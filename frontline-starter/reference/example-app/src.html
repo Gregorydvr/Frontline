@@ -1,0 +1,1029 @@
+<title>Front-line Client App</title>
+<style>
+/*@@FONT@@*/
+/* Layout: a phone-first app. One column of cards on cream with a fixed Send bar at the bottom;
+   from 960px a side menu and a wider main column. One light look, taken from the Front-line website. */
+:root{
+  --cream:#FBF4EB; --cream-deep:#F5ECE1; --card:#FFFDF9;
+  --ink:#20273E; --ink-2:#4A4F63;
+  --line:rgba(32,39,62,.12); --line-strong:rgba(32,39,62,.26);
+  --teal:#2B7E85; --teal-tint:#E4EFEC;
+  --peach-tint:#FFE6D7; --error:#B42318; --error-tint:#FCEDEB;
+  --font:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --bar:0px; --side:0px;
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.4;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+svg{display:block}
+p,li,span{text-wrap:pretty}
+:focus{outline:none}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px;border-radius:8px}
+h1:focus-visible{outline:none}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.i{width:20px;height:20px;flex:none}
+.i-16{width:16px;height:16px;flex:none}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* Shell */
+.app{display:flex;flex-direction:column}
+.app[data-bar="send"]{--bar:80px}
+.app[data-bar="actions"]{--bar:146px}
+.side{display:none}
+.main{min-width:0;padding-inline:16px;padding-bottom:calc(var(--bar) + 28px + env(safe-area-inset-bottom,0px))}
+.screen{max-width:720px;margin-inline:auto;display:flex;flex-direction:column;gap:18px;padding-block:4px 8px}
+
+/* Type */
+h1{font-size:26px;line-height:1.12;letter-spacing:-.025em;font-weight:740}
+h2{font-size:19px;line-height:1.25;letter-spacing:-.01em;font-weight:700}
+.meta{color:var(--ink-2)}
+.badge{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--teal);border-radius:999px;padding:4px 9px}
+
+/* Top of Home on a phone */
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px}
+.top-acts{display:flex;gap:8px}
+.logo{width:96px;height:19px;flex:none}
+.hello{display:flex;flex-direction:column;gap:2px}
+.firm{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:0;border-radius:10px;font-weight:600;font-size:16px;line-height:1.1;text-decoration:none;white-space:nowrap}
+.btn-ink{background:var(--ink);color:var(--cream)}
+.btn-ink:hover{background:#151A2C}
+.btn-teal{background:var(--teal);color:#fff}
+.btn-teal:hover{background:#246A70}
+.btn-line{background:transparent;border:1.5px solid var(--line-strong)}
+.btn-line:hover{background:rgba(32,39,62,.05)}
+.btn-lg{min-height:56px;font-size:18px;border-radius:12px}
+.btn-sm{padding:0 12px;gap:6px}
+.btn-block{width:100%}
+.link{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0;border:0;background:none;font-weight:600;text-decoration:underline;text-underline-offset:3px;text-align:left}
+.back{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 10px 0 0;border:0;background:none;font-weight:600;align-self:flex-start}
+.find{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:0 14px;border:1.5px solid var(--line-strong);border-radius:12px;background:var(--card);color:var(--ink-2);text-align:left}
+input.find{color:var(--ink)}
+input.find::placeholder{color:var(--ink-2);opacity:1}
+
+/* Blocks, cards and rows */
+.block{display:flex;flex-direction:column;gap:8px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
+.head .link{margin-block:-7px}
+.count{color:var(--ink-2);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 14px;border:0;background:none;text-align:left}
+.row + .row{border-top:1px solid var(--line)}
+button.row:hover{background:rgba(32,39,62,.035)}
+button.row:focus-visible{outline-offset:-3px;border-radius:12px}
+.txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.t1{font-weight:600}
+.t2{color:var(--ink-2)}
+.tile{width:40px;height:40px;border-radius:11px;background:var(--teal-tint);color:var(--teal);display:flex;align-items:center;justify-content:center;flex:none}
+.tile svg{width:25px;height:25px}
+.chev{color:var(--ink-2)}
+.empty{padding:16px 14px;color:var(--ink-2)}
+.pad{padding:14px}
+.stack{display:flex;flex-direction:column;gap:10px}
+
+/* Status chips: a word, a colour and an icon together */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 7px;border-radius:999px;font-size:15px;font-weight:600;line-height:20px;white-space:nowrap;align-self:flex-start}
+.chip-ok{background:var(--peach-tint)}
+.chip-good{background:var(--teal-tint)}
+.chip-good .i-16{color:var(--teal)}
+.chip-plain{background:var(--cream-deep)}
+.chip-bad{background:var(--error-tint);color:var(--error)}
+
+/* Done for you */
+.feed{display:flex;flex-direction:column}
+.feed li + li{border-top:1px solid var(--line)}
+.fb{display:flex;align-items:flex-start;gap:10px;width:100%;min-height:44px;padding:8px 0;border:0;background:none;text-align:left}
+button.fb:hover .ft{text-decoration:underline;text-underline-offset:3px}
+.fb .tick{color:var(--teal);margin-top:1px}
+.ft{flex:1;min-width:0}
+.fb time{color:var(--ink-2);font-variant-numeric:tabular-nums;flex:none}
+
+/* Money */
+.money{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.fig{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--cream-deep)}
+.fig b{font-size:21px;line-height:1.2;font-weight:740;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.fig.bad b{color:var(--error)}
+.kv li{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:12px 14px}
+.kv li + li{border-top:1px solid var(--line)}
+.kv b{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Review */
+.total{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.total b{font-size:40px;line-height:1.05;font-weight:740;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.ticks{display:flex;flex-direction:column;gap:6px}
+.ticks li{display:flex;gap:10px;align-items:flex-start}
+.ticks .i{color:var(--teal);margin-top:1px}
+.flag{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:var(--peach-tint)}
+.flag .i{margin-top:1px}
+.quote{padding:12px 14px;border-radius:12px;background:var(--cream-deep)}
+
+/* Job timeline */
+.day{font-weight:700;padding:14px 14px 2px}
+.tl li{display:flex;flex-direction:column;gap:6px;padding:10px 14px}
+.tl li + li{border-top:1px solid var(--line)}
+.tl-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tl-top time{color:var(--ink-2);font-variant-numeric:tabular-nums}
+.who{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:15px;font-weight:600;line-height:20px}
+.who-fl{background:var(--teal-tint)}
+.who-you{background:var(--peach-tint)}
+.who-cust{background:var(--cream-deep)}
+
+/* Bottom bar and toast */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--cream);border-top:1px solid var(--line)}
+.bar-in{max-width:720px;margin-inline:auto;display:flex;flex-direction:column;gap:8px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.toast{position:fixed;left:calc(var(--side) + 16px);right:16px;bottom:calc(var(--bar) + 12px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;justify-content:center;pointer-events:none}
+.toast-in{pointer-events:auto;display:flex;align-items:center;gap:10px;max-width:520px;padding:8px 8px 8px 16px;border-radius:12px;background:var(--ink);color:var(--cream);box-shadow:0 8px 24px rgba(16,22,42,.25)}
+.toast-in span{flex:1;min-width:0;padding-block:6px}
+.toast-btn{min-height:44px;padding:0 14px;border-radius:9px;border:1.5px solid rgba(251,244,235,.55);background:none;color:var(--cream);font-weight:600;white-space:nowrap}
+
+/* Sheets */
+.sheet-wrap{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(16,22,42,.5)}
+.sheet{width:100%;max-width:560px;max-height:calc(100% - 40px);overflow:auto;display:flex;flex-direction:column;gap:16px;padding:10px 16px calc(20px + env(safe-area-inset-bottom,0px));border-radius:18px 18px 0 0;background:var(--cream);animation:rise .18s ease-out}
+.sheet-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin-right:-10px;border:0;border-radius:10px;background:none}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:600}
+.field input,.field textarea{width:100%;min-height:48px;padding:10px 12px;border:1.5px solid var(--line-strong);border-radius:10px;background:var(--card)}
+.field textarea{min-height:110px;resize:vertical}
+.rec{display:flex;align-items:center;justify-content:center;gap:5px;height:60px}
+.rec i{display:block;width:5px;height:14px;border-radius:3px;background:var(--teal);animation:pulse 1s ease-in-out infinite}
+.rec i:nth-child(3n){animation-delay:.2s}
+.rec i:nth-child(3n+1){animation-delay:.45s}
+.timer{font-size:34px;font-weight:740;letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-align:center}
+.center{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.bigtick{width:56px;height:56px;border-radius:50%;background:var(--teal-tint);color:var(--teal);display:flex;align-items:center;justify-content:center}
+.bigtick svg{width:30px;height:30px}
+.bubble{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:16px 16px 16px 4px;background:var(--card)}
+.mini{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--cream)}
+.mini .btn{pointer-events:none}
+@keyframes rise{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+@keyframes pulse{0%,100%{height:12px}50%{height:46px}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}.rec i{animation:none;height:28px}}
+
+/* Laptop. The film's phone (.film-app) is left out, so it keeps the phone layout at any window size. */
+@media (min-width:960px){
+  .app:not(.film-app){--side:296px;flex-direction:row;align-items:flex-start}
+  .app:not(.film-app)[data-bar="send"]{--bar:0px}
+  .app:not(.film-app) .side{display:flex;flex-direction:column;gap:4px;flex:none;width:var(--side);position:sticky;top:0;height:100vh;overflow:auto;padding:22px 16px;background:var(--cream-deep);border-right:1px solid var(--line)}
+  .app:not(.film-app) .side-brand{display:flex;flex-direction:column;gap:12px;padding:0 10px 14px}
+  .app:not(.film-app) .side .logo{width:112px;height:22px}
+  .app:not(.film-app) .side-firm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:700}
+  .app:not(.film-app) .nav{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 10px;border:1.5px solid transparent;border-radius:10px;background:none;text-align:left}
+  .app:not(.film-app) .nav:hover{background:rgba(32,39,62,.05)}
+  .app:not(.film-app) .nav[aria-current="page"]{background:var(--card);border-color:var(--line-strong);font-weight:700}
+  .app:not(.film-app) .nav .i{color:var(--teal);width:22px;height:22px}
+  .app:not(.film-app) .nav span{flex:1;min-width:0}
+  .app:not(.film-app) .nav b{flex:none;min-width:24px;padding:0 7px;border-radius:12px;background:var(--ink);color:var(--cream);font-size:15px;font-weight:700;line-height:24px;text-align:center}
+  .app:not(.film-app) .side hr{width:calc(100% - 20px);margin:8px 10px;border:0;border-top:1px solid var(--line)}
+  .app:not(.film-app) .side-end{margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px}
+  .app:not(.film-app) .main{flex:1;padding:26px 40px 40px;padding-bottom:calc(var(--bar) + 40px)}
+  .app:not(.film-app) .screen{margin-inline:0;max-width:760px;gap:24px}
+  .app:not(.film-app) .screen.wide{max-width:1040px}
+  .app:not(.film-app) .top,.app:not(.film-app) .only-phone{display:none}
+  .app:not(.film-app) .home-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:28px;align-items:start}
+  .app:not(.film-app) .home-grid > div{display:flex;flex-direction:column;gap:24px}
+  .app:not(.film-app) .money{grid-template-columns:minmax(0,1fr)}
+  .app:not(.film-app) .fig{flex-direction:row;align-items:baseline;justify-content:space-between;padding:14px 16px}
+  .app:not(.film-app)[data-bar="send"] .bar{display:none}
+  .app:not(.film-app) .bar{left:var(--side);padding-inline:40px}
+  .app:not(.film-app) .bar-in{margin-inline:0;max-width:760px;flex-direction:row}
+  .app:not(.film-app) .bar-in > .btn{flex:1}
+  .app:not(.film-app) .bar-in .two{flex:1}
+  .app:not(.film-app) .sheet-wrap{align-items:center}
+  .app:not(.film-app) .sheet{border-radius:18px;padding:14px 22px 22px}
+}
+@media (max-width:959px){
+  .home-grid,.home-grid > div{display:contents}
+}
+/*@@FILM_CSS@@*/
+</style>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <mask id="m-calls" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32"><rect width="32" height="32" fill="#fff"></rect><rect x="18.6" y="18.9" width="12.8" height="12.4" rx="3" fill="#000"></rect></mask>
+  </defs>
+  <symbol id="logo" viewBox="0 0 1167.2 229.9"><!--@@LOGO@@--></symbol>
+  <symbol id="logo-light" viewBox="0 0 1167.2 229.9"><!--@@LOGO_LIGHT@@--></symbol>
+  <symbol id="i-calls" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path mask="url(#m-calls)" d="M7.1 4.8h3.1l1.7 4.4-2.3 1.6a13.6 13.6 0 0 0 5.9 5.9l1.6-2.3 4.4 1.7v3.1a2 2 0 0 1-2.2 2A17.2 17.2 0 0 1 5.1 7a2 2 0 0 1 2-2.2z"></path><path d="M15.4 4.4a9.2 9.2 0 0 1 7.7 7.7M15.2 8.2a5.3 5.3 0 0 1 4.1 4.1"></path><rect x="20.4" y="21.2" width="9.2" height="8.1" rx="1.6"></rect><path d="M23 19.7v2.8M27 19.7v2.8M22.9 25.6l1.5 1.4 2.8-2.9"></path></symbol>
+  <symbol id="i-quote" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.6v6.3c0 .6.2 1.1.6 1.5l12.4 12.4a2.1 2.1 0 0 0 3 0l6.3-6.3a2.1 2.1 0 0 0 0-3L14.4 5.1a2.1 2.1 0 0 0-1.5-.6H6.6a2.1 2.1 0 0 0-2.1 2.1z"></path><circle cx="9.4" cy="9.4" r="1.6"></circle><path d="M20.3 13.3a2.3 2.3 0 0 0-4 1.6v4.3c0 .9-.4 1.6-1.2 2.1h5.7M14.9 17.4h3.9"></path></symbol>
+  <symbol id="i-followup" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 6h17.6a2.7 2.7 0 0 1 2.7 2.7v10.1a2.7 2.7 0 0 1-2.7 2.7H13.6l-5.4 4.3v-4.3h-1a2.7 2.7 0 0 1-2.7-2.7V8.7A2.7 2.7 0 0 1 7.2 6z"></path><path d="M10.4 13.8h10.4M17.3 10.3l3.5 3.5-3.5 3.5"></path></symbol>
+  <symbol id="i-paperwork" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 5.7H9A2.5 2.5 0 0 0 6.5 8.2v17.8A2.5 2.5 0 0 0 9 28.5h14a2.5 2.5 0 0 0 2.5-2.5V8.2A2.5 2.5 0 0 0 23 5.7h-2.5"></path><rect x="11.5" y="3.5" width="9" height="4.6" rx="1.3"></rect><path d="M10.6 13.4l1.3 1.3 2.3-2.4M16.7 13.7h5.2M10.6 18.8l1.3 1.3 2.3-2.4M16.7 19.1h5.2M10.6 24.1l1.3 1.3 2.3-2.4M16.7 24.4h5.2"></path></symbol>
+  <symbol id="i-invoice" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 4.5h17v24l-2.8-1.9-2.9 1.9-2.8-1.9-2.8 1.9-2.9-1.9-2.8 1.9z"></path><path d="M18.4 8.4a2 2 0 0 0-3.5 1.4v3.5c0 .8-.3 1.3-1 1.8h4.8M13.9 11.8h3.5"></path><path d="M11.5 19.2h9M11.5 22.7h6"></path></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l4.5 4.5L19.5 7"></path></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.7l1.3-2h5l1.3 2h1.7A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"></path><circle cx="12" cy="12.5" r="3.2"></circle></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5v5M12 16.2v.3"></path></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8.5L6 21v-3.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"></path></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6.5 8 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"></path><path d="M9.5 20.5v-6h5v6"></path></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"></path></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h8M17.5 7h2M4.5 12h2M11.5 12h8M4.5 17h9M18.5 17h1"></path><circle cx="15" cy="7" r="2.3"></circle><circle cx="9" cy="12" r="2.3"></circle><circle cx="16" cy="17" r="2.3"></circle></symbol>
+  <symbol id="i-pound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M14.8 9.4a2.4 2.4 0 0 0-4.6.9v2.2c0 1-.4 1.8-1.2 2.5h5.8M9.3 12.6h4"></path></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M10.2 8.6v6.8l5.4-3.4z"></path></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5"></rect><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"></path></symbol>
+</svg>
+
+<div class="app" id="fl-app" data-bar="send">
+  <aside class="side" id="fl-side" aria-label="Menu"></aside>
+  <main class="main"><div class="screen" id="fl-screen"></div></main>
+  <div class="bar" id="fl-bar"></div>
+  <div class="toast" id="fl-toast" role="status" aria-live="polite"></div>
+  <div class="sheet-wrap" id="fl-sheet" hidden></div>
+</div>
+<main class="film" id="fl-film" hidden></main>
+
+<script>
+(function () {
+  'use strict';
+
+  if (!document.documentElement.lang) document.documentElement.lang = 'en-GB';
+  const app = document.getElementById('fl-app');
+  const side = document.getElementById('fl-side');
+  const screen = document.getElementById('fl-screen');
+  const bar = document.getElementById('fl-bar');
+  const toastEl = document.getElementById('fl-toast');
+  const sheetEl = document.getElementById('fl-sheet');
+
+  const DAY = 'Thursday 15 October';
+  const SVC = {
+    calls: { label: 'Calls & bookings', icon: 'i-calls' },
+    quotes: { label: 'Quotes', icon: 'i-quote' },
+    followups: { label: 'Follow-ups', icon: 'i-followup' },
+    paperwork: { label: 'Job paperwork', icon: 'i-paperwork' },
+    invoices: { label: 'Invoices & reminders', icon: 'i-invoice' }
+  };
+  const ST = {
+    needs_ok: { label: 'Needs your OK', cls: 'chip-ok', icon: 'i-alert' },
+    waiting: { label: 'Waiting on customer', cls: 'chip-plain', icon: 'i-clock' },
+    booked: { label: 'Booked', cls: 'chip-good', icon: 'i-cal' },
+    accepted: { label: 'Accepted', cls: 'chip-good', icon: 'i-check' },
+    today: { label: 'On today', cls: 'chip-plain', icon: 'i-clock' },
+    sent: { label: 'Sent', cls: 'chip-plain', icon: 'i-arrow' },
+    overdue: { label: 'Overdue', cls: 'chip-bad', icon: 'i-alert' },
+    paid: { label: 'Paid', cls: 'chip-good', icon: 'i-check' },
+    urgent: { label: 'Passed to you', cls: 'chip-ok', icon: 'i-alert' }
+  };
+  const WHO = { fl: ['Front-line', 'who-fl'], you: ['You', 'who-you'], cust: ['Customer', 'who-cust'] };
+  const KIND_SVC = { quote: 'quotes', invoice: 'invoices', extra: 'paperwork' };
+
+  /* ---------- helpers ---------- */
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = n => (n < 0 ? '−' : '') + '£' + Math.abs(n).toLocaleString('en-GB');
+  const icon = (id, cls) => `<svg class="${cls || 'i'}" aria-hidden="true"><use href="#${id}"></use></svg>`;
+  const chip = k => `<span class="chip ${ST[k].cls}">${icon(ST[k].icon, 'i-16')}${esc(ST[k].label)}</span>`;
+  const pill = (label, cls, ic) => `<span class="chip ${cls}">${icon(ic, 'i-16')}${esc(label)}</span>`;
+  const tile = ic => `<span class="tile">${icon(ic, '')}</span>`;
+  const chev = () => icon('i-chev', 'i chev');
+  const keep = (k, v) => {
+    try {
+      if (v === undefined) return localStorage.getItem('fl-' + k);
+      localStorage.setItem('fl-' + k, v);
+    } catch (e) { /* storage is optional */ }
+    return null;
+  };
+
+  let timers = [];
+  const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
+
+  /* ---------- example data ---------- */
+  function seed() {
+    return {
+      day: DAY,
+      approvals: ['q-patel', 'i-hughes', 'x-ahmed'],
+      filter: null, reportChecked: false, fluePhoto: false, gasSent: false, voiceUsed: false, changeAsked: {},
+      feed: [
+        ['15:31', 'evans', 'Mr Evans said yes and paid his deposit. Chasing stopped.'],
+        ['15:02', 'khan', 'Asked Mr Khan for a review. He paid yesterday.'],
+        ['14:40', 'wood', 'Sent Mr Wood a reminder. His invoice is 7 days late.'],
+        ['14:25', 'patel', 'Priced Mrs Patel’s quote from your voice note.'],
+        ['14:04', 'ahmed', 'Prepared the Gas Safe details for Mrs Ahmed’s boiler. Due by 14 November.'],
+        ['14:02', 'ahmed', 'Built the job record for Mrs Ahmed’s boiler. Draft report ready to check.'],
+        ['11:40', 'hughes', 'Raised Mr Hughes’s invoice from his quote.'],
+        ['11:02', 'price', 'Call from Mr Price about a leak. Passed straight to you.'],
+        ['10:32', 'davies', 'Told Mr Davies you were on your way.'],
+        ['10:15', 'davies', 'Told Mr Davies you were running 20 minutes late.'],
+        ['09:05', 'evans', 'Nudged Mr Evans about his quote (day 3).'],
+        ['08:34', 'clarke', 'Answered Mr Clarke’s website enquiry in a minute. Visit booked for Friday, 10am.'],
+        ['08:26', null, 'Call from a supplier. Your order is ready to collect.'],
+        ['08:10', 'green', 'Call from Mrs Green answered. Quote visit booked for Monday, 9am.']
+      ],
+      yesterday: [
+        ['16:20', 'turner', 'Sent Mr Turner his quote after your OK.'],
+        ['13:00', null, 'Reminded Mrs Patel, Mrs Ahmed and Mr Davies about today’s visits.'],
+        ['11:26', 'khan', 'Mr Khan paid £2,464. Invoice marked paid.']
+      ],
+      calls: [
+        ['11:02', 'price', 'Mr Price', 'A leak under the kitchen sink. Passed straight to you.', 'urgent'],
+        ['08:26', null, 'A supplier', 'Your order is ready to collect. Message taken.', null],
+        ['08:10', 'green', 'Mrs Green', 'No hot water. Quote visit booked for Monday, 9am.', 'booked']
+      ],
+      web: [
+        ['08:33', 'clarke', 'Mr Clarke', 'Website enquiry answered in a minute. Visit booked for Friday, 10am.', 'booked']
+      ],
+      diary: [
+        ['Fri 16 Oct', '10:00', 'clarke', 'Mr Clarke', 'Quote visit'],
+        ['Mon 19 Oct', '09:00', 'green', 'Mrs Green', 'Quote visit'],
+        ['Tue 20 Oct', '08:30', 'evans', 'Mr Evans', 'Boiler install'],
+        ['Wed 21 Oct', '14:00', 'reid', 'Mrs Reid', 'Boiler service']
+      ],
+      jobs: {
+        patel: { c: 'Mrs Patel', t: 'New boiler', a: '14 Mill Lane', st: 'needs_ok', next: 'Approve the quote and we send it today.', q: { amt: 3150, state: 'draft' },
+          tl: [['Mon 12 Oct', '09:12', 'fl', 'Answered her call. The old boiler is leaking. Quote visit booked for Thursday, 1pm.'],
+            ['Mon 12 Oct', '09:13', 'fl', 'Sent her a confirmation.'],
+            ['Wed 14 Oct', '13:00', 'fl', 'Reminded her about the visit.'],
+            ['Today', '14:12', 'you', 'Sent a 30-second voice note and 3 photos.'],
+            ['Today', '14:25', 'fl', 'Priced the quote from your price list. Ready for your OK.']] },
+        hughes: { c: 'Mr Hughes', t: 'Radiator swap', a: '3 Orchard Close', st: 'needs_ok', next: 'Approve the invoice and we send it with a pay-now link.', q: { amt: 420, state: 'accepted' }, inv: { amt: 420, state: 'draft' },
+          tl: [['Tue 6 Oct', '10:40', 'fl', 'Answered his call. Quote visit booked.'],
+            ['Thu 8 Oct', '16:05', 'you', 'Approved the quote.'],
+            ['Thu 8 Oct', '16:05', 'fl', 'Sent the quote: £420.'],
+            ['Fri 9 Oct', '08:20', 'cust', 'Accepted the quote.'],
+            ['Wed 14 Oct', '15:30', 'you', 'Voice note: “Done, as quoted.”'],
+            ['Today', '11:40', 'fl', 'Raised the invoice from the quote. Ready for your OK.']] },
+        ahmed: { c: 'Mrs Ahmed', t: 'Boiler replacement', a: '27 Station Road', st: 'today', next: 'Tell us if the filter goes on the invoice.', q: { amt: 2890, state: 'accepted' },
+          tl: [['Mon 28 Sep', '11:15', 'fl', 'Answered her call. The boiler keeps cutting out. Quote visit booked for Thursday, 3pm.'],
+            ['Mon 28 Sep', '11:16', 'fl', 'Sent her a confirmation.'],
+            ['Wed 30 Sep', '13:00', 'fl', 'Reminded her about the visit.'],
+            ['Thu 1 Oct', '14:45', 'you', 'Voice note: “Running 20 minutes late.”'],
+            ['Thu 1 Oct', '14:46', 'fl', 'Told her you were running 20 minutes late and moved the diary.'],
+            ['Thu 1 Oct', '15:08', 'fl', 'Told her you were on your way.'],
+            ['Thu 1 Oct', '16:10', 'you', 'Sent a 30-second voice note and 3 photos.'],
+            ['Thu 1 Oct', '16:24', 'fl', 'Priced the quote from your price list. Ready for your OK.'],
+            ['Thu 1 Oct', '17:10', 'you', 'Approved the quote.'],
+            ['Thu 1 Oct', '17:10', 'fl', 'Sent the quote: £2,890, with a £578 deposit link.'],
+            ['Sun 4 Oct', '10:00', 'fl', 'Nudged her about the quote (day 3).'],
+            ['Sun 4 Oct', '18:42', 'cust', 'Accepted the quote and paid the £578 deposit.'],
+            ['Sun 4 Oct', '18:42', 'fl', 'Stopped chasing. Install booked for 15 October.'],
+            ['Wed 14 Oct', '13:00', 'fl', 'Reminded her about the install.'],
+            ['Today', '13:48', 'you', 'Sent photos and a voice note: “Done, fitted a filter as well.”'],
+            ['Today', '14:02', 'fl', 'Built the job record and a draft report. One photo is missing: the flue.'],
+            ['Today', '14:03', 'fl', 'Spotted the filter is not on the quote. Asked you about the invoice.'],
+            ['Today', '14:04', 'fl', 'Prepared the Gas Safe notification details. Due by 14 November.']] },
+        evans: { c: 'Mr Evans', t: 'New boiler and two radiators', a: '8 Church Street', st: 'accepted', next: 'We remind him on Monday about Tuesday’s install.', q: { amt: 2550, state: 'accepted' },
+          tl: [['Fri 9 Oct', '09:30', 'fl', 'Answered his call. Quote visit booked for Monday.'],
+            ['Mon 12 Oct', '16:40', 'fl', 'Sent the quote after your OK: £2,550.'],
+            ['Today', '09:05', 'fl', 'Nudged him about the quote (day 3).'],
+            ['Today', '15:31', 'cust', 'Accepted the quote and paid the £510 deposit.'],
+            ['Today', '15:31', 'fl', 'Stopped chasing. Install booked for Tuesday 20 October.']] },
+        clarke: { c: 'Mr Clarke', t: 'Bathroom radiator', a: '41 Park Road', st: 'booked', next: 'We remind him this afternoon about tomorrow’s visit.',
+          tl: [['Today', '08:33', 'cust', 'Sent an enquiry through your website.'],
+            ['Today', '08:34', 'fl', 'Replied within a minute and booked a quote visit for Friday, 10am.']] },
+        davies: { c: 'Mr Davies', t: 'Boiler service', a: '19 Elm Grove', st: 'today', next: 'Send a voice note when it’s done and we raise the invoice.',
+          tl: [['Wed 14 Oct', '13:00', 'fl', 'Reminded him about today’s service.'],
+            ['Today', '10:15', 'you', 'Voice note: “Running 20 minutes late.”'],
+            ['Today', '10:15', 'fl', 'Told him you were running 20 minutes late and moved the diary.'],
+            ['Today', '10:32', 'fl', 'Told him you were on your way.']] },
+        wood: { c: 'Mr Wood', t: 'Cylinder replacement', a: '5 High Street', st: 'overdue', next: 'Next reminder on 22 October. We stop as soon as he pays.', inv: { amt: 640, state: 'overdue', note: 'Was due on 8 October' },
+          tl: [['Thu 24 Sep', '12:10', 'fl', 'Sent the invoice after your OK: £640, due 8 October.'],
+            ['Today', '14:40', 'fl', 'Sent a reminder. The invoice is 7 days late.']] },
+        lewis: { c: 'Mrs Lewis', t: 'Boiler replacement', a: '62 Queens Road', st: 'sent', next: 'First reminder on 31 October if it’s still unpaid.', inv: { amt: 1670, state: 'sent', note: 'Due on 24 October' },
+          tl: [['Sat 10 Oct', '10:20', 'fl', 'Sent the invoice after your OK: £1,670, due 24 October.']] },
+        kaur: { c: 'Mrs Kaur', t: 'Boiler replacement', a: '11 Victoria Road', st: 'waiting', next: 'First nudge tomorrow (day 3).', q: { amt: 2960, state: 'waiting' },
+          tl: [['Tue 13 Oct', '17:05', 'fl', 'Sent the quote after your OK: £2,960.']] },
+        turner: { c: 'Mr Turner', t: 'Unvented cylinder', a: '2 Manor Way', st: 'waiting', next: 'First nudge on Saturday (day 3).', q: { amt: 1840, state: 'waiting' },
+          tl: [['Wed 14 Oct', '16:20', 'fl', 'Sent the quote after your OK: £1,840.']] },
+        bell: { c: 'Ms Bell', t: 'Boiler replacement', a: '30 Green Lane', st: 'waiting', next: 'Last nudge tomorrow (day 7). Then we stop.', q: { amt: 2450, state: 'waiting' },
+          tl: [['Fri 9 Oct', '15:10', 'fl', 'Sent the quote after your OK: £2,450.'],
+            ['Mon 12 Oct', '10:00', 'fl', 'Nudged her about the quote (day 3).']] },
+        shah: { c: 'Mr Shah', t: 'Three radiators', a: '77 London Road', st: 'waiting', next: 'Last nudge on Saturday (day 7). Then we stop.', q: { amt: 1170, state: 'waiting' },
+          tl: [['Sat 10 Oct', '11:30', 'fl', 'Sent the quote after your OK: £1,170.'],
+            ['Tue 13 Oct', '10:00', 'fl', 'Nudged him about the quote (day 3).']] },
+        khan: { c: 'Mr Khan', t: 'New boiler', a: '9 Mill Road', st: 'paid', next: 'Nothing left to do on the money. The Gas Safe notification is due by 30 October.', q: { amt: 3080, state: 'accepted' }, inv: { amt: 2464, state: 'paid', note: 'Paid on 14 October' },
+          tl: [['Mon 14 Sep', '08:50', 'fl', 'Answered his call. Quote visit booked for Thursday.'],
+            ['Thu 17 Sep', '15:20', 'you', 'Sent a voice note and photos after the visit.'],
+            ['Thu 17 Sep', '16:10', 'fl', 'Sent the quote after your OK: £3,080, with a £616 deposit link.'],
+            ['Sun 20 Sep', '10:00', 'fl', 'Nudged him about the quote (day 3).'],
+            ['Sun 20 Sep', '19:12', 'cust', 'Accepted the quote and paid the £616 deposit.'],
+            ['Tue 29 Sep', '13:00', 'fl', 'Reminded him about the install.'],
+            ['Wed 30 Sep', '16:30', 'you', 'Sent photos and a voice note: “Done, as quoted.”'],
+            ['Wed 30 Sep', '16:45', 'fl', 'Built the job record and a draft report. Prepared the Gas Safe details.'],
+            ['Thu 1 Oct', '09:10', 'fl', 'Sent the invoice after your OK: £2,464, with a pay-now link.'],
+            ['Wed 14 Oct', '11:26', 'cust', 'Paid £2,464.'],
+            ['Wed 14 Oct', '11:26', 'fl', 'Marked the invoice paid. No reminders were needed.'],
+            ['Today', '15:02', 'fl', 'Asked him for a review.']] },
+        reid: { c: 'Mrs Reid', t: 'Boiler service, a year on', a: '16 West Street', st: 'booked', next: 'We remind her on Tuesday about Wednesday’s service.',
+          tl: [['Oct 2025', '', 'you', 'Fitted her new boiler.'],
+            ['Thu 1 Oct', '09:00', 'fl', 'Told her the boiler’s first service is due this month.'],
+            ['Thu 1 Oct', '12:47', 'cust', 'Replied and asked for a Wednesday.'],
+            ['Thu 1 Oct', '12:50', 'fl', 'Booked the service for Wednesday 21 October, 2pm.']] },
+        green: { c: 'Mrs Green', t: 'No hot water', a: '24 Beech Avenue', st: 'booked', next: 'We remind her the day before the visit.',
+          tl: [['Today', '08:10', 'fl', 'Answered her call. No hot water since last night. Quote visit booked for Monday, 9am.'],
+            ['Today', '08:11', 'fl', 'Sent her a confirmation.']] },
+        price: { c: 'Mr Price', t: 'Leak under the sink', a: '6 Bridge Street', st: 'urgent', next: 'This one is with you. Tell us what happened and we take it from there.',
+          tl: [['Today', '11:02', 'fl', 'Answered his call. A leak under the kitchen sink. Passed straight to you, because leaks are urgent.']] }
+      }
+    };
+  }
+
+  let S = Object.assign({ firm: keep('firm') || 'Tidewell Heating', owner: keep('owner') || 'Tom', route: { name: 'home' }, stack: [], sheet: null, find: '', undo: null }, seed());
+  const APP = S;
+  /* The film draws the same screens from its own copy of the data. */
+  const withData = (data, fn) => { const mine = S; S = data; try { return fn(); } finally { S = mine; } };
+  const DATA_KEYS = Object.keys(seed());
+
+  /* ---------- things waiting for an OK ---------- */
+  function review(id) {
+    if (S.reviews && S.reviews[id]) return S.reviews[id];
+    const withInvoice = ['A pay-now link.', 'Reminders 7 and 14 days after it’s due. They stop when it’s paid.'];
+    if (id === 'q-patel') return { id, kind: 'quote', job: 'patel', icon: 'i-quote', title: 'Quote for Mrs Patel', what: 'New boiler', total: 3150,
+      lines: [['Combi boiler, supplied and fitted', 2450], ['Extended flue and fittings', 290], ['System flush', 260], ['Take away the old boiler', 150]],
+      from: ['Every line is from your price list.', 'Last similar job: Mr Khan, September, £3,080.'],
+      flag: 'The flue run is 4 metres, so we priced an extended flue.',
+      withIt: ['A 20% deposit of £630, paid straight to your account.', 'A nudge on day 3 and day 7 if there’s no reply.'],
+      msg: `Hi Mrs Patel, it’s ${S.owner} from ${S.firm}. Thanks for having me round today. Here’s your quote for the new boiler: £3,150. You can read it, accept it and pay the deposit from the link.`,
+      cta: 'View your quote', pay: ['Accept quote', 'Pay £630 deposit'] };
+    if (id === 'i-hughes') return { id, kind: 'invoice', job: 'hughes', icon: 'i-invoice', title: 'Invoice for Mr Hughes', what: 'Radiator swap', total: 420,
+      lines: [['Double radiator, supplied and fitted', 360], ['Thermostatic valve', 60]],
+      from: ['Raised from the quote he accepted on 9 October.', 'Nothing has changed since the quote.'],
+      withIt: withInvoice,
+      msg: `Hi Mr Hughes, it’s ${S.owner} from ${S.firm}. Here’s the invoice for your radiator: £420. You can pay it from the link.`,
+      cta: 'View your invoice', pay: ['Pay £420 now'] };
+    if (id === 'x-ahmed') return { id, kind: 'extra', job: 'ahmed', icon: 'i-paperwork', title: 'Extra for Mrs Ahmed', what: 'Magnetic filter', total: 145 };
+    if (id === 'i-ahmed') {
+      const added = S.filter === 'added';
+      return { id, kind: 'invoice', job: 'ahmed', icon: 'i-invoice', title: 'Invoice for Mrs Ahmed', what: 'Boiler replacement', total: 2890 - 578 + (added ? 145 : 0),
+        lines: added ? [['Boiler replacement, as quoted', 2890], ['Magnetic filter, supplied and fitted', 145], ['Deposit paid on 4 October', -578]] : [['Boiler replacement, as quoted', 2890], ['Deposit paid on 4 October', -578]],
+        from: ['Raised from the quote she accepted on 4 October.', added ? 'The filter was added after your OK today.' : 'The filter was left off, as you asked.'],
+        withIt: withInvoice,
+        msg: `Hi Mrs Ahmed, it’s ${S.owner} from ${S.firm}. Your new boiler is in. Here’s the invoice for the balance: ${money(2890 - 578 + (added ? 145 : 0))}. You can pay it from the link.`,
+        cta: 'View your invoice', pay: ['Pay now'] };
+    }
+    if (id === 'i-davies') return { id, kind: 'invoice', job: 'davies', icon: 'i-invoice', title: 'Invoice for Mr Davies', what: 'Boiler service', total: 95,
+      lines: [['Annual boiler service', 95]],
+      from: ['Raised from your voice note today.', '£95 is your price-list rate for a service.'],
+      withIt: withInvoice,
+      msg: `Hi Mr Davies, it’s ${S.owner} from ${S.firm}. Thanks for today. Here’s the invoice for your boiler service: £95. You can pay it from the link.`,
+      cta: 'View your invoice', pay: ['Pay £95 now'] };
+    return null;
+  }
+  const pending = kind => S.approvals.filter(id => review(id).kind === kind);
+  const jobStatus = id => S.approvals.some(a => review(a).job === id) ? 'needs_ok' : S.jobs[id].st;
+
+  function totals() {
+    const t = { quoted: 0, nq: 0, owed: 0, no: 0, over: 0, nov: 0 };
+    Object.values(S.jobs).forEach(j => {
+      if (j.q && j.q.state === 'waiting') { t.quoted += j.q.amt; t.nq++; }
+      if (j.inv && (j.inv.state === 'sent' || j.inv.state === 'overdue')) { t.owed += j.inv.amt; t.no++; }
+      if (j.inv && j.inv.state === 'overdue') { t.over += j.inv.amt; t.nov++; }
+    });
+    return t;
+  }
+  function svcLine(key) {
+    const t = totals();
+    const n = pending({ quotes: 'quote', invoices: 'invoice', paperwork: 'extra' }[key] || '').length;
+    if (n) return [`${n} ${n === 1 ? 'needs' : 'need'} your OK`, true];
+    if (key === 'calls') return [`${S.calls.length} answered today`, false];
+    if (key === 'quotes') return [`${t.nq} waiting on customers`, false];
+    if (key === 'followups') return [`${t.nq} quotes being chased`, false];
+    if (key === 'paperwork') return [S.reportChecked ? 'All up to date' : '1 report to check', false];
+    return [`${t.no} unpaid`, false];
+  }
+
+  /* ---------- small pieces ---------- */
+  const backBtn = () => `<button class="back" data-act="back">${icon('i-back')}Back</button>`;
+  const head = (title, right) => `<div class="head"><h2>${esc(title)}</h2>${right || ''}</div>`;
+  function okRow(id) {
+    const r = review(id);
+    const asked = S.changeAsked[id] ? ' · change asked' : '';
+    return `<div class="row"${S.born && S.born[id] != null ? ` data-in="${S.born[id]}"` : ''}>${tile(r.icon)}<span class="txt"><span class="t1">${esc(r.title)}</span><span class="t2">${esc(r.what)} · ${money(r.total)}${asked}</span></span><button class="btn btn-ink" data-act="review" data-id="${id}">Review<span class="sr"> ${esc(r.title)}</span></button></div>`;
+  }
+  function okCard(ids) {
+    return `<div class="card">${ids.length ? ids.map(okRow).join('') : '<p class="empty">Nothing needs you right now.</p>'}</div>`;
+  }
+  function jobRow(id, sub, extra) {
+    const j = S.jobs[id];
+    return `<button class="row" data-act="job" data-id="${id}"><span class="txt"><span class="t1">${esc(j.c)}</span><span class="t2">${esc(sub || j.t)}</span>${extra || ''}</span>${chev()}</button>`;
+  }
+  function feedList(items) {
+    return `<ul class="feed">${items.map(f => {
+      const inner = `${icon('i-check', 'i tick')}<span class="ft">${esc(f[2])}</span><time>${esc(f[0])}</time>`;
+      const born = f[3] != null ? ` data-in="${f[3]}"` : '';
+      return f[1] ? `<li${born}><button class="fb" data-act="job" data-id="${f[1]}">${inner}</button></li>` : `<li${born}><div class="fb">${inner}</div></li>`;
+    }).join('')}</ul>`;
+  }
+  function moneyBlock() {
+    const t = totals();
+    return `<div class="money">
+      <div class="fig"><span class="t2">Quoted</span><b>${money(t.quoted)}</b></div>
+      <div class="fig"><span class="t2">Owed</span><b>${money(t.owed)}</b></div>
+      <div class="fig${t.over ? ' bad' : ''}"><span class="t2">Overdue</span><b>${money(t.over)}</b></div>
+    </div>`;
+  }
+
+  /* ---------- screens ---------- */
+  function home() {
+    const services = Object.keys(SVC).map(k => {
+      const [line, strong] = svcLine(k);
+      return `<button class="row" data-act="section" data-id="${k}">${tile(SVC[k].icon)}<span class="txt"><span class="t1">${esc(SVC[k].label)}</span><span class="${strong ? 't1' : 't2'}">${esc(line)}</span></span>${chev()}</button>`;
+    }).join('');
+    return `
+      <header class="top">
+        <svg class="logo" role="img" aria-label="Front-line"><use href="#logo"></use></svg>
+        <span class="top-acts">
+          <button class="btn btn-line btn-sm" data-act="go" data-name="jobs">${icon('i-search')}Find</button>
+          <button class="btn btn-line btn-sm" data-act="sheet" data-name="message">${icon('i-msg')}Message us</button>
+        </span>
+      </header>
+      <div class="hello">
+        <div class="firm"><h1>${esc(S.firm)}</h1><span class="badge">Example</span></div>
+        <p class="meta">${esc(S.day)}</p>
+      </div>
+      <div class="home-grid">
+        <div>
+          <section class="block">
+            ${head('Needs your OK', S.approvals.length ? `<span class="count">${S.approvals.length === 1 ? '1 thing' : S.approvals.length + ' things'}</span>` : '')}
+            ${okCard(S.approvals)}
+          </section>
+          <section class="block">
+            ${head('Done for you today', `<button class="link" data-act="go" data-name="feed">See all ${S.feed.length}</button>`)}
+            ${feedList(S.feed.slice(0, 3))}
+          </section>
+        </div>
+        <div>
+          <section class="block">
+            ${head('Money', `<button class="link" data-act="go" data-name="money">This week</button>`)}
+            ${moneyBlock()}
+          </section>
+        </div>
+      </div>
+      <section class="block only-phone">
+        ${head('Your services')}
+        <div class="card">${services}</div>
+      </section>
+      <div class="card only-phone">
+        <button class="row" data-act="go" data-name="rules"><span class="txt"><span class="t1">Your rules</span><span class="t2">Prices, wording and times</span></span>${chev()}</button>
+      </div>
+      <div class="stack">
+        <button class="link" data-act="film">${icon('i-play')}Play the example job</button>
+        <button class="link" data-act="sheet" data-name="settings">Example settings</button>
+      </div>`;
+  }
+
+  function reviewScreen(id) {
+    const r = review(id);
+    const j = S.jobs[r.job];
+    const top = `${backBtn()}<div class="block"><h1>${esc(r.title)}</h1><p class="meta">${esc(j.t)} · ${esc(j.a)}</p></div>`;
+    if (r.kind === 'extra') {
+      return `${top}
+        <div class="quote"><span class="t2">Your voice note today</span><p>“Done, fitted a filter as well.”</p></div>
+        <p>A magnetic filter isn’t on her quote. Do you want it on the invoice?</p>
+        <div class="card"><ul class="kv"><li><span>Magnetic filter, supplied and fitted</span><b>${money(145)}</b></li></ul></div>
+        <ul class="ticks">
+          <li>${icon('i-check')}<span>£145 is the price on your price list.</span></li>
+          <li>${icon('i-check')}<span>If you add it, her invoice goes from £2,312 to £2,457.</span></li>
+        </ul>
+        <button class="link" data-act="job" data-id="${r.job}">See the whole job</button>`;
+    }
+    return `${top}
+      <div class="total"><b>${money(r.total)}</b><span class="meta">including VAT</span></div>
+      <section class="block">
+        ${head(r.kind === 'quote' ? 'What’s in the quote' : 'What’s on the invoice')}
+        <div class="card"><ul class="kv">${r.lines.map(l => `<li><span>${esc(l[0])}</span><b>${money(l[1])}</b></li>`).join('')}</ul></div>
+      </section>
+      ${r.flag ? `<div class="flag">${icon('i-alert')}<span><b>Worth a look.</b> ${esc(r.flag)}</span></div>` : ''}
+      <section class="block">
+        ${head('Where it came from')}
+        <ul class="ticks">${r.from.map(t => `<li>${icon('i-check')}<span>${esc(t)}</span></li>`).join('')}</ul>
+      </section>
+      <section class="block">
+        ${head('What goes with it')}
+        <ul class="ticks">${r.withIt.map(t => `<li>${icon('i-check')}<span>${esc(t)}</span></li>`).join('')}</ul>
+      </section>
+      <div class="stack">
+        <button class="link" data-act="sheet" data-name="preview" data-id="${id}">See what ${esc(j.c)} gets</button>
+        <button class="link" data-act="job" data-id="${r.job}">See the whole job</button>
+      </div>`;
+  }
+
+  function jobScreen(id) {
+    const j = S.jobs[id];
+    const mine = S.approvals.filter(a => review(a).job === id);
+    const days = [];
+    j.tl.forEach(e => {
+      const last = days[days.length - 1];
+      if (last && last.day === e[0]) last.items.push(e); else days.push({ day: e[0], items: [e] });
+    });
+    const rows = days.map(g => `<p class="day">${esc(g.day)}</p><ul class="tl">${g.items.map(e =>
+      `<li><div class="tl-top"><span class="who ${WHO[e[2]][1]}">${WHO[e[2]][0]}</span><time>${esc(e[1])}</time></div><span>${esc(e[3])}</span></li>`).join('')}</ul>`).join('');
+    return `${backBtn()}
+      <div class="block"><h1>${esc(j.c)}</h1><p class="meta">${esc(j.t)} · ${esc(j.a)}</p>${chip(jobStatus(id))}</div>
+      ${mine.length ? okCard(mine) : ''}
+      <section class="block">
+        ${head('What happens next')}
+        <div class="card pad"><p>${esc(j.next)}</p></div>
+      </section>
+      <section class="block">
+        ${head('Everything so far')}
+        <div class="card">${rows}</div>
+      </section>`;
+  }
+
+  function sectionScreen(key) {
+    const t = totals();
+    const title = `${backBtn()}<div class="block"><h1>${esc(SVC[key].label)}</h1>`;
+    if (key === 'calls') {
+      const call = c => {
+        const inner = `<span class="txt"><span class="t1">${esc(c[2])} · ${esc(c[0])}</span><span class="t2">${esc(c[3])}</span>${c[4] ? chip(c[4]) : ''}</span>`;
+        return c[1] ? `<button class="row" data-act="job" data-id="${c[1]}">${inner}${chev()}</button>` : `<div class="row">${inner}</div>`;
+      };
+      return `${title}<p class="meta">${S.calls.length} calls answered today. None missed.</p></div>
+        <section class="block">${head('Today’s calls')}<div class="card">${S.calls.map(call).join('')}</div></section>
+        <section class="block">${head('Website and email')}<div class="card">${S.web.map(call).join('')}</div></section>
+        <section class="block">${head('Coming up')}<div class="card">${S.diary.map(d => `<button class="row" data-act="job" data-id="${d[2]}"><span class="txt"><span class="t1">${esc(d[0])}, ${esc(d[1])}</span><span class="t2">${esc(d[3])} · ${esc(d[4])}</span></span>${chev()}</button>`).join('')}</div></section>`;
+    }
+    const ids = Object.keys(S.jobs);
+    if (key === 'quotes') {
+      const waiting = ids.filter(i => S.jobs[i].q && S.jobs[i].q.state === 'waiting');
+      const won = ids.filter(i => S.jobs[i].q && S.jobs[i].q.state === 'accepted');
+      return `${title}<p class="meta">${t.nq} out with customers, worth ${money(t.quoted)}.</p></div>
+        <section class="block">${head('Needs your OK')}${okCard(pending('quote'))}</section>
+        <section class="block">${head('Waiting on customers')}<div class="card">${waiting.map(i => jobRow(i, `${S.jobs[i].t} · ${money(S.jobs[i].q.amt)}`, `<span class="t2">${esc(S.jobs[i].next)}</span>`)).join('')}</div></section>
+        <section class="block">${head('Accepted')}<div class="card">${won.map(i => jobRow(i, `${S.jobs[i].t} · ${money(S.jobs[i].q.amt)}`)).join('')}</div></section>`;
+    }
+    if (key === 'followups') {
+      const waiting = ids.filter(i => S.jobs[i].q && S.jobs[i].q.state === 'waiting');
+      return `${title}<p class="meta">We nudge on day 3 and day 7, and stop the moment a customer replies.</p></div>
+        <section class="block">${head('Being chased')}<div class="card">${waiting.map(i => jobRow(i, `${S.jobs[i].t} · ${money(S.jobs[i].q.amt)}`, `<span class="t2">${esc(S.jobs[i].next)}</span>`)).join('')}</div></section>
+        <section class="block">${head('Stopped today')}<div class="card">${jobRow('evans', 'Said yes and paid the deposit. Chasing stopped.')}</div></section>
+        <section class="block">${head('Reviews')}<div class="card">${jobRow('khan', 'Asked today, the day after he paid.')}</div></section>
+        <section class="block">${head('Service due')}<div class="card">${jobRow('reid', 'Reminded on 1 October. Booked for 21 October.')}</div></section>`;
+    }
+    if (key === 'paperwork') {
+      return `${title}<p class="meta">Job records, draft reports and deadlines. You check anything technical.</p></div>
+        <section class="block">${head('Needs your OK')}${okCard(pending('extra'))}</section>
+        <section class="block">${head('To check')}<div class="card">
+          <div class="row"><span class="txt"><span class="t1">Mrs Ahmed’s draft report</span><span class="t2">${S.reportChecked ? 'Checked by you today.' : 'Built from your photos and voice note.'}</span></span>${S.reportChecked ? pill('Checked', 'chip-good', 'i-check') : '<button class="btn btn-line" data-act="check-report">Looks right</button>'}</div>
+          <div class="row"><span class="txt"><span class="t1">Photo of the flue</span><span class="t2">${S.fluePhoto ? 'Added to Mrs Ahmed’s job record.' : 'Missing from Mrs Ahmed’s job record.'}</span></span>${S.fluePhoto ? pill('Added', 'chip-good', 'i-check') : '<button class="btn btn-line" data-act="sheet" data-name="send" data-id="flue">Add it</button>'}</div>
+        </div></section>
+        <section class="block">${head('Deadlines')}<div class="card">
+          <div class="row"><span class="txt"><span class="t1">Gas Safe: Mrs Ahmed</span><span class="t2">${S.gasSent ? 'Sent by you today.' : 'Details ready. Due by 14 November. You send it.'}</span></span>${S.gasSent ? pill('Sent', 'chip-good', 'i-check') : '<button class="btn btn-line" data-act="gas-sent">I’ve sent it</button>'}</div>
+          <div class="row"><span class="txt"><span class="t1">Gas Safe: Mr Khan</span><span class="t2">Details ready. Due by 30 October. You send it.</span></span>${pill('15 days left', 'chip-plain', 'i-clock')}</div>
+        </div></section>
+        <section class="block">${head('Job records')}<div class="card">${['ahmed', 'khan', 'hughes'].map(i => jobRow(i)).join('')}</div></section>`;
+    }
+    const unpaid = ids.filter(i => S.jobs[i].inv && (S.jobs[i].inv.state === 'sent' || S.jobs[i].inv.state === 'overdue'));
+    const paid = ids.filter(i => S.jobs[i].inv && S.jobs[i].inv.state === 'paid');
+    return `${title}<p class="meta">${t.no} unpaid, worth ${money(t.owed)}. ${t.nov ? money(t.over) + ' of it is overdue.' : 'Nothing is overdue.'}</p></div>
+      <section class="block">${head('Needs your OK')}${okCard(pending('invoice'))}</section>
+      <section class="block">${head('Unpaid')}<div class="card">${unpaid.map(i => jobRow(i, `${S.jobs[i].t} · ${money(S.jobs[i].inv.amt)}`, `<span class="t2">${esc(S.jobs[i].inv.note)}. ${esc(S.jobs[i].next)}</span>${chip(S.jobs[i].inv.state)}`)).join('')}</div></section>
+      <section class="block">${head('Paid this month')}<div class="card">${paid.map(i => jobRow(i, `${S.jobs[i].t} · ${money(S.jobs[i].inv.amt)}`, `<span class="t2">${esc(S.jobs[i].inv.note)}.</span>`)).join('')}</div></section>`;
+  }
+
+  function feedScreen() {
+    return `${backBtn()}<div class="block"><h1>Done for you</h1><p class="meta">Everything Front-line did in your name.</p></div>
+      <section class="block">${head('Today', `<span class="count">${S.feed.length}</span>`)}${feedList(S.feed)}</section>
+      <section class="block">${head('Yesterday', `<span class="count">${S.yesterday.length}</span>`)}${feedList(S.yesterday)}</section>`;
+  }
+
+  function moneyScreen() {
+    const t = totals();
+    const li = (a, b) => `<li><span>${esc(a)}</span><b>${esc(b)}</b></li>`;
+    const patelSent = S.jobs.patel && S.jobs.patel.q.state === 'waiting';
+    const w = S.week || { sent: patelSent ? '4 · £10,500' : '3 · £7,350', won: '1 · £2,550', quiet: 'None', paid: '1 · £2,464', deposits: '1 · £510' };
+    return `${backBtn()}<div class="block"><h1>Money this week</h1><p class="meta">Monday to today. We send you this every Friday.</p></div>
+      ${moneyBlock()}
+      <section class="block">${head('Quotes')}<div class="card"><ul class="kv">
+        ${li('Sent this week', w.sent)}${li('Won this week', w.won)}${li('Waiting on customers', `${t.nq} · ${money(t.quoted)}`)}${li('Gone quiet', w.quiet)}
+      </ul></div></section>
+      <section class="block">${head('Invoices')}<div class="card"><ul class="kv">
+        ${li('Paid this week', w.paid)}${li('Deposits in', w.deposits)}${li('Owed to you', `${t.no} · ${money(t.owed)}`)}${li('Overdue', t.nov ? `${t.nov} · ${money(t.over)}` : 'None')}
+      </ul></div></section>`;
+  }
+
+  function rulesScreen() {
+    const group = (k, items) => `<section class="block">${head(SVC[k].label)}<div class="card pad"><ul class="ticks">${items.map(t => `<li>${icon('i-check')}<span>${esc(t)}</span></li>`).join('')}</ul></div></section>`;
+    return `${backBtn()}<div class="block"><h1>Your rules</h1><p class="meta">We set these up with you. To change one, tell us.</p></div>
+      ${group('calls', ['We answer when you can’t pick up.', 'Quote visits go in Monday to Friday, 8am to 4pm.', 'Anything urgent, like a leak, comes straight to you.'])}
+      ${group('quotes', ['We price from your price list.', 'Nothing goes out until you approve it.', 'Jobs over £1,000 ask for a 20% deposit, paid straight to your account.'])}
+      ${group('followups', ['We nudge on day 3 and day 7, then stop.', 'We stop the moment a customer replies.', 'We ask every customer for a review after they pay.', 'We tell customers when their boiler service is due.'])}
+      ${group('paperwork', ['We build the job record and a draft report from your photos and voice note.', 'You check anything technical.', 'We prepare Gas Safe notification details and track the 30-day deadline. You send it.'])}
+      ${group('invoices', ['We raise the invoice from the quote when you say the job is done.', 'Nothing goes out until you approve it.', 'We remind at 7 and 14 days late, and stop when it’s paid.', 'If a customer disputes an invoice, we stop and hand it to you.'])}
+      <section class="block">${head('Messages to customers')}<div class="card pad"><ul class="ticks"><li>${icon('i-check')}<span>They go from the WhatsApp number you chose, in your name.</span></li><li>${icon('i-check')}<span>Customers without WhatsApp get a text or an email.</span></li></ul></div></section>
+      <button class="btn btn-line btn-lg" data-act="sheet" data-name="message">${icon('i-msg')}Tell us what to change</button>`;
+  }
+
+  function jobList() {
+    const q = S.find.trim().toLowerCase();
+    const ids = Object.keys(S.jobs).filter(i => !q || (S.jobs[i].c + ' ' + S.jobs[i].t + ' ' + S.jobs[i].a).toLowerCase().includes(q));
+    if (!ids.length) return '<p class="empty">No job or customer matches that.</p>';
+    return ids.map(i => jobRow(i, `${S.jobs[i].t} · ${S.jobs[i].a}`, chip(jobStatus(i)))).join('');
+  }
+  function jobsScreen() {
+    return `${backBtn()}<div class="block"><h1>All jobs</h1></div>
+      <div class="field"><label for="fl-find">Find a job or a customer</label><input class="find" id="fl-find" type="search" autocomplete="off" placeholder="Name, job or street" value="${esc(S.find)}"></div>
+      <div class="card" id="fl-jobs">${jobList()}</div>`;
+  }
+
+  /* ---------- sheets ---------- */
+  function sheetBody() {
+    const sh = S.sheet;
+    const h = t => `<div class="sheet-top"><h2 id="fl-sheet-h" tabindex="-1">${esc(t)}</h2><button class="x" data-act="close" aria-label="Close">${icon('i-x')}</button></div>`;
+    const done = (title, text) => `${h(title)}<div class="center"><span class="bigtick">${icon('i-check', '')}</span><p>${esc(text)}</p></div><button class="btn btn-ink btn-lg btn-block" data-act="close">Done</button>`;
+    if (sh.name === 'send') {
+      if (sh.step === 'rec') return `${h('Recording')}<p class="timer" id="fl-timer">0:00</p><div class="rec" aria-hidden="true">${'<i></i>'.repeat(17)}</div><button class="btn btn-ink btn-lg btn-block" data-act="send-stop">Stop and send</button><button class="btn btn-line btn-block" data-act="close">Cancel</button>`;
+      if (sh.step === 'sent') return done('Got it', sh.text);
+      const one = sh.id === 'flue';
+      const photos = sh.photos ? `<p class="meta">${one ? '1 photo added.' : '3 photos added.'}</p><button class="btn btn-ink btn-lg btn-block" data-act="send-photos">${one ? 'Send the photo' : 'Send the photos'}</button>` : '';
+      return `${h(sh.id === 'flue' ? 'Add the flue photo' : 'Send it in')}
+        <p class="meta">${sh.id === 'flue' ? 'Take the photo or pick it from your phone. We add it to Mrs Ahmed’s job record.' : 'Say what happened or what the job needs. We do the rest.'}</p>
+        ${sh.id === 'flue' ? '' : `<button class="btn btn-teal btn-lg btn-block" data-act="send-rec">${icon('i-mic')}Record a voice note</button>`}
+        <button class="btn ${one && !sh.photos ? 'btn-teal' : 'btn-line'} btn-lg btn-block" data-act="send-add">${icon('i-camera')}${one ? (sh.photos ? 'Add another photo' : 'Add the photo') : (sh.photos ? 'Add more photos' : 'Add photos')}</button>
+        ${photos}`;
+    }
+    if (sh.name === 'message') {
+      if (sh.step === 'sent') return done('Sent', 'Sophie or Greg will come back to you.');
+      return `${h('Message Sophie or Greg')}
+        <div class="field"><label for="fl-msg">What do you need?</label><textarea id="fl-msg" placeholder="For example: put my day rate up to £320 from Monday."></textarea></div>
+        <button class="btn btn-ink btn-lg btn-block" data-act="msg-send">Send message</button>
+        <p class="meta">Or ring Greg on 07771 542157.</p>`;
+    }
+    if (sh.name === 'change') {
+      const r = review(sh.id);
+      return `${h('What needs changing?')}
+        <p class="meta">${esc(r.title)}. Tell us and we bring it back for your OK.</p>
+        <div class="field"><label for="fl-change">The change</label><textarea id="fl-change" placeholder="For example: take the system flush off."></textarea></div>
+        <button class="btn btn-ink btn-lg btn-block" data-act="change-send" data-id="${sh.id}">Send the change</button>`;
+    }
+    if (sh.name === 'preview') {
+      const r = review(sh.id);
+      const j = S.jobs[r.job];
+      return `${h('What ' + j.c + ' gets')}
+        <p class="meta">A WhatsApp message from your number, in your name. A text or an email if they aren’t on WhatsApp.</p>
+        <div class="bubble"><span class="t1">${esc(S.firm)}</span><p>${esc(r.msg)}</p><span class="link">${esc(r.cta)}</span></div>
+        <p class="meta">The link opens this, with no login:</p>
+        <div class="mini"><span class="t1">${esc(S.firm)}</span><span>${esc(r.title.replace(' for ', ' · '))}</span>
+          <div class="total"><b>${money(r.total)}</b><span class="meta">including VAT</span></div>
+          ${r.pay.map((p, n) => `<span class="btn ${n ? 'btn-line' : 'btn-ink'} btn-block">${esc(p)}</span>`).join('')}
+        </div>`;
+    }
+    if (sh.name === 'settings') {
+      return `${h('Example settings')}
+        <p class="meta">This is an example. Change the names to show it as someone’s own firm.</p>
+        <div class="field"><label for="fl-firm">Firm name</label><input id="fl-firm" type="text" autocomplete="off" value="${esc(S.firm)}"></div>
+        <div class="field"><label for="fl-owner">Owner’s first name</label><input id="fl-owner" type="text" autocomplete="off" value="${esc(S.owner)}"></div>
+        <button class="btn btn-ink btn-lg btn-block" data-act="settings-save">Save names</button>
+        <button class="btn btn-line btn-block" data-act="reset">Start the example again</button>`;
+    }
+    return '';
+  }
+
+  /* ---------- render ---------- */
+  function renderSide() {
+    const r = S.route;
+    const cur = (name, id) => (r.name === name && (id === undefined || r.id === id)) ? ' aria-current="page"' : '';
+    const svc = Object.keys(SVC).map(k => {
+      const n = pending({ quotes: 'quote', invoices: 'invoice', paperwork: 'extra' }[k] || '').length;
+      return `<button class="nav" data-act="section" data-id="${k}"${cur('section', k)}>${icon(SVC[k].icon)}<span>${esc(SVC[k].label)}</span>${n ? `<b aria-label="${n} ${n === 1 ? 'needs' : 'need'} your OK">${n}</b>` : ''}</button>`;
+    }).join('');
+    side.innerHTML = `
+      <div class="side-brand">
+        <svg class="logo" role="img" aria-label="Front-line"><use href="#logo"></use></svg>
+        <div class="side-firm"><span>${esc(S.firm)}</span><span class="badge">Example</span></div>
+      </div>
+      <button class="nav" data-act="home"${cur('home')}>${icon('i-home')}<span>Home</span>${S.approvals.length ? `<b aria-label="${S.approvals.length} need your OK">${S.approvals.length}</b>` : ''}</button>
+      ${svc}
+      <hr>
+      <button class="nav" data-act="go" data-name="jobs"${cur('jobs')}>${icon('i-list')}<span>All jobs</span></button>
+      <button class="nav" data-act="go" data-name="money"${cur('money')}>${icon('i-pound')}<span>Money this week</span></button>
+      <button class="nav" data-act="go" data-name="rules"${cur('rules')}>${icon('i-rules')}<span>Your rules</span></button>
+      <div class="side-end">
+        <button class="btn btn-teal btn-lg btn-block" data-act="sheet" data-name="send">${icon('i-mic')}Send it in</button>
+        <button class="btn btn-line btn-block" data-act="sheet" data-name="message">${icon('i-msg')}Message us</button>
+      </div>`;
+  }
+  function barHTML(r) {
+    if (r.name === 'review') {
+      const rv = review(r.id);
+      return ['actions', `<div class="bar-in">${rv.kind === 'extra'
+        ? `<button class="btn btn-ink btn-lg btn-block" data-act="extra" data-v="add">Add it to the invoice</button><div class="two"><button class="btn btn-line" data-act="extra" data-v="leave">Leave it off</button><button class="btn btn-line" data-act="notyet">Not yet</button></div>`
+        : `<button class="btn btn-ink btn-lg btn-block" data-act="approve" data-id="${r.id}">Approve and send</button><div class="two"><button class="btn btn-line" data-act="sheet" data-name="change" data-id="${r.id}">Change</button><button class="btn btn-line" data-act="notyet">Not yet</button></div>`}</div>`];
+    }
+    return ['send', `<div class="bar-in"><button class="btn btn-teal btn-lg btn-block" data-act="sheet" data-name="send">${icon('i-mic')}Send a voice note or photos</button></div>`];
+  }
+  function renderBar() {
+    const b = barHTML(S.route);
+    app.dataset.bar = b[0];
+    bar.innerHTML = b[1];
+  }
+  function screenHTML(r) {
+    return r.name === 'home' ? home()
+      : r.name === 'review' ? reviewScreen(r.id)
+      : r.name === 'job' ? jobScreen(r.id)
+      : r.name === 'section' ? sectionScreen(r.id)
+      : r.name === 'feed' ? feedScreen()
+      : r.name === 'money' ? moneyScreen()
+      : r.name === 'rules' ? rulesScreen()
+      : jobsScreen();
+  }
+  function render(keepScroll) {
+    const r = S.route;
+    const y = window.scrollY;
+    screen.className = 'screen' + (r.name === 'home' ? ' wide' : '');
+    screen.innerHTML = screenHTML(r);
+    renderSide();
+    renderBar();
+    if (keepScroll) { window.scrollTo(0, y); return; }
+    window.scrollTo(0, 0);
+    const h = screen.querySelector('h1');
+    if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+  }
+  function renderSheet(focus) {
+    const behind = [side, screen.parentNode, bar];
+    if (!S.sheet) {
+      sheetEl.hidden = true; sheetEl.innerHTML = ''; document.body.style.overflow = '';
+      behind.forEach(el => el.removeAttribute('inert'));
+      return;
+    }
+    sheetEl.hidden = false;
+    document.body.style.overflow = 'hidden';
+    behind.forEach(el => el.setAttribute('inert', ''));
+    sheetEl.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fl-sheet-h">${sheetBody()}</div>`;
+    if (focus !== false) { const h = document.getElementById('fl-sheet-h'); if (h) h.focus(); }
+  }
+
+  let toastTimer = null;
+  function toast(text, undo, action) {
+    clearTimeout(toastTimer);
+    toastEl.innerHTML = `<div class="toast-in"><span>${esc(text)}</span>${undo ? '<button class="toast-btn" data-act="undo">Undo</button>' : ''}${action ? `<button class="toast-btn" data-act="review" data-id="${action}">Review</button>` : ''}</div>`;
+    toastTimer = setTimeout(() => { toastEl.innerHTML = ''; S.undo = null; }, 8000);
+  }
+
+  /* ---------- moving about ---------- */
+  function go(route, fresh) {
+    if (fresh) S.stack = []; else S.stack.push(S.route);
+    S.route = route;
+    render();
+  }
+  function back() {
+    S.route = S.stack.pop() || { name: 'home' };
+    render();
+  }
+  function openSheet(sheet, opener) {
+    S.sheet = sheet;
+    S.opener = opener || null;
+    renderSheet();
+  }
+  function closeSheet() {
+    clearInterval(S.recTimer);
+    S.sheet = null;
+    renderSheet();
+    if (S.opener && document.contains(S.opener)) S.opener.focus();
+  }
+
+  /* ---------- changes to the example ---------- */
+  const snapshot = () => { S.undo = JSON.stringify(DATA_KEYS.reduce((o, k) => { o[k] = S[k]; return o; }, {})); };
+  function approve(id) {
+    snapshot();
+    const r = review(id);
+    const j = S.jobs[r.job];
+    S.approvals = S.approvals.filter(a => a !== id);
+    delete S.changeAsked[id];
+    if (r.kind === 'quote') {
+      j.q.state = 'waiting'; j.st = 'waiting';
+      j.next = 'First nudge on Sunday (day 3) if there’s no reply.';
+      j.tl.push(['Today', 'Now', 'you', 'Approved the quote.'], ['Today', 'Now', 'fl', `Sent the quote: ${money(r.total)}, with a £630 deposit link.`]);
+      S.feed.unshift(['Now', r.job, `Sent ${j.c} the quote for ${money(r.total)} after your OK.`]);
+      toast(`Quote sent to ${j.c}.`, true);
+    } else {
+      j.inv = { amt: r.total, state: 'sent', note: 'Due on 29 October' }; j.st = 'sent';
+      j.next = 'First reminder 7 days after it’s due. We stop when it’s paid.';
+      j.tl.push(['Today', 'Now', 'you', 'Approved the invoice.'], ['Today', 'Now', 'fl', `Sent the invoice: ${money(r.total)}, with a pay-now link.`]);
+      S.feed.unshift(['Now', r.job, `Sent ${j.c} the invoice for ${money(r.total)} after your OK.`]);
+      toast(`Invoice sent to ${j.c}.`, true);
+    }
+    go({ name: 'home' }, true);
+  }
+  function extra(added) {
+    snapshot();
+    const j = S.jobs.ahmed;
+    S.filter = added ? 'added' : 'left';
+    S.approvals = S.approvals.map(a => a === 'x-ahmed' ? 'i-ahmed' : a);
+    const total = review('i-ahmed').total;
+    j.inv = { amt: total, state: 'draft' };
+    j.next = 'Approve the invoice and we send it with a pay-now link.';
+    j.tl.push(['Today', 'Now', 'you', added ? 'Said the filter goes on the invoice.' : 'Said to leave the filter off.'], ['Today', 'Now', 'fl', `Raised the invoice: ${money(total)}. Ready for your OK.`]);
+    S.feed.unshift(['Now', 'ahmed', `Raised Mrs Ahmed’s invoice for ${money(total)}${added ? ', with the filter added' : ''}.`]);
+    toast(added ? 'Filter added. Her invoice is ready for your OK.' : 'Left off. Her invoice is ready for your OK.', true);
+    go({ name: 'home' }, true);
+  }
+  function voiceSent() {
+    const first = !S.voiceUsed;
+    S.voiceUsed = true;
+    S.sheet = { name: 'send', step: 'sent', text: first ? 'This sounds like Mr Davies’s boiler service. We’re raising the invoice now.' : 'We’ll take it from here.' };
+    renderSheet();
+    if (!first) return;
+    later(() => {
+      const j = S.jobs.davies;
+      j.inv = { amt: 95, state: 'draft' };
+      j.next = 'Approve the invoice and we send it with a pay-now link.';
+      j.tl.push(['Today', 'Now', 'you', 'Voice note: “Done. Standard service, nothing extra.”'], ['Today', 'Now', 'fl', 'Raised the invoice from your voice note: £95. Ready for your OK.']);
+      S.approvals.push('i-davies');
+      S.feed.unshift(['Now', 'davies', 'Raised Mr Davies’s invoice from your voice note.']);
+      render(true);
+      toast('Mr Davies’s invoice is ready for your OK.', false, 'i-davies');
+    }, 2600);
+  }
+
+  const ACT = {
+    home: () => go({ name: 'home' }, true),
+    back: () => back(),
+    go: d => {
+      go({ name: d.name });
+      if (d.name === 'jobs') { const f = document.getElementById('fl-find'); if (f) f.focus(); }
+    },
+    section: d => go({ name: 'section', id: d.id }),
+    job: d => go({ name: 'job', id: d.id }),
+    review: d => { toastEl.innerHTML = ''; go({ name: 'review', id: d.id }); },
+    approve: d => approve(d.id),
+    extra: d => extra(d.v === 'add'),
+    notyet: () => { back(); toast('Left for later. It stays under Needs your OK.'); },
+    undo: () => {
+      if (!S.undo) return;
+      Object.assign(S, JSON.parse(S.undo));
+      S.undo = null;
+      toastEl.innerHTML = '';
+      render(true);
+      toast('Undone. Nothing was sent.');
+    },
+    sheet: (d, el) => openSheet({ name: d.name, id: d.id, step: 'start' }, el),
+    close: () => closeSheet(),
+    'send-rec': () => {
+      S.sheet.step = 'rec';
+      renderSheet();
+      let s = 0;
+      S.recTimer = setInterval(() => {
+        s++;
+        const t = document.getElementById('fl-timer');
+        if (t) t.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+      }, 1000);
+    },
+    'send-stop': () => { clearInterval(S.recTimer); voiceSent(); },
+    'send-add': () => { S.sheet.photos = true; renderSheet(false); },
+    'send-photos': () => {
+      if (S.sheet.id === 'flue') {
+        S.fluePhoto = true;
+        S.jobs.ahmed.tl.push(['Today', 'Now', 'you', 'Added the photo of the flue.']);
+        S.sheet = { name: 'send', step: 'sent', text: 'The flue photo is in Mrs Ahmed’s job record.' };
+        render(true);
+      } else {
+        S.sheet = { name: 'send', step: 'sent', text: 'We’ll take it from here.' };
+      }
+      renderSheet();
+    },
+    'msg-send': () => { S.sheet.step = 'sent'; renderSheet(); },
+    'change-send': d => {
+      S.changeAsked[d.id] = true;
+      closeSheet();
+      go({ name: 'home' }, true);
+      toast('Got it. We’ll change it and bring it back for your OK.');
+    },
+    'check-report': () => { S.reportChecked = true; render(true); },
+    'gas-sent': () => { S.gasSent = true; render(true); },
+    'settings-save': () => {
+      const f = document.getElementById('fl-firm').value.trim();
+      const o = document.getElementById('fl-owner').value.trim();
+      if (f) { S.firm = f.slice(0, 40); keep('firm', S.firm); }
+      if (o) { S.owner = o.slice(0, 20); keep('owner', S.owner); }
+      closeSheet();
+      render(true);
+      toast('Names saved on this device.');
+    },
+    reset: () => {
+      timers.forEach(clearTimeout); timers = [];
+      Object.assign(S, seed(), { find: '', undo: null });
+      closeSheet();
+      go({ name: 'home' }, true);
+      toast('The example is back to the start.');
+    }
+  };
+
+  app.addEventListener('click', e => {
+    if (e.target === sheetEl) { closeSheet(); return; }
+    const el = e.target.closest('[data-act]');
+    if (el && ACT[el.dataset.act]) ACT[el.dataset.act](el.dataset, el);
+  });
+  app.addEventListener('input', e => {
+    if (e.target.id !== 'fl-find') return;
+    S.find = e.target.value;
+    document.getElementById('fl-jobs').innerHTML = jobList();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
+
+  render();
+
+/*@@FILM_JS@@*/
+})();
+</script>

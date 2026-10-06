@@ -1,0 +1,205 @@
+/* The film, version 2. A 1920x1080 stage scaled to fit the window, and it does not move: Tom's phone on
+   the left, Front-line's column in the middle, the customer's phone on the right, for the whole film.
+   The words sit in the middle column and stay there. One dark look, from the website's dark band, so the
+   cream phones stand out. Everything on the stage is placed by film.js from one clock, so nothing here
+   animates by itself. */
+.film{
+  --f-bg:#151C30; --f-bg-2:#1D2640; --f-ink:#FBF4EB; --f-dim:rgba(251,244,235,.68);
+  --f-line:rgba(251,244,235,.16); --f-cyan:#66D8E8; --f-peach:#FFB18D; --f-phone:#090D18;
+  --k:1;
+  min-height:100vh; display:flex; flex-direction:column; gap:14px;
+  padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px));
+  background:var(--f-bg); color:var(--f-ink); color-scheme:dark;
+}
+html.film-on body{background:#151C30}
+.film :focus-visible{outline-color:var(--f-cyan)}
+.film-fit{position:relative; width:100%; max-width:calc((100vh - 210px) * 16 / 9); min-width:0; margin-inline:auto; aspect-ratio:16 / 9; overflow:hidden; border-radius:10px; background:var(--f-bg)}
+.film-stage{position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; transform:scale(var(--k)); overflow:hidden; font-family:var(--font); line-height:1.2; color:var(--f-ink);
+  background:radial-gradient(1200px 700px at 50% 38%, var(--f-bg-2), var(--f-bg) 70%)}
+.film-stage *{animation:none !important; transition:none !important}
+.film-fit:fullscreen{max-width:none; width:100%; height:100%; border-radius:0; aspect-ratio:auto}
+.film.capture{padding:0; gap:0; min-height:0}
+.film.capture .film-fit{max-width:none; width:1920px; height:1080px; margin:0; border-radius:0; aspect-ratio:auto}
+.film.capture .film-ui{display:none}
+
+/* Controls and script, outside the stage */
+.film-bar{width:100%; max-width:calc((100vh - 210px) * 16 / 9); min-width:0; margin-inline:auto; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.film-bar h1{font-size:19px; line-height:1.25; letter-spacing:-.01em; font-weight:700; color:var(--f-dim)}
+.film-bar .btn{background:transparent; border:1.5px solid rgba(251,244,235,.4); color:var(--f-ink); padding-left:10px}
+.film-bar .btn:hover{background:rgba(251,244,235,.08)}
+.film.capture .film-bar{display:none}
+.film-ctl .btn[aria-pressed="true"]{background:rgba(102,216,232,.16); border-color:var(--f-cyan)}
+.film-ui{width:100%; max-width:calc((100vh - 210px) * 16 / 9); min-width:0; margin-inline:auto; display:flex; flex-direction:column; gap:14px}
+.film-ctl{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.film-ctl .btn{background:transparent; border:1.5px solid rgba(251,244,235,.4); color:var(--f-ink)}
+.film-ctl .btn:hover{background:rgba(251,244,235,.08)}
+.film-ctl .btn.go{background:var(--f-ink); border-color:var(--f-ink); color:#20273E; min-width:104px}
+.film-ctl .btn.go:hover{background:#fff}
+.film-time{font-variant-numeric:tabular-nums; color:var(--f-dim); white-space:nowrap; margin-left:auto}
+.film-seek{flex:1 1 220px; min-width:0; height:44px; accent-color:var(--f-cyan)}
+.film-now{display:flex; flex-direction:column; gap:4px; min-height:74px}
+.film-now b{font-weight:700}
+.film-now p{color:var(--f-dim); max-width:70ch}
+.film-script{border-top:1px solid var(--f-line); padding-top:14px; display:flex; flex-direction:column; gap:10px}
+.film-script h2{font-size:17px}
+.film-script ol{display:flex; flex-direction:column; gap:2px}
+.film-script li{display:block}
+.film-script button{display:flex; gap:12px; width:100%; min-height:44px; padding:8px 10px; border:0; border-radius:10px; background:none; color:var(--f-dim); text-align:left}
+.film-script button:hover{background:rgba(251,244,235,.06)}
+.film-script button[aria-current="true"]{background:rgba(251,244,235,.09); color:var(--f-ink)}
+.film-script time{flex:none; width:44px; font-variant-numeric:tabular-nums; color:var(--f-cyan)}
+.film-script span{flex:1; min-width:0}
+.film-script b{color:var(--f-ink); font-weight:700}
+
+/* Column heads: who did how much. They stay lit whichever phone is in use. */
+.f-hd{position:absolute; top:22px; left:0; display:flex; flex-direction:column; gap:2px; white-space:nowrap; transform-origin:0 0}
+.f-hd small{font-size:24px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--f-dim); height:30px; display:flex; align-items:center; gap:12px}
+.f-hd .f-logo{width:150px; height:30px}
+.f-eg{padding:3px 10px 2px; border:1.5px solid rgba(251,244,235,.4); border-radius:999px; font-size:16px; letter-spacing:.12em; color:var(--f-dim)}
+.f-hd div{display:flex; align-items:baseline; gap:12px; font-size:44px; font-weight:600; letter-spacing:-.01em; height:84px}
+.f-hd b{display:inline-block; min-width:.56em; margin-inline:6px; text-align:center; font-size:84px; line-height:84px; font-weight:800; font-stretch:82%; letter-spacing:-.02em; font-variant-numeric:tabular-nums; transform-origin:50% 80%}
+.f-hd-tom b{color:var(--f-peach)}
+.f-hd-fl b{color:var(--f-cyan)}
+.f-hd-cust div{font-size:52px; font-weight:740; letter-spacing:-.02em}
+
+/* Phones */
+.f-world{position:absolute; left:0; top:140px; width:1920px; height:940px; overflow:hidden}
+.f-phone{position:absolute; left:0; top:-140px; transform-origin:0 0}
+.f-body{width:414px; height:744px; padding:12px; border-radius:52px; background:var(--f-phone); box-shadow:inset 0 0 0 1.5px rgba(251,244,235,.24), 0 28px 70px rgba(0,0,0,.5)}
+.f-screen{position:relative; width:390px; height:720px; border-radius:40px; overflow:hidden; background:var(--cream); color:var(--ink); font-size:16px; line-height:1.4}
+.f-status{position:absolute; left:0; top:0; right:0; z-index:60; height:30px; display:flex; align-items:flex-end; justify-content:space-between; padding:0 26px 3px; font-size:14px; font-weight:700; font-variant-numeric:tabular-nums}
+.f-status span{display:flex; align-items:center; gap:5px}
+.f-status i{display:block; width:17px; height:11px; border-radius:2px; background:currentColor; clip-path:polygon(0 70%,18% 70%,18% 100%,0 100%,0 70%,27% 45%,45% 45%,45% 100%,27% 100%,27% 45%,54% 22%,72% 22%,72% 100%,54% 100%,54% 22%,82% 0,100% 0,100% 100%,82% 100%,82% 0)}
+.f-status em{display:block; width:24px; height:12px; border:1.5px solid currentColor; border-radius:4px; padding:1.5px}
+.f-status em::after{content:""; display:block; width:74%; height:100%; border-radius:1.5px; background:currentColor}
+.f-tap{position:absolute; z-index:65; left:0; top:0; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(32,39,62,.3); box-shadow:0 0 0 2px rgba(255,255,255,.75), 0 0 0 5px rgba(32,39,62,.25); opacity:0; pointer-events:none}
+.f-press{filter:brightness(.78)}
+/* The one thing on Tom's screen that matters: everything round it is dimmed */
+.f-spot{position:absolute; z-index:45; left:0; top:0; width:0; height:0; border-radius:14px; box-shadow:0 0 0 2px rgba(43,126,133,.95), 0 0 0 1200px rgba(21,28,48,.46); opacity:0; pointer-events:none}
+/* What Tom says or sends, shown the short way: a note leaving his phone */
+.f-vn{position:absolute; z-index:58; left:20px; right:20px; bottom:104px; display:flex; justify-content:center; opacity:0; pointer-events:none}
+.f-vn div{display:flex; align-items:center; gap:10px; max-width:100%; padding:11px 16px 11px 12px; border-radius:22px; background:#FFB18D; color:#20273E; font-size:18px; line-height:1.22; font-weight:650; box-shadow:0 10px 26px rgba(16,22,42,.28)}
+.f-vn i{flex:none; display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%; background:rgba(32,39,62,.14)}
+.f-vn i + i{margin-left:-4px}
+.f-vn svg{width:20px; height:20px}
+
+/* The app inside Tom's phone: the same screens, held in a box */
+.film-app{position:absolute; left:0; top:30px; width:390px; height:690px; overflow:hidden; display:block; background:var(--cream)}
+.film-app .main{padding-bottom:calc(var(--bar) + 28px)}
+.film-app .bar,.film-app .toast,.film-app .sheet-wrap{position:absolute}
+.film-app .bar{padding-bottom:16px}
+.film-app .sheet{padding-bottom:26px}
+.film-app .home-grid,.film-app .home-grid > div{display:contents}
+.film-app .rec i{height:14px}
+.film-app .f-thumbs{display:flex; gap:8px}
+.film-app .f-thumbs span{flex:0 1 calc((100% - 16px) / 3); aspect-ratio:1; border-radius:10px; background:linear-gradient(140deg,#c9d6d4,#8fa9a8); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,.9)}
+
+/* The customer's phone: a call, a plain message thread from the firm, and the page a link opens.
+   The type is big and each message short, so one message can be taken in at a glance. */
+.c-host{position:absolute; inset:0}
+.c-app{position:absolute; left:0; top:0; width:390px; height:720px; display:flex; flex-direction:column; background:var(--cream)}
+.c-top{flex:none; display:flex; align-items:center; gap:10px; height:58px; margin-top:30px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--card)}
+.c-av{width:36px; height:36px; border-radius:50%; background:var(--teal); color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none}
+.c-top b{font-weight:700; line-height:1.15}
+.c-top small{display:block; font-size:13px; color:var(--ink-2)}
+.c-thread{flex:1; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; padding:0 12px 12px; overflow:hidden}
+.c-row{display:grid; grid-template-rows:1fr; flex:none}
+.c-row > div{min-height:0; overflow:hidden; display:flex; flex-direction:column}
+.c-day{align-self:center; margin:12px 0 2px; padding:3px 12px; border-radius:999px; background:var(--cream-deep); color:var(--ink-2); font-size:14px; font-weight:600}
+.c-b{align-self:flex-start; max-width:326px; margin-top:9px; padding:12px 14px 9px; border:1px solid var(--line); border-radius:19px 19px 19px 6px; background:var(--card); font-size:20px; line-height:1.3; transform-origin:0 100%}
+.c-me .c-b{align-self:flex-end; border-color:transparent; border-radius:19px 19px 6px 19px; background:var(--teal-tint); transform-origin:100% 100%}
+.c-b time{display:block; margin-top:4px; font-size:13px; color:var(--ink-2); text-align:right}
+.c-link{display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; margin-top:10px; border-radius:11px; background:var(--ink); color:var(--cream); font-size:18px; font-weight:600}
+.c-link .i-16{color:var(--cream)}
+.c-in{flex:none; display:flex; align-items:center; gap:8px; padding:8px 12px 18px; border-top:1px solid var(--line); background:var(--card)}
+.c-in span{flex:1; height:38px; display:flex; align-items:center; padding:0 14px; border:1.5px solid var(--line-strong); border-radius:999px; color:var(--ink-2); font-size:15px}
+.c-in i{display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:50%; background:var(--teal); color:#fff}
+.c-call{position:absolute; inset:0; display:flex; flex-direction:column; padding:50px 16px 24px; background:#20273E; color:var(--cream)}
+.c-who{flex:none; display:flex; align-items:center; gap:14px}
+.c-who .c-av{width:60px; height:60px; font-size:22px}
+.c-who b{display:block; font-size:24px; font-weight:740; letter-spacing:-.01em; line-height:1.15}
+.c-who small{display:block; font-size:17px; color:rgba(251,244,235,.72); font-variant-numeric:tabular-nums}
+.c-lines{flex:1; min-height:0; display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden; padding-top:14px}
+.c-say{align-self:flex-start; max-width:322px; margin-top:10px; padding:11px 14px; border-radius:17px 17px 17px 6px; background:rgba(251,244,235,.13); font-size:19px; line-height:1.3; transform-origin:0 0}
+.c-say small{display:block; margin-bottom:2px; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#8FE3EF}
+.c-me .c-say{align-self:flex-end; border-radius:17px 17px 6px 17px; background:rgba(255,177,141,.2); transform-origin:100% 0}
+.c-me .c-say small{color:#FFC6AC}
+.c-end{flex:none; align-self:center; width:62px; height:62px; border-radius:50%; background:#D94A3D; display:flex; align-items:center; justify-content:center; color:#fff}
+.c-end svg{width:34px; height:34px}
+.c-lock{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; padding-top:130px; background:#20273E; color:rgba(251,244,235,.78)}
+.c-lock b{font-size:78px; font-weight:300; letter-spacing:-.03em; color:var(--cream); line-height:1.1}
+.c-page{position:absolute; inset:0; display:flex; flex-direction:column; background:var(--cream)}
+.c-bar{flex:none; display:flex; align-items:center; justify-content:space-between; height:50px; margin-top:30px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--card); font-weight:600}
+.c-bar small{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-2); font-weight:600}
+.c-doc{flex:1; min-height:0; display:flex; flex-direction:column; gap:12px; padding:18px 18px 0}
+.c-doc h3{font-size:22px; font-weight:740; letter-spacing:-.02em}
+.c-doc .total b{font-size:46px}
+.c-doc .kv li{padding:9px 12px; font-size:15px}
+.c-doc .btn{pointer-events:none}
+.c-done{display:flex; align-items:center; gap:10px; min-height:56px; padding:0 16px; border-radius:12px; background:var(--teal-tint); font-weight:600; font-size:18px}
+.c-done .i{color:var(--teal); width:24px; height:24px}
+.c-note{color:var(--ink-2); font-size:14.5px}
+
+/* Front-line's column: which of the five services this is, its name, and what was done.
+   It is the only place the words are, and it does not move. */
+.f-mid{position:absolute; left:0; top:150px; width:810px; height:796px; display:flex; flex-direction:column; transform-origin:0 0}
+.f-chap{flex:none; height:44px; display:flex; align-items:center; gap:14px; font-size:27px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--f-cyan); white-space:nowrap}
+.f-chap i{display:block; width:36px; height:3px; border-radius:2px; background:var(--f-cyan)}
+.f-chap svg{width:38px; height:38px; margin-right:-2px}
+.f-head{flex:none; margin-top:8px; font-size:80px; line-height:1.04; font-weight:780; font-stretch:88%; letter-spacing:-.024em; text-wrap:balance; min-height:84px}
+.f-head{position:relative}
+.f-head > .f-was{position:absolute; left:0; top:0; right:0}
+.f-head span{display:block; text-wrap:balance}
+.f-list{position:relative; flex:1; min-height:0; margin-top:22px; overflow:hidden}
+.f-list-old{position:absolute; left:0; top:0; right:0; display:flex; flex-direction:column; pointer-events:none}
+.f-list.over{-webkit-mask-image:linear-gradient(transparent,#000 60px); mask-image:linear-gradient(transparent,#000 60px)}
+.f-list-in{display:flex; flex-direction:column}
+.f-it{display:grid; grid-template-rows:1fr; flex:none}
+.f-it > div{min-height:0; overflow:hidden}
+.f-it p{display:flex; align-items:flex-start; gap:18px; padding:9px 0; font-size:50px; line-height:1.12; font-weight:580; letter-spacing:-.012em}
+.f-it svg{flex:none; width:44px; height:44px; margin-top:6px; color:var(--f-cyan)}
+.f-it small{display:block; margin:-4px 0 8px 62px; font-size:36px; line-height:1.16; font-weight:540; color:var(--f-peach); opacity:.92}
+.f-it.tom p{color:var(--f-peach); font-weight:680}
+.f-it.tom svg{color:var(--f-peach)}
+.f-it.note p{color:var(--f-dim); font-size:38px; font-weight:500; padding-top:13px}
+.f-it.note svg{display:none}
+.f-it.note p::before{content:""; flex:none; width:26px; height:3px; margin:20px 8px 0 10px; border-radius:2px; background:var(--f-dim)}
+.f-tl{display:flex; flex-direction:column; gap:12px; padding-top:8px}
+.f-tl + .f-tl{padding-top:26px}
+.f-tl small{font-size:25px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--f-dim)}
+.f-tl p{display:flex; flex-wrap:wrap; gap:12px; max-width:800px}
+.f-tl i{display:block; width:36px; height:36px; border-radius:50%; background:var(--f-cyan)}
+.f-tl.tom i{background:var(--f-peach)}
+.f-cap{flex:none; min-height:112px; display:flex; align-items:flex-end; padding-top:10px; font-size:30px; line-height:1.3; color:var(--f-dim); font-weight:500}
+.f-cap span{display:block; padding-top:12px; border-top:2px solid var(--f-line); width:100%}
+.film-stage.nocap .f-cap{display:none}
+
+/* The map along the bottom: the five services, the one being shown lit */
+.f-rail{position:absolute; z-index:6; left:56px; right:56px; bottom:24px; height:62px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:18px}
+.f-rail > i{display:flex; flex-direction:column; justify-content:flex-end; gap:9px; min-width:0; font-style:normal}
+.f-rail span{display:flex; align-items:center; gap:10px; min-width:0; font-size:25px; font-weight:650; letter-spacing:-.005em; white-space:nowrap; color:var(--f-ink)}
+.f-rail svg{flex:none; width:32px; height:32px; color:var(--f-cyan)}
+.f-rail em{display:block; height:5px; border-radius:3px; background:rgba(251,244,235,.16); overflow:hidden; font-style:normal}
+.f-rail b{display:block; height:100%; width:0; background:var(--f-cyan)}
+
+/* The opening and closing cards, and the card that opens each service */
+.f-card{position:absolute; z-index:4; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:30px; text-align:center; opacity:0; pointer-events:none}
+.f-card .f-logo{width:430px; height:86px}
+.f-card h3{font-size:104px; line-height:1; font-weight:800; font-stretch:86%; letter-spacing:-.03em}
+.f-card h3 span{display:block}
+.f-card h3 em{font-style:normal; color:var(--f-cyan)}
+.f-card p{font-size:58px; line-height:1.15; font-weight:560; color:var(--f-ink); max-width:1500px; text-wrap:balance}
+.f-card p.dim{font-size:46px; color:var(--f-dim)}
+.f-card .f-contact{display:flex; gap:40px; font-size:64px; font-weight:740; letter-spacing:-.01em; color:var(--f-ink)}
+.f-card .f-contact i{display:block; width:3px; background:rgba(251,244,235,.3)}
+.f-day{position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; padding-bottom:70px; background:radial-gradient(1200px 700px at 50% 38%, var(--f-bg-2), var(--f-bg) 70%); opacity:0; pointer-events:none}
+.f-day small{font-size:42px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--f-cyan)}
+.f-day span{display:flex; align-items:center; justify-content:center; width:150px; height:150px; border-radius:40px; background:rgba(102,216,232,.13); color:var(--f-cyan)}
+.f-day span:empty{display:none}
+.f-day svg{width:96px; height:96px}
+.f-day b{font-size:132px; line-height:1; font-weight:800; font-stretch:86%; letter-spacing:-.03em}
+
+@media (max-width:700px){
+  .film{padding-inline:16px}
+  .film-time{margin-left:0}
+}
