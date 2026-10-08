@@ -1,4 +1,5 @@
 import { env, exports } from 'cloudflare:workers';
+import { HTTPException } from 'hono/http-exception';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { version } from '../package.json';
 import { createApp } from '../src/app';
@@ -49,6 +50,21 @@ describe('createApp', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toBe('Internal Server Error');
     expect(logged.mock.calls).toEqual([[JSON.stringify({ error: 'TypeError', event: 'unhandled_error' })]]);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('keeps the answer of a refusal on purpose, such as a 401, and logs nothing', async () => {
+    const logged = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const app = createApp(() => ({ clock: pretendClock(instantFromIso('2026-09-28T10:15:00Z')) }));
+    app.get('/test/refuse', () => {
+      throw new HTTPException(401);
+    });
+
+    const response = await app.request('/test/refuse', {}, env);
+
+    expect(response.status).toBe(401);
+    expect(logged).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
   });
 });

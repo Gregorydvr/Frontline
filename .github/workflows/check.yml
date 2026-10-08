@@ -11,8 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Wrangler sends no usage data to Cloudflare from the check.
+      # Wrangler sends no usage data to Cloudflare from the check, and does
+      # not download Cloudflare's example request details.
       WRANGLER_SEND_METRICS: "false"
+      CLOUDFLARE_CF_FETCH_ENABLED: "false"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

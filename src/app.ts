@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { version } from '../package.json';
 import type { Deps } from './deps';
 import { errorName, log } from './log';
@@ -22,9 +23,14 @@ export function createApp(makeDeps: (env: Env) => Deps): Hono<AppEnv> {
 
   app.get('/health', (c) => c.json({ version }, 200, { 'Cache-Control': 'no-store' }));
 
-  // Hono's own handler would log the error's message, which can hold a
-  // customer's details. Log only its type (rule 11).
   app.onError((thrown, c) => {
+    // A refusal on purpose, such as a 401 from an auth check, keeps its own
+    // answer and is not an error.
+    if (thrown instanceof HTTPException) {
+      return thrown.getResponse();
+    }
+    // Hono's own handler would log the error's message, which can hold a
+    // customer's details. Log only its type (rule 11).
     log('unhandled_error', { error: errorName(thrown) });
     return c.text('Internal Server Error', 500);
   });

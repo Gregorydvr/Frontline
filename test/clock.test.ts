@@ -30,6 +30,14 @@ describe('pretendClock', () => {
     expect(clock.now()).toBe(instantFromIso('2026-09-30T12:00:00Z'));
   });
 
+  it('refuses to be set to part of a millisecond, even one forced past the types', () => {
+    const clock = pretendClock(start);
+    expect(() => {
+      clock.set(0.5 as Instant);
+    }).toThrow(RangeError);
+    expect(clock.now()).toBe(start);
+  });
+
   it('refuses to move by part of a millisecond', () => {
     const clock = pretendClock(start);
     expect(() => {
@@ -48,6 +56,8 @@ describe('instantFromIso', () => {
     // 11:15 UK summer time is 10:15 UTC.
     expect(instantFromIso('2026-09-28T11:15:00+01:00')).toBe(instantFromIso('2026-09-28T10:15:00Z'));
     expect(instantFromIso('2026-09-28T05:15:00-05:00')).toBe(instantFromIso('2026-09-28T10:15:00Z'));
+    expect(instantFromIso('2026-09-28T15:45:00+05:30')).toBe(instantFromIso('2026-09-28T10:15:00Z'));
+    expect(instantFromIso('2026-09-28T06:45:00-03:30')).toBe(instantFromIso('2026-09-28T10:15:00Z'));
   });
 
   it('reads minutes without seconds, and milliseconds', () => {
@@ -66,9 +76,14 @@ describe('instantFromIso', () => {
     ['a date only', '2026-09-28'],
     ['words', 'Monday at 11:15'],
     ['30 February', '2026-02-30T00:00:00Z'],
+    ['day 0', '2026-09-00T00:00:00Z'],
+    ['month 0', '2026-00-15T00:00:00Z'],
     ['month 13', '2026-13-01T00:00:00Z'],
     ['hour 24', '2026-09-28T24:00:00Z'],
     ['minute 60', '2026-09-28T10:60:00Z'],
+    ['second 60', '2026-09-28T10:15:60Z'],
+    ['an offset of 24 hours', '2026-09-28T10:15:00+24:00'],
+    ['an offset with minute 60', '2026-09-28T10:15:00+01:60'],
     ['a space in place of T', '2026-09-28 10:15:00Z'],
   ])('refuses %s', (_, text) => {
     expect(() => instantFromIso(text)).toThrow(RangeError);

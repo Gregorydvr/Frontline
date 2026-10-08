@@ -23,9 +23,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // Wrangler's usage data is off for this project. A few of Wrangler's
-  // one-off events ignore this setting, so the GitHub check also sets
-  // WRANGLER_SEND_METRICS=false, which stops them all.
+  // one-off events ignore this setting; WRANGLER_SEND_METRICS=false in the
+  // environment stops them all (see README.md).
   "send_metrics": false,
+
+  // The names of the secrets the Worker needs. None yet: slice C adds the
+  // first. Listing them here, in each copy, keeps the generated types the same
+  // whether or not a local .dev.vars exists.
+  "secrets": { "required": [] },
 
   // This machine only.
   "d1_databases": [
@@ -43,6 +48,7 @@
 
   "env": {
     "practice": {
+      "secrets": { "required": [] },
       "d1_databases": [
         {
           "binding": "DB",
@@ -66,13 +72,14 @@
         "producers": [
           {
             "binding": "DUE",
-            // Greg creates the practice queue with this name.
+            // Greg creates the practice queue in the EU with this name.
             "queue": "frontline-practice-due"
           }
         ]
       }
     },
     "live": {
+      "secrets": { "required": [] },
       "d1_databases": [
         {
           "binding": "DB",
@@ -96,7 +103,7 @@
         "producers": [
           {
             "binding": "DUE",
-            // Greg creates the live queue with this name.
+            // Greg creates the live queue in the EU with this name.
             "queue": "frontline-live-due"
           }
         ]

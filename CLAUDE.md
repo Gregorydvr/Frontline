@@ -95,7 +95,9 @@ Slice A creates these. Keep the names.
 - `npm run dev`: the system on this machine, with the invented data. It applies `migrations/` to the local database first.
 - `npm run types`: rewrites `worker-configuration.d.ts` after a change to `wrangler.jsonc`.
 
-To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of Vite's optional add-ons. `npm ci` works with either.
+To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of Vite's optional add-ons. `npm ci` works with either. `.npmrc` makes npm record exact versions.
+
+In a cloud session, run anything that starts Wrangler (`npm run check`, `npm test`, `npm run dev`) with `WRANGLER_SEND_METRICS=false` and `CLOUDFLARE_CF_FETCH_ENABLED=false` set, so that it does not try to reach Cloudflare.
 
 ## Layout
 
