@@ -33,6 +33,8 @@ The first time the system is used, it loads the demo firm: Tidewell Heating, own
 
 Open http://localhost:8787/local/calls to see the demo firm's Calls & bookings screen on the same day, drawn from the record in the example app's look. Until the owner can log in (slice F), the owner's screens are served only here.
 
+Open http://localhost:8787/local/texts to see the demo firm's texts from the record: what went out, what was not sent and why, and what came in. On this machine no text leaves: a stand-in takes the place of Twilio and sends nothing. `npm run dev` warns that the Twilio secrets are missing; that is expected, since this machine never needs them.
+
 To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again. Do this once after an update that changes the demo firm, such as slice C's calls: the demo firm is loaded only into an empty database.
 
 ### Watch a call land
@@ -47,6 +49,20 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/vapi/serv
 ```
 
 It prints 200. Refresh http://localhost:8787/local/calls and Mrs Hall's call is at the top. Send it again, and nothing changes: the same report makes one call. Put anything else after `Bearer`, and it prints 401: refused. The other example reports are in `test/fixtures/vapi/`. What to set on a firm's voice agent in Vapi is in `docs/vapi.md`.
+
+### Send an urgent call
+
+Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so an alert to the owner is made at once. Open http://localhost:8787/local/texts: the alert to Tom is listed as `not_sent (no_wording)`, because the words of the owner's alert are not agreed yet (open question 7 in `docs/decisions.md`), and no text goes without words the firm agreed.
+
+### Run the clock by hand
+
+On a deployed copy the clock runs every minute. On this machine it runs only when asked:
+
+```sh
+curl http://localhost:8787/cdn-cgi/local/scheduled
+```
+
+It puts the rows of the due list whose time has come on the queue, and the queue's worker runs them. The demo firm has nothing due yet: reminders are written when a visit is booked, which comes with slice E.
 
 Wrangler does contact Cloudflare in two small ways unless told not to:
 
@@ -84,5 +100,8 @@ Only Greg deploys, from his own machine, and only when he asks. Nothing goes to 
    - `npx wrangler queues create frontline-practice-due --jurisdiction eu`
 2. Put the database's id in `wrangler.jsonc`, in place of the zeros under `practice`.
 3. Set its secret for Vapi, different for practice and live: `npx wrangler secret put VAPI_SECRET --env practice`. See `docs/vapi.md`.
+4. Set its Twilio account and auth token: `npx wrangler secret put TWILIO_ACCOUNT_SID --env practice` and `TWILIO_AUTH_TOKEN` likewise. Put the copy's address in `PUBLIC_ADDRESS` under its environment in `wrangler.jsonc`. See `docs/twilio.md`.
 
 Wrangler 4 creates a missing file store or queue by itself during a deploy. Until step 1 is done, deploy with `--x-provision=false` so nothing is created by accident.
+
+Each copy runs the clock every minute (a cron trigger) and takes its own queue's messages (a queue consumer), both set in `wrangler.jsonc`.

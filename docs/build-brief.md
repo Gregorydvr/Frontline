@@ -94,7 +94,7 @@ In the plan for this slice, name the router, the way queries are written and the
 
 Until slice F there is no owner login, so the app's pages are served only on this machine and behind the practice gate (section 5).
 
-### [ ] D. Sending, and the clock
+### [x] D. Sending, and the clock
 
 - `send()`, as rules 1 to 4 in `CLAUDE.md` describe. Each message has a kind. A kind either needs the owner's approval or uses wording agreed at set-up.
 - A texts interface with a fake, and a Twilio version behind it: sending, delivery reports, and incoming texts with Twilio's signature checked.
