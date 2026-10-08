@@ -25,6 +25,9 @@ export type LineForm = 'job' | 'feed';
  * - {visit} and {Visit}: the kind of visit, such as "quote visit"
  * - {short visit}: the shorter word, such as "visit"
  * - {when}: the visit's day and time, such as "Monday, 9am"
+ * - {caller}: who rang, for a caller who is not a customer, such as "a supplier"
+ * - {message}: the one line about their call, such as "Your order is ready to
+ *   collect." Left out when there is none.
  */
 export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineForm, string>> | null>> = {
   call_answered: {
@@ -49,11 +52,22 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
     job: 'Sent a reminder about the {short visit}.',
     feed: 'Reminded {customer} about the {short visit}.',
   },
+  // A caller who is not a customer has no job page, so both forms are the
+  // example's line in Done for you.
+  message_taken: {
+    job: 'Call from {caller}. {message}',
+    feed: 'Call from {caller}. {message}',
+  },
+  // The example never needed these words. They come with slice F, which
+  // builds the screen for a call with details missing.
+  details_missing: null,
   // For the control room, in slice G.
   service_on: null,
   service_off: null,
   stop_on: null,
   stop_off: null,
+  number_set: null,
+  urgent_list_set: null,
 };
 
 /** The words for each kind of visit. */
@@ -69,7 +83,8 @@ export function historyLine(entry: HistoryEntry, form: LineForm): string | null 
   if (words === undefined) {
     return null;
   }
-  return words.replace(/\{([^{}]+)\}/g, (_, gap: string) => fill(gap, entry));
+  // A gap left empty at the end, such as a missing {message}, leaves no space behind.
+  return words.replace(/\{([^{}]+)\}/g, (_, gap: string) => fill(gap, entry)).trimEnd();
 }
 
 function fill(gap: string, entry: HistoryEntry): string {
@@ -86,6 +101,10 @@ function fill(gap: string, entry: HistoryEntry): string {
       return visitWords(entry).short;
     case 'when':
       return whenWords(visitOf(entry).startsAt, entry.at);
+    case 'caller':
+      return callOf(entry).caller ?? missing('This line needs who rang');
+    case 'message':
+      return callOf(entry).summary ?? '';
     default:
       throw new RangeError('The words have a gap this does not know');
   }
@@ -134,10 +153,19 @@ function visitOf(entry: HistoryEntry): NonNullable<HistoryEntry['visit']> {
   return entry.visit;
 }
 
+function callOf(entry: HistoryEntry): NonNullable<HistoryEntry['call']> {
+  return entry.call ?? missing('This line needs the call');
+}
+
+function missing(what: string): never {
+  throw new RangeError(what);
+}
+
 function visitWords(entry: HistoryEntry): { name: string; short: string } {
   return VISIT_WORDS[visitOf(entry).kind];
 }
 
-function capitalised(words: string): string {
+/** "quote visit" as "Quote visit", "a supplier" as "A supplier". */
+export function capitalised(words: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

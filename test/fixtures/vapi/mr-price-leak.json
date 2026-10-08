@@ -1,0 +1,100 @@
+{
+  "message": {
+    "timestamp": 1792058687633,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-10-15T10:02:10.480Z",
+    "endedAt": "2026-10-15T10:04:45.233Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1792058530480,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1792058531280,
+          "endTime": 1792058537760,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        },
+        {
+          "role": "user",
+          "message": "There's water coming from under my kitchen sink. It's all over the floor.",
+          "time": 1792058538360,
+          "endTime": 1792058543620,
+          "secondsFromStart": 7.88,
+          "duration": 5260
+        },
+        {
+          "role": "bot",
+          "message": "I'm sorry to hear that. A leak is urgent, so I'll pass this straight to Tom. Can I take your name and address?",
+          "time": 1792058544220,
+          "endTime": 1792058551530,
+          "secondsFromStart": 13.74,
+          "duration": 7310
+        },
+        {
+          "role": "user",
+          "message": "Mr Price, 6 Bridge Street.",
+          "time": 1792058552130,
+          "endTime": 1792058554770,
+          "secondsFromStart": 21.65,
+          "duration": 2640
+        },
+        {
+          "role": "bot",
+          "message": "Thank you, Mr Price. Tom will be in touch as soon as he can.",
+          "time": 1792058555370,
+          "endTime": 1792058559900,
+          "secondsFromStart": 24.89,
+          "duration": 4530
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: There's water coming from under my kitchen sink. It's all over the floor.\nAI: I'm sorry to hear that. A leak is urgent, so I'll pass this straight to Tom. Can I take your name and address?\nUser: Mr Price, 6 Bridge Street.\nAI: Thank you, Mr Price. Tom will be in touch as soon as he can.",
+      "recordingUrl": "https://example.invalid/recordings/2a7d4b63-9f58-4c2e-8b40-1d8f3e6c9b72-mono.wav"
+    },
+    "analysis": {
+      "summary": "Mr Price reported a leak under his kitchen sink and gave his address.",
+      "structuredData": {
+        "callerType": "customer",
+        "name": "Mr Price",
+        "about": "Leak under the sink",
+        "address": "6 Bridge Street",
+        "summary": "A leak under the kitchen sink.",
+        "urgentMatch": "a leak"
+      },
+      "successEvaluation": "true"
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+447700900016"
+    },
+    "call": {
+      "id": "2a7d4b63-9f58-4c2e-8b40-1d8f3e6c9b72",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "endedReason": "customer-ended-call",
+      "createdAt": "2026-10-15T10:02:10.480Z",
+      "updatedAt": "2026-10-15T10:04:45.233Z",
+      "startedAt": "2026-10-15T10:02:10.480Z",
+      "endedAt": "2026-10-15T10:04:45.233Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+447700900016"
+      }
+    }
+  }
+}

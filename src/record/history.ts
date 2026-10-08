@@ -7,6 +7,7 @@ import { Refused, run, type RecordDb } from './db';
 import {
   HISTORY_KINDS,
   type Actor,
+  type CallId,
   type CustomerId,
   type FirmId,
   type HistoryEntry,
@@ -78,7 +79,7 @@ export async function addHistory(db: RecordDb, firm: FirmId, entry: NewHistory):
 export function firmEntry(
   db: RecordDb,
   firm: FirmId,
-  kind: 'service_on' | 'service_off' | 'stop_on' | 'stop_off',
+  kind: 'service_on' | 'service_off' | 'stop_on' | 'stop_off' | 'number_set' | 'urgent_list_set',
   by: Actor,
   service: Service | null,
 ): D1PreparedStatement {
@@ -89,6 +90,29 @@ export function firmEntry(
        VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8)`,
     )
     .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, service);
+}
+
+/**
+ * The statement for an entry written with a call: the call answered, the
+ * caller's details taken, a message taken, or details missing. Only
+ * recordCall() uses it, in the same step as the call, its customer and its
+ * job. The database checks that the call, the customer and the job are all
+ * this firm's, and that the call is about the same customer and job.
+ */
+export function callEntry(
+  db: RecordDb,
+  firm: FirmId,
+  kind: 'call_answered' | 'details_taken' | 'message_taken' | 'details_missing',
+  by: Actor,
+  about: { customer: CustomerId | null; job: JobId | null; call: CallId | null },
+): D1PreparedStatement {
+  const [actor, owner, staff] = actorColumns(by);
+  return db.d1
+    .prepare(
+      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, call_id)
+       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+    )
+    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, about.customer, about.job, about.call);
 }
 
 /** Everything about one job, in the order it happened. */
@@ -130,10 +154,12 @@ export async function historyBetween(
 const SELECT_ENTRY = `
   SELECT h.id, h.at, h.actor, h.owner_id, h.staff_id, h.kind, h.customer_id,
          c.name AS customer_name, h.job_id, h.visit_id, v.kind AS visit_kind,
-         v.starts_at AS visit_starts_at, h.service
+         v.starts_at AS visit_starts_at, h.call_id, k.caller AS call_caller,
+         k.summary AS call_summary, h.service
   FROM history h
   LEFT JOIN customers c ON c.firm_id = h.firm_id AND c.id = h.customer_id
-  LEFT JOIN visits v ON v.firm_id = h.firm_id AND v.id = h.visit_id`;
+  LEFT JOIN visits v ON v.firm_id = h.firm_id AND v.id = h.visit_id
+  LEFT JOIN calls k ON k.firm_id = h.firm_id AND k.id = h.call_id`;
 
 interface EntryRow {
   id: string;
@@ -148,6 +174,9 @@ interface EntryRow {
   visit_id: string | null;
   visit_kind: VisitKind | null;
   visit_starts_at: number | null;
+  call_id: string | null;
+  call_caller: string | null;
+  call_summary: string | null;
   service: Service | null;
 }
 
@@ -166,6 +195,10 @@ function fromRow(row: EntryRow): HistoryEntry {
       row.visit_id === null || row.visit_kind === null || row.visit_starts_at === null
         ? null
         : { id: row.visit_id as VisitId, kind: row.visit_kind, startsAt: instant(row.visit_starts_at) },
+    call:
+      row.call_id === null
+        ? null
+        : { id: row.call_id as CallId, caller: row.call_caller, summary: row.call_summary },
     service: row.service,
   };
 }

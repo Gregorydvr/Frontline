@@ -15,6 +15,14 @@ npm ci
 
 ## Run it on this machine
 
+The first time, make a secret for the address Vapi reports to. It goes in `.dev.vars`, which git ignores:
+
+```sh
+echo "VAPI_SECRET=$(openssl rand -hex 32)" > .dev.vars
+```
+
+Then:
+
 ```sh
 npm run dev
 ```
@@ -23,7 +31,22 @@ This brings the local database up to date with `migrations/`, then starts the sy
 
 The first time the system is used, it loads the demo firm: Tidewell Heating, owner Tom, and the example app's sixteen customers and jobs, as records. Open http://localhost:8787/local/example to see it in plain text: each job with its state and its history as the owner would read it, and Done for you on the example's "today", Thursday 15 October 2026. This page and the loading exist only in the version `npm run dev` runs (`src/local.ts`). The deployed copies are built from `src/index.ts` and have neither.
 
-To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again.
+Open http://localhost:8787/local/calls to see the demo firm's Calls & bookings screen on the same day, drawn from the record in the example app's look. Until the owner can log in (slice F), the owner's screens are served only here.
+
+To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again. Do this once after an update that changes the demo firm, such as slice C's calls: the demo firm is loaded only into an empty database.
+
+### Watch a call land
+
+While `npm run dev` is running, this sends an example report to the system, the way Vapi does when a call ends. It is a new customer ringing from a landline at 14:47 on the example's "today":
+
+```sh
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/vapi/server \
+  -H "Authorization: Bearer $(sed -n 's/^VAPI_SECRET=//p' .dev.vars)" \
+  -H "Content-Type: application/json" \
+  --data @test/fixtures/vapi/landline-caller.json
+```
+
+It prints 200. Refresh http://localhost:8787/local/calls and Mrs Hall's call is at the top. Send it again, and nothing changes: the same report makes one call. Put anything else after `Bearer`, and it prints 401: refused. The other example reports are in `test/fixtures/vapi/`. What to set on a firm's voice agent in Vapi is in `docs/vapi.md`.
 
 Wrangler does contact Cloudflare in two small ways unless told not to:
 
@@ -60,5 +83,6 @@ Only Greg deploys, from his own machine, and only when he asks. Nothing goes to 
    - `npx wrangler r2 bucket create frontline-practice-files --jurisdiction eu`
    - `npx wrangler queues create frontline-practice-due --jurisdiction eu`
 2. Put the database's id in `wrangler.jsonc`, in place of the zeros under `practice`.
+3. Set its secret for Vapi, different for practice and live: `npx wrangler secret put VAPI_SECRET --env practice`. See `docs/vapi.md`.
 
 Wrangler 4 creates a missing file store or queue by itself during a deploy. Until step 1 is done, deploy with `--x-provision=false` so nothing is created by accident.

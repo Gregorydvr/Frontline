@@ -5,12 +5,13 @@ import { ensureExample, loadExample } from '../src/example/load';
 import { CUSTOMERS, EXAMPLE_NOW } from '../src/example/tidewell';
 import { historyLine } from '../src/history-lines';
 import { jobState } from '../src/job-state';
-import { inLondon } from '../src/london';
+import { clock24, inLondon } from '../src/london';
 import {
   exampleFirms,
   getFirm,
   historyBetween,
   historyForJob,
+  listCallsBetween,
   listCustomers,
   listJobs,
   listOwners,
@@ -59,8 +60,41 @@ describe('the demo firm', () => {
       isExample: true,
       stopped: false,
       services: { calls: true, quotes: true, followups: true, paperwork: true, invoices: true },
+      phoneNumber: '+447700900100',
+      urgentList: ['a leak'],
     });
     expect((await listOwners(db, firm)).map((owner) => owner.name)).toEqual(['Tom']);
+  });
+
+  it('holds the example’s eight calls, each with what came of it', async () => {
+    const calls = await listCallsBetween(
+      db,
+      firm,
+      instantFromIso('2026-09-01T00:00:00+01:00'),
+      instantFromIso('2026-10-16T00:00:00+01:00'),
+    );
+    expect(
+      calls.map((call) => [
+        clock24(call.startedAt),
+        call.customer?.name ?? call.caller,
+        call.outcome,
+        call.visit?.kind ?? call.urgentItem,
+        call.summary,
+      ]),
+    ).toEqual([
+      ['08:50', 'Mr Khan', 'booked', 'quote_visit', null],
+      ['11:15', 'Mrs Ahmed', 'booked', 'quote_visit', 'The boiler keeps cutting out.'],
+      ['10:40', 'Mr Hughes', 'booked', 'quote_visit', null],
+      ['09:30', 'Mr Evans', 'booked', 'quote_visit', null],
+      ['09:12', 'Mrs Patel', 'booked', 'quote_visit', 'The old boiler is leaking.'],
+      ['08:10', 'Mrs Green', 'booked', 'quote_visit', 'No hot water.'],
+      ['08:26', 'a supplier', 'message', null, 'Your order is ready to collect.'],
+      ['11:02', 'Mr Price', 'urgent', 'a leak', 'A leak under the kitchen sink.'],
+    ]);
+    // Every call came from a mobile in Ofcom's range for drama.
+    for (const call of calls) {
+      expect(call.from).toMatch(/^\+447700900\d{3}$/);
+    }
   });
 
   it('has the example’s sixteen customers, each with one job, and invented mobiles', () => {
@@ -89,9 +123,12 @@ describe('the demo firm', () => {
       call_answered: 7,
       confirmation_sent: 3,
       details_taken: 7,
+      message_taken: 1,
+      number_set: 1,
       passed_to_owner: 1,
       reminder_sent: 5,
       service_on: 5,
+      urgent_list_set: 1,
       visit_booked: 10,
     });
   });
@@ -138,6 +175,7 @@ describe('the demo firm', () => {
       'Call from Mr Price. Passed straight to you.',
       'Call from Mr Price answered.',
       'Booked Mr Clarke’s quote visit for Friday, 10am.',
+      'Call from a supplier. Your order is ready to collect.',
       'Sent Mrs Green a confirmation.',
       'Booked Mrs Green’s quote visit for Monday, 9am.',
       'Call from Mrs Green answered.',
@@ -179,7 +217,7 @@ describe('the demo firm', () => {
   });
 
   it('can be loaded again under another name, as a separate firm of the same shape', async () => {
-    const twin = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false });
+    const twin = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false, number: '07700 900200' });
     expect(twin).not.toBe(firm);
     expect(await exampleFirms(db)).toEqual([firm]);
     expect(await historyKinds(env.DB, twin)).toEqual(await historyKinds(env.DB, firm));

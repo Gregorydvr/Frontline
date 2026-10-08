@@ -12,6 +12,15 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | The shape of Vapi's report as a call ends is taken from the types in Vapi's server kit, `@vapi-ai/server-sdk` 2.0.1 (`ServerMessageEndOfCallReport`), because the cloud session could not open Vapi's documentation website. The example reports in `test/fixtures/vapi/` follow it. Greg, approving the slice C plan |
+| 8 Oct 2026 | A call's outcome is worked out by code, never taken from the voice agent: urgent when it matched an item on the firm's own urgent list, booked when a visit in the diary was booked on it (from slice E), otherwise a message taken. Greg, approving the slice C plan |
+| 8 Oct 2026 | A call is held once, by Vapi's id for it, whichever firm it is for. Its customer, job, call and history are written in one step, so either all of it is kept or none of it is. Greg, approving the slice C plan |
+| 8 Oct 2026 | The caller's number is one of three kinds: a UK mobile, a UK landline (01, 02 or 03), or withheld, which covers no number and anything that is not a UK mobile or landline. A landline is kept on the customer, to ring back and to find them next time. A customer without a mobile is marked with why no text can reach them. Greg, approving the slice C plan |
+| 8 Oct 2026 | Until open question 5 is answered, every customer's call opens a new job. Greg, approving the slice C plan |
+| 8 Oct 2026 | An urgent call writes "answered the call", and not "passed straight to you", until something is actually passed to the owner (slice D). The demo firm keeps the example's entry for Mr Price. Greg, approving the slice C plan |
+| 8 Oct 2026 | From a report, only the fields Front-line reads are kept: Vapi's id for the call, the numbers, the times, the checked details and the transcript, which stays with the call. The rest of the report is never stored or logged. Greg, approving the slice C plan |
+| 8 Oct 2026 | History names a call through a check inside the database (a trigger), which refuses another firm's call or a call about another job, because SQLite cannot add a two-part link to the existing history table without rebuilding it. Greg, approving the slice C plan |
+| 8 Oct 2026 | Calls & bookings is drawn from the record in the example's look, with the example's styles and Archivo font copied into `src/screens/`. "Website and email" is left out, since it is not Release 1. Greg, approving the slice C plan |
 | 8 Oct 2026 | Each history entry is its own line to the owner. Where the example joins a call and its booking in one line ("Answered her call. No hot water since last night. Quote visit booked for Monday, 9am."), the owner sees two, each in the example's words. "Details taken" is not shown to the owner. Greg, answering the slice B pull request |
 | 8 Oct 2026 | New words in the owner's lines: "Sent a reminder about the visit." on a job page, "Reminded Mrs Patel about the visit." in Done for you, "Service booked for…" in place of "Booked the service for…", and "midday" for 12 o'clock. A visit's day is written by name within six days ("Monday, 9am") and as a date beyond ("Wednesday 21 October, 2pm"). Greg, answering the slice B pull request |
 | 8 Oct 2026 | The second firm in the wall tests is "Second Example Firm", holding the same sixteen invented customers as Tidewell Heating. Greg, answering the slice B pull request |
@@ -70,6 +79,15 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Front-line's own diary comes first. A link to an owner's Google Calendar is added later, firm by firm | Slice E |
 | The demo firm is Tidewell Heating, owner Tom, with the example's sixteen jobs. It books quote visits Monday to Friday, 8am to 4pm, as the example's rules say | Slices B and E |
 | An outside developer reviews the payment code, the links and the wall between firms before pay links go live | Release 2 |
+| The voice agent hands over a call's details in Vapi's structured data, with the fields and schema in `docs/vapi.md`. Proposed in the slice C pull request | Slice C, and setting up each firm's agent |
+| Vapi proves a report is from Vapi with a Bearer token in the `Authorization` header, the Worker's `VAPI_SECRET`. Proposed in the slice C pull request | Slice C |
+| `findFirmByNumber()` is a third record function that takes no firm, beside `createFirm()` and `exampleFirms()`, because finding the firm is its job. It gives only the firm's id. Proposed in the slice C pull request | Slice C, and the settled decision on the wall |
+| A call the agent says is urgent, for something not on the firm's urgent list, is not urgent, and a log line tells staff. Tidewell Heating's list is "a leak". Proposed in the slice C pull request | Slices C and D |
+| A call that comes while the firm's calls service is switched off is still kept, and a log line tells staff. Proposed in the slice C pull request | Slice C |
+| A caller who gives no name, no job or no address is kept as a call with details missing: no customer and no job. Proposed in the slice C pull request | Slices C and F |
+| A caller is the customer of this firm on the same number with the same name. Otherwise a new customer is made, since a duplicate is safer than mixing two people up. Proposed in the slice C pull request | Slice C |
+| Calls & bookings leaves out the example's "None missed." until the record can tell a missed call. Proposed in the slice C pull request | Slices C and F |
+| Until slice F, Calls & bookings is served only on this machine, at `/local/calls`. Proposed in the slice C pull request | Slices C and F |
 | Practice and the control room sit behind Cloudflare Access. Proposed in the build brief, 6 Oct 2026. Not in the plan | Slices C and G |
 | Every due row has a latest time, after which it is skipped and not sent late. Proposed in the build brief, 6 Oct 2026 | Slice D |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |

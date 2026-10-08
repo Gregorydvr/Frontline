@@ -3,10 +3,10 @@
 // checking the record by eye. It is not one of the owner's screens, which
 // come in slice F.
 
-import { instant, type Instant } from '../clock';
+import type { Instant } from '../clock';
 import { historyLine } from '../history-lines';
 import { jobState } from '../job-state';
-import { inLondon, MONTHS, WEEKDAYS } from '../london';
+import { clock24, inLondon, londonDayAround, MONTHS, shortDate, WEEKDAYS } from '../london';
 import {
   getCustomer,
   getFirm,
@@ -54,9 +54,7 @@ export async function showExample(db: RecordDb, firmId: FirmId, now: Instant): P
     }
   }
 
-  const { year, month, day } = inLondon(now);
-  const from = startOfLondonDay(year, month, day);
-  const to = startOfLondonDay(year, month, day + 1);
+  const { from, to } = londonDayAround(now);
   lines.push('', `DONE FOR YOU ON ${longDate(now).toUpperCase()}`, '');
   const today = await historyBetween(db, firmId, from, to);
   for (const entry of today.reverse()) {
@@ -72,27 +70,4 @@ export async function showExample(db: RecordDb, firmId: FirmId, now: Instant): P
 function longDate(at: Instant): string {
   const { year, month, day, weekday } = inLondon(at);
   return `${WEEKDAYS[weekday] ?? ''} ${String(day)} ${MONTHS[month - 1] ?? ''} ${String(year)}`;
-}
-
-/** "Mon 14 Sep", as the example's job pages write it. */
-function shortDate(at: Instant): string {
-  const { month, day, weekday } = inLondon(at);
-  return `${(WEEKDAYS[weekday] ?? '').slice(0, 3)} ${String(day)} ${(MONTHS[month - 1] ?? '').slice(0, 3)}`;
-}
-
-/** "08:50", as the example writes the time of each line. */
-function clock24(at: Instant): string {
-  const { hour, minute } = inLondon(at);
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-}
-
-/**
- * The instant a UK day starts. Midnight is never skipped or repeated in the
- * UK (the clocks change at 1am and 2am), so midnight UTC moved by that day's
- * offset is exact.
- */
-function startOfLondonDay(year: number, month: number, day: number): Instant {
-  const midnightUtc = Date.UTC(year, month - 1, day);
-  const offsetHours = inLondon(instant(midnightUtc)).hour;
-  return instant(midnightUtc - offsetHours * 3_600_000);
 }

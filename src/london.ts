@@ -5,7 +5,7 @@
 // Turning a UK date and time into an instant, for the due list, comes with
 // slice D.
 
-import type { Instant } from './clock';
+import { instant, type Instant } from './clock';
 
 export interface LondonTime {
   year: number;
@@ -50,6 +50,35 @@ export function inLondon(at: Instant): LondonTime {
 export function londonDay(at: Instant): number {
   const { year, month, day } = inLondon(at);
   return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+/**
+ * The instant a UK day starts. Midnight is never skipped or repeated in the
+ * UK (the clocks change at 1am and 2am), so midnight UTC moved by that day's
+ * offset is exact. A day past the end of the month runs on into the next.
+ */
+export function startOfLondonDay(year: number, month: number, day: number): Instant {
+  const midnightUtc = Date.UTC(year, month - 1, day);
+  const offsetHours = inLondon(instant(midnightUtc)).hour;
+  return instant(midnightUtc - offsetHours * 3_600_000);
+}
+
+/** The UK day that holds an instant: from its start up to, not including, the next day's. */
+export function londonDayAround(at: Instant): { from: Instant; to: Instant } {
+  const { year, month, day } = inLondon(at);
+  return { from: startOfLondonDay(year, month, day), to: startOfLondonDay(year, month, day + 1) };
+}
+
+/** "08:50", as the example writes the time of a line. */
+export function clock24(at: Instant): string {
+  const { hour, minute } = inLondon(at);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+/** "Mon 14 Sep", as the example writes a day on a job page or in the diary. */
+export function shortDate(at: Instant): string {
+  const { month, day, weekday } = inLondon(at);
+  return `${(WEEKDAYS[weekday] ?? '').slice(0, 3)} ${String(day)} ${(MONTHS[month - 1] ?? '').slice(0, 3)}`;
 }
 
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;

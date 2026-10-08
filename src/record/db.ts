@@ -61,3 +61,12 @@ export function words(value: string): string {
   }
   return value;
 }
+
+/** Refuses text that is empty, longer than `longest`, or more than one line. */
+export function line(value: string, longest: number): string {
+  // Control characters include line breaks and tabs.
+  if (words(value).length > longest || /\p{Cc}/u.test(value)) {
+    throw new Refused();
+  }
+  return value;
+}
