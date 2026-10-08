@@ -26,7 +26,7 @@ Wrangler does contact Cloudflare in two small ways unless told not to:
 - It sends usage data. `wrangler.jsonc` turns most of it off; `WRANGLER_SEND_METRICS=false` in your environment turns off the rest.
 - It downloads a public file of example request details, at most once every 30 days. `CLOUDFLARE_CF_FETCH_ENABLED=false` stops that.
 
-A cloud session must not try to reach Cloudflare, so it runs Wrangler with both set. The GitHub check sets both.
+`.claude/settings.json` sets both for every Claude Code session, cloud or local, because a cloud session must not try to reach Cloudflare. The GitHub check sets both too.
 
 ## Check it
 

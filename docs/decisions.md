@@ -12,6 +12,8 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | Rule 8's "no SQL anywhere else" covers the application in `src/`. Tests may read the database directly, but only through `test/helpers/db.ts`, for example to prove that a delete left nothing behind. Greg, answering the slice A pull request |
+| 8 Oct 2026 | Wrangler runs with `WRANGLER_SEND_METRICS=false` and `CLOUDFLARE_CF_FETCH_ENABLED=false`, so that it sends no usage data and downloads nothing from Cloudflare. `.claude/settings.json` sets them for every Claude Code session, and the GitHub check sets them too. Greg, answering the slice A pull request |
 | 8 Oct 2026 | The code lives at the root of the repository. `CLAUDE.md`, `docs/` and `reference/` moved up from `frontline-starter/` unchanged. Greg, answering a question while the slice A plan was made |
 | 8 Oct 2026 | Routes use Hono, which is built for Workers and can list every route for the cross-firm tests. Greg, approving the slice A plan |
 | 8 Oct 2026 | Queries are plain SQL in D1 prepared statements with bound values, written only in `src/record/`. No query builder or ORM. Greg, approving the slice A plan |
@@ -55,7 +57,6 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Every due row has a latest time, after which it is skipped and not sent late. Proposed in the build brief, 6 Oct 2026 | Slice D |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
 | An amount with pence shows two digits: "£2,457.50". A negative amount starts with the example's minus sign: "−£5". The brief gives only "£2,457" and "£8.87". Proposed in the slice A pull request, 8 Oct 2026 | Every screen that shows money |
-| Rule 8's "no SQL anywhere else" covers the application in `src/`. Tests may read the database directly, but only through `test/helpers/db.ts`, for example to prove that a delete left nothing behind. Proposed in the slice A pull request, 8 Oct 2026 | Slice B's check for SQL outside `src/record/`, and slice G |
 
 ## Open
 
