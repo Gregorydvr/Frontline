@@ -4,9 +4,11 @@
 
 import { instantFromIso, pretendClock, type Instant } from '../clock';
 import { newId } from '../ids';
+import { DRAFT_WORDING } from '../messages';
 import { ukMobile } from '../phone';
 import {
   addHistory,
+  cancelDue,
   createCustomer,
   createFirm,
   createJob,
@@ -18,14 +20,25 @@ import {
   setFirmNumber,
   setService,
   setUrgentList,
+  setWording,
 } from '../record';
 import { openRecord } from '../record/db';
-import { SERVICES, type CallId, type CustomerId, type FirmId, type JobId, type VisitId } from '../record/types';
+import {
+  MESSAGE_KINDS,
+  SERVICES,
+  type CallId,
+  type CustomerId,
+  type FirmId,
+  type JobId,
+  type MessageKind,
+  type VisitId,
+} from '../record/types';
 import {
   CUSTOMERS,
   EXAMPLE_FIRM,
   EXAMPLE_NUMBER,
   EXAMPLE_OWNER,
+  EXAMPLE_OWNER_MOBILE,
   EXAMPLE_SET_UP,
   EXAMPLE_URGENT_LIST,
   TIMELINE,
@@ -58,7 +71,14 @@ export async function loadExample(
   }
   await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
   await setUrgentList(db, firm, EXAMPLE_URGENT_LIST, frontline);
-  await createOwner(db, firm, { name: EXAMPLE_OWNER });
+  await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) });
+  // The wording agreed at set-up: the drafts, for each kind that has one.
+  for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
+    const draft = DRAFT_WORDING[kind];
+    if (draft !== null) {
+      await setWording(db, firm, `text:${kind}`, draft, frontline);
+    }
+  }
 
   const people = new Map<CustomerKey, { customer: CustomerId; job: JobId; call?: CallId }>();
   const visits = new Map<VisitKey, VisitId>();
@@ -92,6 +112,12 @@ export async function loadExample(
         });
         if (made.customer === null || made.job === null) {
           throw new RangeError('A new customer’s call opens their job');
+        }
+        // The example passes Mr Price's urgent call to the owner with its own
+        // entry (passed_to_owner below), so the alert written with the call
+        // is not run.
+        if (made.alert !== null) {
+          await cancelDue(db, firm, made.alert);
         }
         people.set(step.customer, { customer: made.customer, job: made.job, call: made.call });
         break;

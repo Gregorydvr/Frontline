@@ -8,17 +8,34 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
 import { instantFromIso, pretendClock } from '../src/clock';
+import { runDue } from '../src/due';
 import { loadExample } from '../src/example/load';
+import { newId, type Id } from '../src/ids';
 import { ukLandline, ukMobile } from '../src/phone';
 import * as record from '../src/record';
 import { openRecord, Refused, type RecordDb } from '../src/record/db';
-import type { Call, Customer, FirmId, HistoryId, Job, NewCall, OwnerId, VisitId } from '../src/record/types';
+import type {
+  Call,
+  Customer,
+  DueId,
+  FirmId,
+  HistoryId,
+  Job,
+  Message,
+  NewCall,
+  OwnerId,
+  TextIn,
+  VisitId,
+  WordingId,
+} from '../src/record/types';
 import { firmRows } from './helpers/db';
+import { testDeps } from './helpers/deps';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
 const frontline = { kind: 'frontline' } as const;
 const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
+const far = instantFromIso('2099-01-01T00:00:00Z');
 let calls = 0;
 
 /** A call from Mrs Ahmed's mobile, as a report would bring it. */
@@ -50,6 +67,12 @@ let ofA: {
   visits: VisitId[];
   calls: Call[];
   entries: HistoryId[];
+  wording: WordingId[];
+  dues: DueId[];
+  /** The first firm's row held by a worker's claim, with the claim. */
+  held: { due: DueId; claim: Id };
+  messages: Message[];
+  textsIn: TextIn[];
   /** Every id of the first firm's, to look for in what the second firm is given. */
   ids: string[];
 };
@@ -64,6 +87,40 @@ beforeAll(async () => {
   for (const firm of [a, b]) {
     await record.createCustomer(db, firm, { name: 'Mrs Hall', mobile: null, landline: mrsHallsLandline, noText: 'landline' });
   }
+  // And, in each firm, texts sent and come in, an opt-out, and rows in the
+  // due list in every state another firm might try to change: one done, one
+  // waiting until after the tests, and one held by a worker's claim, with a
+  // text it is still handing over.
+  const heldBy = new Map<FirmId, { due: DueId; claim: Id }>();
+  const waitingBy = new Map<FirmId, DueId>();
+  for (const firm of [a, b]) {
+    const [clarke] = (await record.findCustomersByMobile(db, firm, ukMobile('07700 900005')));
+    const [clarkesJob] = clarke === undefined ? [] : await record.listJobsForCustomer(db, firm, clarke.id);
+    const [tomorrow] = clarkesJob === undefined ? [] : await record.listVisitsForJob(db, firm, clarkesJob.id);
+    if (clarke?.mobile == null || clarkesJob === undefined || tomorrow === undefined) throw new Error('Mr Clarke has no visit');
+    const reminder = await record.addDue(db, firm, { action: 'send_reminder', visit: tomorrow.id, runAt: clock.now(), latestAt: clock.now() });
+    expect(await runDue(db, testDeps(clock), firm, reminder)).toEqual({ ran: 'done', outcome: 'sent' });
+    waitingBy.set(firm, await record.addDue(db, firm, { action: 'send_reminder', visit: tomorrow.id, runAt: far, latestAt: far }));
+    const held = await record.addDue(db, firm, { action: 'send_reminder', visit: tomorrow.id, runAt: clock.now(), latestAt: far });
+    const claimed = await record.claimDue(db, firm, held);
+    const wording = (await record.firmWording(db, firm))['text:visit_reminder'];
+    const firmNumber = (await record.getFirm(db, firm))?.phoneNumber;
+    if (claimed === null || wording === undefined || firmNumber == null) throw new Error('Not set up');
+    heldBy.set(firm, { due: held, claim: claimed.claim });
+    await record.claimMessage(db, firm, {
+      due: held,
+      kind: 'visit_reminder',
+      to: { kind: 'customer', customer: clarke.id },
+      about: { job: clarkesJob.id, visit: tomorrow.id, call: null },
+      going: { toNumber: clarke.mobile, fromNumber: firmNumber, words: 'Reminder.', wording: wording.id },
+      notSent: null,
+    });
+    await record.recordTextIn(db, firm, { provider: 'fake', providerId: `in-${newId()}`, from: '+447700900005', words: 'See you then.', consent: null });
+    await record.optOut(db, firm, clarke.id, 'visit_reminder', frontline);
+  }
+  // The first firm alone has Mrs Ahmed's number opted out: the second firm
+  // must not see it.
+  await record.optOutNumber(db, a, mrsAhmedsMobile);
 
   const owners = (await record.listOwners(db, a)).map((owner) => owner.id);
   const customers = await record.listCustomers(db, a);
@@ -73,10 +130,26 @@ beforeAll(async () => {
     visits.push(...(await record.listVisitsForJob(db, a, job.id)).map((visit) => visit.id));
   }
   const calls = await record.listCallsBetween(db, a, ...allTime);
-  const far = instantFromIso('2100-01-01T00:00:00Z');
   const entries = (await record.historyBetween(db, a, instantFromIso('2000-01-01T00:00:00Z'), far)).map(
     (entry) => entry.id,
   );
+  const wording = Object.values(await record.firmWording(db, a)).map((words) => words.id);
+  const messages = await record.listMessagesBetween(db, a, ...allTime);
+  const textsIn = await record.listTextsInBetween(db, a, ...allTime);
+  const dues: DueId[] = [];
+  for (const call of calls) {
+    dues.push(...(await record.listDueForCall(db, a, call.id)).map((due) => due.id));
+  }
+  dues.push(...messages.map((message) => message.due));
+  const held = heldBy.get(a);
+  const waiting = waitingBy.get(a);
+  if (held === undefined || waiting === undefined) throw new Error('No held or waiting row');
+  dues.push(waiting, held.due);
+  // Rows another firm could change if a query lost its firm: one waiting,
+  // one held by a claim, and a text still being handed over.
+  const states = await Promise.all([...new Set(dues)].map(async (due) => (await record.getDue(db, a, due))?.state));
+  expect(states).toEqual(expect.arrayContaining(['waiting', 'claimed', 'done', 'cancelled']));
+  expect(messages.map((message) => message.state)).toEqual(expect.arrayContaining(['sent', 'sending']));
   ofA = {
     owners,
     customers,
@@ -84,6 +157,11 @@ beforeAll(async () => {
     visits,
     calls,
     entries,
+    wording,
+    dues: [...new Set(dues)],
+    held,
+    messages,
+    textsIn,
     ids: [
       a,
       ...owners,
@@ -92,6 +170,10 @@ beforeAll(async () => {
       ...visits,
       ...calls.flatMap((call) => [call.id, call.providerCallId]),
       ...entries,
+      ...wording,
+      ...dues,
+      ...messages.flatMap((message) => [message.id, message.providerId ?? message.id]),
+      ...textsIn.flatMap((text) => [text.id, text.providerId]),
     ],
   };
   const [first] = await record.listJobs(db, b);
@@ -349,6 +431,193 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(entries.length).toBeGreaterThan(0);
     nothingOfA(entries);
   },
+
+  async setOwnerMobile() {
+    const [ownerOfB] = await record.listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('The second firm has no owner');
+    await record.setOwnerMobile(db, b, ownerOfB.id, ukMobile('07700 900101'), frontline);
+    for (const owner of ofA.owners) {
+      await refused(record.setOwnerMobile(db, b, owner, ukMobile('07700 900102'), frontline));
+      await refused(record.setOwnerMobile(db, b, ownerOfB.id, ukMobile('07700 900102'), { kind: 'owner', owner }));
+    }
+  },
+
+  async setWording() {
+    await record.setWording(db, b, 'text:visit_reminder', "Reminder: Tom's visit is tomorrow, {weekday}, at {time}.", frontline);
+    for (const owner of ofA.owners) {
+      await refused(record.setWording(db, b, 'text:visit_reminder', 'Reminder: {time}.', { kind: 'owner', owner }));
+    }
+  },
+  async firmWording() {
+    const words = await record.firmWording(db, b);
+    expect(Object.keys(words).length).toBeGreaterThan(0);
+    nothingOfA(words);
+  },
+
+  async optOut() {
+    for (const customer of ofA.customers) {
+      await refused(record.optOut(db, b, customer.id, 'every', frontline));
+    }
+  },
+  async optIn() {
+    for (const customer of ofA.customers) {
+      await refused(record.optIn(db, b, customer.id, 'every', frontline));
+    }
+  },
+  async optOutNumber() {
+    await record.optOutNumber(db, b, ukMobile('07700 900015'));
+    expect(await record.isNumberOptedOut(db, b, ukMobile('07700 900015'))).toBe(true);
+  },
+  async isNumberOptedOut() {
+    expect(await record.isNumberOptedOut(db, a, mrsAhmedsMobile)).toBe(true);
+    expect(await record.isNumberOptedOut(db, b, mrsAhmedsMobile)).toBe(false);
+  },
+  async listOptOuts() {
+    for (const customer of ofA.customers) {
+      expect(await record.listOptOuts(db, b, customer.id)).toEqual([]);
+    }
+  },
+
+  async addDue() {
+    for (const visit of ofA.visits) {
+      await refused(record.addDue(db, b, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: far }));
+    }
+    for (const call of ofA.calls) {
+      await refused(record.addDue(db, b, { action: 'alert_owner', call: call.id, runAt: clock.now(), latestAt: far }));
+    }
+  },
+  async findDue() {
+    // The one record function besides the three for firms that takes no
+    // firm. Each row it gives is the firm's it says, and it gives only ids.
+    await record.addDue(db, b, { action: 'send_reminder', runAt: clock.now(), latestAt: far });
+    const found = await record.findDue(db);
+    expect(found.length).toBeGreaterThan(0);
+    for (const { firm, due } of found) {
+      expect(firm).not.toBe(a);
+      expect(await record.getDue(db, firm, due)).not.toBeNull();
+      expect(Object.keys(found[0] ?? {}).sort()).toEqual(['due', 'firm']);
+    }
+  },
+  async claimDue() {
+    // Far enough on that every waiting row is due and every claim has run
+    // out: without the firm in its query, this would win the first firm's.
+    const later = openRecord(env.DB, pretendClock(far));
+    for (const due of ofA.dues) {
+      expect(await record.claimDue(later, b, due)).toBeNull();
+    }
+  },
+  async finishDue() {
+    // With the first firm's own claim: only the firm stops it.
+    expect(await record.finishDue(db, b, ofA.held.due, ofA.held.claim, 'sent')).toBe(false);
+    for (const due of ofA.dues) {
+      expect(await record.finishDue(db, b, due, newId(), 'sent')).toBe(false);
+    }
+  },
+  async releaseDue() {
+    expect(await record.releaseDue(db, b, ofA.held.due, ofA.held.claim)).toBe(false);
+    expect(await record.releaseDue(db, b, ofA.held.due, ofA.held.claim, far)).toBe(false);
+    for (const due of ofA.dues) {
+      expect(await record.releaseDue(db, b, due, newId())).toBe(false);
+    }
+  },
+  async cancelDue() {
+    for (const due of ofA.dues) {
+      expect(await record.cancelDue(db, b, due)).toBe(false);
+    }
+  },
+  async getDue() {
+    for (const due of ofA.dues) {
+      expect(await record.getDue(db, b, due)).toBeNull();
+    }
+  },
+  async listDueForCall() {
+    for (const call of ofA.calls) {
+      expect(await record.listDueForCall(db, b, call.id)).toEqual([]);
+    }
+  },
+
+  async claimMessage() {
+    const [dueOfB] = (await record.listMessagesBetween(db, b, ...allTime)).map((message) => message.due);
+    if (dueOfB === undefined) throw new Error('The second firm has no texts');
+    const about = { job: null, visit: null, call: null };
+    // A text to the first firm's customer or owner, for the first firm's
+    // row in the due list, or about the first firm's job.
+    for (const customer of ofA.customers) {
+      await refused(
+        record.claimMessage(db, b, { due: dueOfB, kind: 'visit_reminder', to: { kind: 'customer', customer: customer.id }, about, going: null, notSent: 'no_wording' }),
+      );
+    }
+    for (const owner of ofA.owners) {
+      await refused(
+        record.claimMessage(db, b, { due: dueOfB, kind: 'urgent_alert', to: { kind: 'owner', owner }, about, going: null, notSent: 'no_wording' }),
+      );
+    }
+    const [ownerOfB] = await record.listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('The second firm has no owner');
+    for (const due of ofA.dues) {
+      await refused(
+        record.claimMessage(db, b, { due, kind: 'urgent_alert', to: { kind: 'owner', owner: ownerOfB.id }, about, going: null, notSent: 'no_wording' }),
+      );
+    }
+    for (const job of ofA.jobs) {
+      await refused(
+        record.claimMessage(db, b, { due: dueOfB, kind: 'urgent_alert', to: { kind: 'owner', owner: ownerOfB.id }, about: { ...about, job: job.id }, going: null, notSent: 'no_wording' }),
+      );
+    }
+  },
+  async findMessageForDue() {
+    for (const message of ofA.messages) {
+      expect(await record.findMessageForDue(db, b, message.due, message.to)).toBeNull();
+    }
+  },
+  async getMessage() {
+    for (const message of ofA.messages) {
+      expect(await record.getMessage(db, b, message.id)).toBeNull();
+    }
+  },
+  async listMessagesBetween() {
+    const messages = await record.listMessagesBetween(db, b, ...allTime);
+    expect(messages.length).toBeGreaterThan(0);
+    nothingOfA(messages);
+  },
+  async markMessageSent() {
+    for (const message of ofA.messages) {
+      await refused(record.markMessageSent(db, b, message.id, 'fake', `fake-${newId()}`));
+    }
+  },
+  async markMessageFailed() {
+    for (const message of ofA.messages) {
+      await refused(record.markMessageFailed(db, b, message.id, 'unclear', null));
+    }
+  },
+  async recordDelivery() {
+    for (const message of ofA.messages) {
+      if (message.providerId === null) continue;
+      expect(await record.recordDelivery(db, b, 'fake', message.providerId, { delivered: false, errorCode: 30003 })).toBeNull();
+    }
+  },
+
+  async recordTextIn() {
+    // A text to the second firm from Mrs Ahmed's mobile lands on its own Mrs Ahmed.
+    const landed = await record.recordTextIn(db, b, { provider: 'fake', providerId: `in-${newId()}`, from: mrsAhmedsMobile, words: 'Thank you.', consent: null });
+    nothingOfA(landed);
+    expect(landed).toMatchObject({ result: 'stored' });
+    // A STOP to the second firm from Mrs Ahmed's mobile opts out only the
+    // second firm's customers on it.
+    const stopped = await record.recordTextIn(db, b, { provider: 'fake', providerId: `in-${newId()}`, from: mrsAhmedsMobile, words: 'STOP', consent: 'stop' });
+    nothingOfA(stopped);
+    expect(stopped).toMatchObject({ result: 'stored' });
+    expect(stopped.result === 'stored' ? stopped.consented.length : 0).toBeGreaterThan(0);
+    // Nor can it take a text the first firm holds.
+    for (const text of ofA.textsIn) {
+      await refused(record.recordTextIn(db, b, { provider: text.provider, providerId: text.providerId, from: mrsAhmedsMobile, words: 'STOP', consent: 'stop' }));
+    }
+  },
+  async listTextsInBetween() {
+    const texts = await record.listTextsInBetween(db, b, ...allTime);
+    expect(texts.length).toBeGreaterThan(0);
+    nothingOfA(texts);
+  },
 };
 
 describe('the wall between firms', () => {
@@ -356,13 +625,13 @@ describe('the wall between firms', () => {
     expect(Object.keys(cases).sort()).toEqual(Object.keys(record).sort());
   });
 
-  it('has every record function take the firm, apart from the three that find or make a firm', () => {
+  it('has every record function take the firm, apart from the three that find or make a firm, and the clock’s', () => {
     type NotTakingTheFirm = {
       [Name in keyof typeof record]: Parameters<(typeof record)[Name]> extends [RecordDb, FirmId, ...unknown[]]
         ? never
         : Name;
     }[keyof typeof record];
-    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<'createFirm' | 'exampleFirms' | 'findFirmByNumber'>();
+    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<'createFirm' | 'exampleFirms' | 'findFirmByNumber' | 'findDue'>();
   });
 
   it.each(Object.keys(cases) as (keyof typeof record)[])(

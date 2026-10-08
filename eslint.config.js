@@ -38,8 +38,46 @@ const D1_TYPES = new Set(['D1Database', 'D1DatabaseSession', 'D1PreparedStatemen
 const LOOKS_LIKE_SQL =
   /\b(?:SELECT\b[\s\S]*\bFROM|INSERT\s+(?:OR\s+[A-Z]+\s+)?INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM|(?:CREATE|DROP|ALTER)\s+(?:TABLE|INDEX|TRIGGER|VIEW)|PRAGMA\s+[a-z_]+)\b/;
 
+// Rule 1: every text goes out through send() in src/send.ts. Nothing else
+// hands a text to a provider: no call to a texts provider's sendText(), and no
+// address of Twilio's, outside send() and the providers themselves.
+// test/fixtures/lint/ holds deliberate mistakes that show it works.
+const PROVIDER_ADDRESS = /api\.twilio\.com/i;
+
 const frontline = {
   rules: {
+    'text-outside-send': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { text: 'Rule 1: only send() in src/send.ts hands a text to a provider.' },
+      },
+      create(context) {
+        return {
+          MemberExpression(node) {
+            if (!node.computed && node.property.type === 'Identifier' && node.property.name === 'sendText') {
+              context.report({ node, messageId: 'text' });
+            }
+          },
+          // const { sendText } = texts
+          Property(node) {
+            if (node.parent.type === 'ObjectPattern' && node.key.type === 'Identifier' && node.key.name === 'sendText') {
+              context.report({ node, messageId: 'text' });
+            }
+          },
+          Literal(node) {
+            if (typeof node.value === 'string' && PROVIDER_ADDRESS.test(node.value)) {
+              context.report({ node, messageId: 'text' });
+            }
+          },
+          TemplateLiteral(node) {
+            if (PROVIDER_ADDRESS.test(node.quasis.map((quasi) => quasi.value.cooked ?? '').join(''))) {
+              context.report({ node, messageId: 'text' });
+            }
+          },
+        };
+      },
+    },
     // Using the database: anything done to a D1 database, session or
     // statement. The types tell which objects those are, whatever they are
     // called.
@@ -118,7 +156,14 @@ export default defineConfig(
       'no-restricted-syntax': ['error', ...readsTheClockSyntax],
       'frontline/database-outside-record': 'error',
       'frontline/sql-outside-record': 'error',
+      'frontline/text-outside-send': 'error',
     },
+  },
+  {
+    // send(), the providers that carry texts, and the tests of the providers
+    // themselves.
+    files: ['src/send.ts', 'src/providers/texts/**', 'test/twilio.test.ts'],
+    rules: { 'frontline/text-outside-send': 'off' },
   },
   {
     // The record layer, and the one test helper that reads the database.

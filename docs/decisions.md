@@ -12,6 +12,33 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | The owner's alert about an urgent call stays worth sending for a day; after that it is skipped and recorded. Greg, answering the slice D pull request |
+| 8 Oct 2026 | A reminder's `{owner}` is the firm's first owner's name, or the firm's name if it has no owner. Greg, answering the slice D pull request |
+| 8 Oct 2026 | The queue does not try a row again itself; a row that fails is left claimed and the clock offers it again once its claim runs out. Greg, answering the slice D pull request |
+| 8 Oct 2026 | `findDue()` is a fourth record function that takes no firm, beside `createFirm()`, `exampleFirms()` and `findFirmByNumber()`, because the clock finds what is due for every firm at once. It gives only firm and row ids. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Alerts to the owner come from the firm's own number. Greg, answering the slice D pull request |
+| 8 Oct 2026 | One Twilio account holds every firm's number, with one auth token to check Twilio's requests. Greg, answering the slice D pull request |
+| 8 Oct 2026 | A text that failed is not tried again automatically in Release 1, since a retry after an unclear failure could send it twice. It is logged now, and listed for staff in slice G. Greg, answering the slice D pull request |
+| 8 Oct 2026 | The stop button and a service switched off hold texts to customers: a held text goes if the button is turned off, or the service on, before its latest time, and is skipped and recorded otherwise. An opt-out is not a hold: that text never goes. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Words from a caller (a name, an address, a summary) are made fit for a text when they go into one: curly quotes and dashes become straight, and any other character a text cannot carry becomes "?". Greg, answering the slice D pull request |
+| 8 Oct 2026 | START undoes only what a STOP did: the number, and the opt-outs the customer's STOP made (texted to the firm or to the provider). An opt-out staff set stays, even one for every kind, and one staff set over a STOP's becomes theirs. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 2: a customer's STOP stops every text from the firm to that number. A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT (any capitals, spaces trimmed) opts every one of the firm's customers on that mobile out of every kind of text; START or UNSTOP opts them back in. It is written in the same step as the stored text. Nothing else a customer writes is acted on. A refusal from the provider because the customer unsubscribed with it is recorded as an opt-out too. Greg, answering the slice D pull request |
+| 8 Oct 2026 | After a customer's STOP or START, their job shows "No more texts will go to them." or "Texts can go to them again.", after the text itself. Neither is in Done for you. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 3: "passed straight to you" means a text alert to the owner at once. Putting the live call through may come later, firm by firm. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 7: the owner's alert reads "Front-line: urgent call from {customer}, {place}. {summary} Their number: {number}." A link to the job is added once the owner can log in (slice F). An urgent call whose caller's details did not all come through still alerts the owner, as "Front-line: urgent call. Not all their details came through. {summary} Their number: {number}." Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 8: no text goes to a customer from 8pm to 8am UK time, any day, Sundays included. A text due then waits until 8am, unless 8am is past its latest time; then it is skipped and recorded. Alerts to the owner go at any hour. The same hours for every firm for now. Greg, answering the slice D pull request |
+| 8 Oct 2026 | STOP handling and quiet hours are built in the slice D pull request, which completes slice D. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Every text goes out through `send()` in `src/send.ts`, which makes its words itself from the firm's agreed wording for the kind and facts from the record. Nobody hands it words. A firm with no agreed wording for a kind gets no text of that kind. Lint fails anything else that hands a text to a provider. Greg, approving the slice D plan |
+| 8 Oct 2026 | Every text comes from a row in the due list. A text is claimed before it goes, as "this row, to this person", and the database refuses a second claim, so the same text cannot go twice. A text not sent (opted out, no mobile, no wording, no number) is claimed and recorded too, so it is not tried again. Greg, approving the slice D plan |
+| 8 Oct 2026 | Before a text to a customer, `send()` checks the stop button, then the firm's switch for the kind's service, then the customer's opt-out. Texts are GSM-7 only and their segments are counted. Greg, approving the slice D plan |
+| 8 Oct 2026 | Each firm's agreed wording for each kind of text, and its own versions of the owner's lines, are kept in the record. Each change is a new row, never an edit; the newest is in use. Wording for a text with a character a text cannot carry, such as a curly apostrophe, is refused at set-up. The drafts each firm starts from are in `src/messages.ts`, and a test fails if any holds such a character. Greg, approving the slice D plan |
+| 8 Oct 2026 | Opt-outs are held for each customer and each kind of text, or for every kind, with who made each change in the history. Greg, approving the slice D plan |
+| 8 Oct 2026 | The owner has a mobile for alerts. An urgent call writes the row that alerts the owner in the same step as the call, and the alert is sent at once, before Vapi gets its answer; if that fails, the clock runs the row again. "Passed straight to you." is written when the provider has taken the alert. Greg, approving the slice D plan |
+| 8 Oct 2026 | The due list: each row has a time to run and a latest time. Every minute the clock puts due rows on a queue, and offers a row again after five minutes if it is still waiting. A worker claims a row in one database step; a claim holds for ten minutes, after which the row can be claimed again. A row past its latest time is skipped, and that is kept on the row. Greg, approving the slice D plan |
+| 8 Oct 2026 | Before a reminder goes, its visit is looked at again: if it was cancelled, or is no longer tomorrow in UK time, nothing goes. Slice E sets a reminder's latest time to the start of the visit's day. Greg, approving the slice D plan |
+| 8 Oct 2026 | A text that comes in is stored against the customer on that mobile (the one last texted, else the newest) and shown on a job: the job of the last text sent to them, else their newest. A text from a number that is not a customer's is kept with no customer, for staff. Nothing answers a text in Release 1: Front-line's answer to Twilio is empty. Greg, approving the slice D plan |
+| 8 Oct 2026 | Twilio is reached with one web request and Web Crypto; no package is added. How Twilio signs a request is taken from Twilio's own package, `twilio` 6.1.2, and checked against Twilio's published example, because the cloud session could not open Twilio's documentation website. Greg, approving the slice D plan |
+| 8 Oct 2026 | A UK date and time is turned into an instant in `src/london.ts`. An hour the clocks skip is read as the hour after it; an hour that happens twice is the first. Greg, approving the slice D plan |
 | 8 Oct 2026 | The shape of Vapi's report as a call ends is taken from the types in Vapi's server kit, `@vapi-ai/server-sdk` 2.0.1 (`ServerMessageEndOfCallReport`), because the cloud session could not open Vapi's documentation website. The example reports in `test/fixtures/vapi/` follow it. Greg, approving the slice C plan |
 | 8 Oct 2026 | A call's outcome is worked out by code, never taken from the voice agent: urgent when it matched an item on the firm's own urgent list, booked when a visit in the diary was booked on it (from slice E), otherwise a message taken. Greg, approving the slice C plan |
 | 8 Oct 2026 | A call is held once, by Vapi's id for it, whichever firm it is for. Its customer, job, call and history are written in one step, so either all of it is kept or none of it is. Greg, approving the slice C plan |
@@ -75,7 +102,6 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | A reminder goes at 1pm the day before a visit. From the example | Slice E |
 | Alerts reach the owner by text, with a link that opens the item | Slices C and D |
 | The first text to a new customer carries a line on opting out and a link to confirm their details | Slice E |
-| Opt-outs are kept by kind of message | Slice D |
 | Front-line's own diary comes first. A link to an owner's Google Calendar is added later, firm by firm | Slice E |
 | The demo firm is Tidewell Heating, owner Tom, with the example's sixteen jobs. It books quote visits Monday to Friday, 8am to 4pm, as the example's rules say | Slices B and E |
 | An outside developer reviews the payment code, the links and the wall between firms before pay links go live | Release 2 |
@@ -89,18 +115,22 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Calls & bookings leaves out the example's "None missed." until the record can tell a missed call. Proposed in the slice C pull request | Slices C and F |
 | Until slice F, Calls & bookings is served only on this machine, at `/local/calls`. Proposed in the slice C pull request | Slices C and F |
 | Practice and the control room sit behind Cloudflare Access. Proposed in the build brief, 6 Oct 2026. Not in the plan | Slices C and G |
-| Every due row has a latest time, after which it is skipped and not sent late. Proposed in the build brief, 6 Oct 2026 | Slice D |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
+| A STOP is also kept against the mobile itself, so a customer made later on that number (the same person giving their name another way, or anyone after a STOP from a number nobody had yet) gets no text either; START takes it off. A provider's "unsubscribed" refusal does the same. How the slice D pull request reads Greg's answer to open question 2, "every text from the firm to that number", after its second review | Slice D |
+| The stop button, the service switches and opt-outs are about texts to customers. An alert to the owner is never held by them, and goes when the firm's calls service is off, since the call is still kept. How the slice D plan reads rule 3 | Slice D |
+| A customer's text is shown on the job page as `Text: “…”`, after the example's `Voice note: “…”`, and not in Done for you. New wording, proposed in the slice D plan | Slices D and F |
+| The fields read from Twilio's requests (`To`, `From`, `Body`, `MessageSid`, `MessageStatus`, `ErrorCode`) and its error 21610 for an unsubscribed customer are as Twilio is known to send them, not yet checked against real ones. See `docs/twilio.md` | Slice D, until Greg captures real ones on practice |
+| The demo firm's past confirmations and reminders stay as history only, with no made-up texts behind them. The alert row written with Mr Price's urgent call is cancelled, since the example passes it on with its own entry. Proposed in the slice D plan | Slices D and G |
 
 ## Open
 
 1. The words for the opt-out line and the confirm-your-details link in the first text. A solicitor is to see the opt-out wording.
-2. What a customer's STOP does, given that Twilio's own handling can block every later text from that number.
-3. What "passed straight to you" means for an urgent call: the live call put through, a text alert, or both.
+2. Answered 8 Oct 2026: see Settled. (What a customer's STOP does.)
+3. Answered 8 Oct 2026: see Settled. (What "passed straight to you" means for an urgent call.)
 4. How long a visit takes, and when no reminder is sent because the visit is too soon.
 5. When a second call from the same customer joins their open job, and when it starts a new one.
 6. How long an owner stays logged in.
-7. The words of the owner's alert for an urgent call.
-8. Quiet hours, and whether anything is held back on a Sunday.
+7. Answered 8 Oct 2026: see Settled. (The words of the owner's alert for an urgent call.)
+8. Answered 8 Oct 2026: see Settled. (Quiet hours, and Sundays.)
 9. The web address for the app and for customers' links. It should be kept apart from the addresses used for outreach emails.
 10. Whether Vapi moves to its EU region.

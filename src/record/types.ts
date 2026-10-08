@@ -13,6 +13,10 @@ declare const jobBrand: unique symbol;
 declare const visitBrand: unique symbol;
 declare const historyBrand: unique symbol;
 declare const callBrand: unique symbol;
+declare const dueBrand: unique symbol;
+declare const messageBrand: unique symbol;
+declare const textInBrand: unique symbol;
+declare const wordingBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -23,6 +27,10 @@ export type JobId = Id & { readonly [jobBrand]: true };
 export type VisitId = Id & { readonly [visitBrand]: true };
 export type HistoryId = Id & { readonly [historyBrand]: true };
 export type CallId = Id & { readonly [callBrand]: true };
+export type DueId = Id & { readonly [dueBrand]: true };
+export type MessageId = Id & { readonly [messageBrand]: true };
+export type TextInId = Id & { readonly [textInBrand]: true };
+export type WordingId = Id & { readonly [wordingBrand]: true };
 
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
@@ -46,6 +54,8 @@ export interface Firm {
 export interface Owner {
   id: OwnerId;
   name: string;
+  /** For alerts and, from slice F, the login link. */
+  mobile: UkMobile | null;
   createdAt: Instant;
 }
 
@@ -101,14 +111,19 @@ export type Actor =
 /**
  * The kinds of history entry. Each says what it is about:
  * - a job: call_answered, passed_to_owner. A call_answered entry written by
- *   recordCall() also names its call.
- * - a customer: details_taken
+ *   recordCall() also names its call. passed_to_owner is written when the
+ *   owner's urgent alert has gone (markMessageSent()), or by the demo firm.
+ * - a customer: details_taken, and opted_out and opted_in, which also name
+ *   the kind of text
  * - a visit: visit_booked, confirmation_sent, reminder_sent
  * - a call with no customer or job: message_taken, for a caller who is not
  *   a customer, and details_missing, for a call whose details did not come
  *   through. Written only by recordCall().
+ * - a text that came in: text_received, written only by recordTextIn(), on
+ *   the customer's job when it has one
  * - the firm itself: service_on, service_off, stop_on, stop_off, number_set,
- *   urgent_list_set, written only by the functions in firms.ts
+ *   urgent_list_set, owner_mobile_set, written only by the functions in
+ *   firms.ts and owners.ts
  * Later slices add their own.
  */
 export const HISTORY_KINDS = {
@@ -120,12 +135,16 @@ export const HISTORY_KINDS = {
   reminder_sent: 'visit',
   message_taken: 'call',
   details_missing: 'call',
+  opted_out: 'opt_out',
+  opted_in: 'opt_out',
+  text_received: 'text',
   service_on: 'service',
   service_off: 'service',
   stop_on: 'firm',
   stop_off: 'firm',
   number_set: 'firm',
   urgent_list_set: 'firm',
+  owner_mobile_set: 'firm',
 } as const;
 export type HistoryKind = keyof typeof HISTORY_KINDS;
 
@@ -153,6 +172,10 @@ export interface HistoryEntry {
   visit: { id: VisitId; kind: VisitKind; startsAt: Instant } | null;
   /** The call the entry names, with what its line is made from. */
   call: { id: CallId; caller: string | null; summary: string | null } | null;
+  /** The text that came in that the entry names, with its words. */
+  textIn: { id: TextInId; words: string } | null;
+  /** For an opt-out: the kind of text, or every kind. */
+  textKind: OptOutKind | null;
   service: Service | null;
 }
 
@@ -240,3 +263,148 @@ export interface Call {
 export interface DiaryVisit extends Visit {
   customer: { id: CustomerId; name: string };
 }
+
+/**
+ * The kinds of text. Each says who it goes to, the service it belongs to (for
+ * a text to a customer, whose service switch must be on), the history entry
+ * written when it has gone, and the gaps its wording may use.
+ *
+ * Every kind here uses wording the firm agreed at set-up (rule 2 in
+ * CLAUDE.md). Kinds that need the owner's approval of the exact version, such
+ * as a quote or an invoice, come with their releases. Slice E adds the visit
+ * confirmation.
+ */
+export const MESSAGE_KINDS = {
+  /** The reminder the day before a visit. */
+  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'] },
+  /** The owner's alert about an urgent call. */
+  urgent_alert: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['customer', 'place', 'summary', 'number'] },
+  /**
+   * The owner's alert about an urgent call whose caller's name, job or
+   * address did not come through, so there is no customer or job to name.
+   */
+  urgent_alert_details_missing: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['summary', 'number'] },
+} as const satisfies Record<
+  string,
+  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind; gaps: readonly string[] }
+>;
+export type MessageKind = keyof typeof MESSAGE_KINDS;
+
+/** What a customer can opt out of: one kind of text to them, or every kind. */
+export type OptOutKind = { [K in MessageKind]: (typeof MESSAGE_KINDS)[K]['to'] extends 'customer' ? K : never }[MessageKind] | 'every';
+
+/**
+ * Where a text is in its life: claimed and being handed over, taken by the
+ * provider, delivered, failed, or not sent at all. A text only moves forward.
+ */
+export const MESSAGE_STATES = ['sending', 'sent', 'delivered', 'failed', 'not_sent'] as const;
+export type MessageState = (typeof MESSAGE_STATES)[number];
+
+/** Why a text was not sent, or failed. */
+export const MESSAGE_REASONS = [
+  // Not sent: it never reached the provider.
+  'opted_out',
+  'no_mobile',
+  'no_number',
+  'no_wording',
+  'not_gsm7',
+  // Failed: the provider refused it, it could not be delivered, the
+  // customer had unsubscribed with the provider, or it is not clear whether
+  // the provider took it. Staff check that last one: it is never sent again.
+  'refused',
+  'undelivered',
+  'unsubscribed',
+  'unclear',
+] as const;
+export type MessageReason = (typeof MESSAGE_REASONS)[number];
+
+/** Who carries a firm's texts: Twilio, or the stand-in on this machine and in tests. */
+export const TEXT_PROVIDERS = ['twilio', 'fake'] as const;
+export type TextProvider = (typeof TEXT_PROVIDERS)[number];
+
+/** Who a text is to. */
+export type Recipient = { kind: 'customer'; customer: CustomerId } | { kind: 'owner'; owner: OwnerId };
+
+export interface Message {
+  id: MessageId;
+  due: DueId;
+  kind: MessageKind;
+  to: Recipient;
+  job: JobId | null;
+  visit: VisitId | null;
+  call: CallId | null;
+  toNumber: UkMobile | null;
+  fromNumber: UkMobile | null;
+  words: string | null;
+  wording: WordingId | null;
+  segments: number | null;
+  state: MessageState;
+  reason: MessageReason | null;
+  provider: TextProvider | null;
+  providerId: string | null;
+  errorCode: number | null;
+  createdAt: Instant;
+  sentAt: Instant | null;
+  updatedAt: Instant;
+}
+
+/** The longest a text's words may be, and a firm's wording. */
+export const TEXT_LIMITS = { words: 1_000, providerId: 100, textIn: 2_000 } as const;
+
+/** A text that came in to the firm's number. */
+export interface TextIn {
+  id: TextInId;
+  provider: TextProvider;
+  providerId: string;
+  /** The number it came from, as the provider gave it. */
+  from: string | null;
+  customer: { id: CustomerId; name: string } | null;
+  job: JobId | null;
+  words: string;
+  receivedAt: Instant;
+}
+
+/** What a row in the due list does. Slice E adds the visit confirmation; slice H the deletions. */
+export const DUE_ACTIONS = ['alert_owner', 'send_reminder'] as const;
+export type DueAction = (typeof DUE_ACTIONS)[number];
+
+export const DUE_STATES = ['waiting', 'claimed', 'done', 'skipped', 'cancelled'] as const;
+export type DueState = (typeof DUE_STATES)[number];
+
+/**
+ * How a row ended. Done: its texts were sent, not sent, or failed (each text
+ * says why), or there was nothing to do because what it was about changed.
+ * Skipped: it was past its latest time.
+ */
+export const DUE_OUTCOMES = ['sent', 'not_sent', 'failed', 'nobody_to_tell', 'visit_changed', 'too_late', 'cancelled'] as const;
+export type DueOutcome = (typeof DUE_OUTCOMES)[number];
+
+export interface Due {
+  id: DueId;
+  action: DueAction;
+  call: CallId | null;
+  visit: VisitId | null;
+  runAt: Instant;
+  latestAt: Instant;
+  state: DueState;
+  outcome: DueOutcome | null;
+  createdAt: Instant;
+  finishedAt: Instant | null;
+}
+
+/** A row in the due list as a worker holds it once claimed: the claim proves it is this worker's. */
+export interface ClaimedDue extends Due {
+  claim: Id;
+}
+
+/**
+ * What a firm's own words can be for: a kind of text, or one of the owner's
+ * lines in one of its two forms (src/history-lines.ts).
+ */
+export type WordingKey = `text:${MessageKind}` | `line:${HistoryKind}:${'job' | 'feed'}`;
+
+/** The gaps the owner's lines may use, as src/history-lines.ts fills them. */
+export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when', 'caller', 'message', 'words'] as const;
+
+/** The firm's words in use: for each key, the newest. */
+export type FirmWording = Partial<Record<WordingKey, { id: WordingId; words: string }>>;

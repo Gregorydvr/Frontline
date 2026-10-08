@@ -1,9 +1,7 @@
-// Reading a stored instant as the time a person in the UK reads it (rule 18 in
-// CLAUDE.md). Instants are stored in UTC; this works out the date and time in
-// Europe/London, with the clocks going forward and back.
-//
-// Turning a UK date and time into an instant, for the due list, comes with
-// slice D.
+// Reading a stored instant as the time a person in the UK reads it, and the
+// other way round (rule 18 in CLAUDE.md). Instants are stored in UTC; this
+// works out the date and time in Europe/London, with the clocks going forward
+// and back.
 
 import { instant, type Instant } from './clock';
 
@@ -61,6 +59,43 @@ export function startOfLondonDay(year: number, month: number, day: number): Inst
   const midnightUtc = Date.UTC(year, month - 1, day);
   const offsetHours = inLondon(instant(midnightUtc)).hour;
   return instant(midnightUtc - offsetHours * 3_600_000);
+}
+
+/**
+ * The instant of a UK date and time, such as 1pm on Sunday 18 October 2026
+ * (12:00 UTC, in summer time) or 1pm on Sunday 25 October 2026 (13:00 UTC,
+ * after the clocks go back). A day past the end of the month runs on into the
+ * next, and day 0 is the last day of the month before, so "the day before"
+ * is simply `day - 1`.
+ *
+ * Twice a year an hour is odd. When the clocks go forward, 1:30am does not
+ * happen: it is read as 2:30am, the same distance into the day. When they go
+ * back, 1:30am happens twice: the first is taken.
+ */
+export function londonInstant(year: number, month: number, day: number, hour: number, minute = 0): Instant {
+  if (![year, month, day, hour, minute].every(Number.isSafeInteger) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    throw new RangeError('Not a UK date and time');
+  }
+  // The date and time as written, read as if UK time were UTC.
+  const asWritten = Date.UTC(year, month - 1, day, hour, minute);
+  const wanted = new Date(asWritten);
+  // UK time is UTC or an hour ahead. Summer time first, so a repeated hour
+  // gives the first of the two.
+  for (const offset of [3_600_000, 0]) {
+    const at = instant(asWritten - offset);
+    const read = inLondon(at);
+    if (
+      read.year === wanted.getUTCFullYear() &&
+      read.month === wanted.getUTCMonth() + 1 &&
+      read.day === wanted.getUTCDate() &&
+      read.hour === wanted.getUTCHours() &&
+      read.minute === wanted.getUTCMinutes()
+    ) {
+      return at;
+    }
+  }
+  // An hour the clocks skipped. As UTC it reads an hour later in UK time.
+  return instant(asWritten);
 }
 
 /** The UK day that holds an instant: from its start up to, not including, the next day's. */

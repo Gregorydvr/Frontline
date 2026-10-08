@@ -15,9 +15,11 @@ import {
   type HistoryKind,
   type JobId,
   type NewHistory,
+  type OptOutKind,
   type OwnerId,
   type Service,
   type StaffId,
+  type TextInId,
   type VisitId,
   type VisitKind,
 } from './types';
@@ -29,41 +31,7 @@ const ENTRY_COLUMNS = 'id, firm_id, at, seq, actor, owner_id, staff_id, kind';
 
 /** Adds an entry about a job, a customer or a visit of this firm, at the clock's time. */
 export async function addHistory(db: RecordDb, firm: FirmId, entry: NewHistory): Promise<HistoryId> {
-  const about = aboutOf(entry.kind);
-  const id = newId() as HistoryId;
-  const [actor, owner, staff] = actorColumns(entry.by);
-  const start = [id, firm, db.clock.now(), actor, owner, staff, entry.kind] as const;
-
-  let statement: D1PreparedStatement;
-  if (about === 'visit' && 'visit' in entry) {
-    statement = db.d1
-      .prepare(
-        `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, visit_id)
-         SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, jobs.customer_id, visits.job_id, visits.id
-         FROM visits JOIN jobs ON jobs.firm_id = visits.firm_id AND jobs.id = visits.job_id
-         WHERE visits.firm_id = ?2 AND visits.id = ?8`,
-      )
-      .bind(...start, entry.visit);
-  } else if (about === 'job' && 'job' in entry) {
-    statement = db.d1
-      .prepare(
-        `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id)
-         SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, jobs.customer_id, jobs.id
-         FROM jobs WHERE jobs.firm_id = ?2 AND jobs.id = ?8`,
-      )
-      .bind(...start, entry.job);
-  } else if (about === 'customer' && 'customer' in entry) {
-    statement = db.d1
-      .prepare(
-        `INSERT INTO history (${ENTRY_COLUMNS}, customer_id)
-         SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, customers.id
-         FROM customers WHERE customers.firm_id = ?2 AND customers.id = ?8`,
-      )
-      .bind(...start, entry.customer);
-  } else {
-    throw new Refused();
-  }
-
+  const [id, statement] = historyStatement(db, firm, entry);
   // Nothing is written when what it is about is not this firm's.
   const result = await run(statement);
   if (result.meta.changes !== 1) {
@@ -73,13 +41,66 @@ export async function addHistory(db: RecordDb, firm: FirmId, entry: NewHistory):
 }
 
 /**
+ * The statement that adds an entry about a job, a customer or a visit, for
+ * running in the same step as what it records. It writes nothing when what
+ * the entry is about is not this firm's, so whoever runs it checks that it
+ * wrote one row.
+ */
+export function historyStatement(db: RecordDb, firm: FirmId, entry: NewHistory): [HistoryId, D1PreparedStatement] {
+  const about = aboutOf(entry.kind);
+  const id = newId() as HistoryId;
+  const [actor, owner, staff] = actorColumns(entry.by);
+  const start = [id, firm, db.clock.now(), actor, owner, staff, entry.kind] as const;
+
+  if (about === 'visit' && 'visit' in entry) {
+    return [
+      id,
+      db.d1
+        .prepare(
+          `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, visit_id)
+           SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, jobs.customer_id, visits.job_id, visits.id
+           FROM visits JOIN jobs ON jobs.firm_id = visits.firm_id AND jobs.id = visits.job_id
+           WHERE visits.firm_id = ?2 AND visits.id = ?8`,
+        )
+        .bind(...start, entry.visit),
+    ];
+  }
+  if (about === 'job' && 'job' in entry) {
+    return [
+      id,
+      db.d1
+        .prepare(
+          `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id)
+           SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, jobs.customer_id, jobs.id
+           FROM jobs WHERE jobs.firm_id = ?2 AND jobs.id = ?8`,
+        )
+        .bind(...start, entry.job),
+    ];
+  }
+  if (about === 'customer' && 'customer' in entry) {
+    return [
+      id,
+      db.d1
+        .prepare(
+          `INSERT INTO history (${ENTRY_COLUMNS}, customer_id)
+           SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, customers.id
+           FROM customers WHERE customers.firm_id = ?2 AND customers.id = ?8`,
+        )
+        .bind(...start, entry.customer),
+    ];
+  }
+  throw new Refused();
+}
+
+/**
  * The statement for an entry about the firm itself, such as a service switched
- * on. Only firms.ts uses it, in the same step as the change it records.
+ * on. Only firms.ts and owners.ts use it, in the same step as the change it
+ * records.
  */
 export function firmEntry(
   db: RecordDb,
   firm: FirmId,
-  kind: 'service_on' | 'service_off' | 'stop_on' | 'stop_off' | 'number_set' | 'urgent_list_set',
+  kind: 'service_on' | 'service_off' | 'stop_on' | 'stop_off' | 'number_set' | 'urgent_list_set' | 'owner_mobile_set',
   by: Actor,
   service: Service | null,
 ): D1PreparedStatement {
@@ -113,6 +134,49 @@ export function callEntry(
        VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
     )
     .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, about.customer, about.job, about.call);
+}
+
+/**
+ * The statement for an entry about a customer opting out of a kind of text,
+ * or back in. Only opt-outs.ts and texts-in.ts use it, in the same step as
+ * the change. One made by a customer's STOP or START text also names the job
+ * the text went on, so the owner sees it there.
+ */
+export function optOutEntry(
+  db: RecordDb,
+  firm: FirmId,
+  kind: 'opted_out' | 'opted_in',
+  by: Actor,
+  about: { customer: CustomerId; job: JobId | null },
+  textKind: OptOutKind,
+): D1PreparedStatement {
+  const [actor, owner, staff] = actorColumns(by);
+  return db.d1
+    .prepare(
+      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, text_kind)
+       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+    )
+    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, about.customer, about.job, textKind);
+}
+
+/**
+ * The statement for the entry about a text that came in, on the customer's
+ * job, or on the customer when there is no job. Only recordTextIn() uses it,
+ * in the same step as the text. The database checks the text, the customer
+ * and the job are all this firm's, and agree.
+ */
+export function textInEntry(
+  db: RecordDb,
+  firm: FirmId,
+  about: { text: TextInId; customer: CustomerId; job: JobId | null },
+): D1PreparedStatement {
+  const [actor, owner, staff] = actorColumns({ kind: 'customer' });
+  return db.d1
+    .prepare(
+      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, text_in_id)
+       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, 'text_received', ?7, ?8, ?9)`,
+    )
+    .bind(newId(), firm, db.clock.now(), actor, owner, staff, about.customer, about.job, about.text);
 }
 
 /** Everything about one job, in the order it happened. */
@@ -155,11 +219,12 @@ const SELECT_ENTRY = `
   SELECT h.id, h.at, h.actor, h.owner_id, h.staff_id, h.kind, h.customer_id,
          c.name AS customer_name, h.job_id, h.visit_id, v.kind AS visit_kind,
          v.starts_at AS visit_starts_at, h.call_id, k.caller AS call_caller,
-         k.summary AS call_summary, h.service
+         k.summary AS call_summary, h.text_in_id, t.words AS text_in_words, h.text_kind, h.service
   FROM history h
   LEFT JOIN customers c ON c.firm_id = h.firm_id AND c.id = h.customer_id
   LEFT JOIN visits v ON v.firm_id = h.firm_id AND v.id = h.visit_id
-  LEFT JOIN calls k ON k.firm_id = h.firm_id AND k.id = h.call_id`;
+  LEFT JOIN calls k ON k.firm_id = h.firm_id AND k.id = h.call_id
+  LEFT JOIN texts_in t ON t.firm_id = h.firm_id AND t.id = h.text_in_id`;
 
 interface EntryRow {
   id: string;
@@ -177,6 +242,9 @@ interface EntryRow {
   call_id: string | null;
   call_caller: string | null;
   call_summary: string | null;
+  text_in_id: string | null;
+  text_in_words: string | null;
+  text_kind: OptOutKind | null;
   service: Service | null;
 }
 
@@ -199,6 +267,11 @@ function fromRow(row: EntryRow): HistoryEntry {
       row.call_id === null
         ? null
         : { id: row.call_id as CallId, caller: row.call_caller, summary: row.call_summary },
+    textIn:
+      row.text_in_id === null || row.text_in_words === null
+        ? null
+        : { id: row.text_in_id as TextInId, words: row.text_in_words },
+    textKind: row.text_kind,
     service: row.service,
   };
 }
@@ -223,7 +296,7 @@ function aboutOf(kind: HistoryKind): (typeof HISTORY_KINDS)[HistoryKind] {
   return HISTORY_KINDS[kind];
 }
 
-function actorColumns(by: Actor): [Actor['kind'], OwnerId | null, StaffId | null] {
+export function actorColumns(by: Actor): [Actor['kind'], OwnerId | null, StaffId | null] {
   switch (by.kind) {
     case 'frontline':
     case 'customer':

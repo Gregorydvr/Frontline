@@ -6,9 +6,10 @@ import { env } from 'cloudflare:workers';
 import type { Hono } from 'hono';
 import type { AppEnv } from '../../src/app';
 import { ukMobile } from '../../src/phone';
-import { createFirm, createOwner, setFirmNumber, setService, setUrgentList } from '../../src/record';
+import { DRAFT_WORDING } from '../../src/messages';
+import { createFirm, createOwner, setFirmNumber, setService, setUrgentList, setWording } from '../../src/record';
 import type { RecordDb } from '../../src/record/db';
-import type { FirmId } from '../../src/record/types';
+import type { FirmId, MessageKind } from '../../src/record/types';
 import hangUp from '../fixtures/vapi/hang-up.json';
 import landlineCaller from '../fixtures/vapi/landline-caller.json';
 import mrPriceLeak from '../fixtures/vapi/mr-price-leak.json';
@@ -67,9 +68,13 @@ export async function send(
   );
 }
 
+/** Tom's mobile, for his alerts. */
+export const TOMS_MOBILE = '+447700900101';
+
 /**
  * Tidewell Heating as it is set up for a real firm, with nothing in it yet:
- * its number, its urgent list, calls switched on, and owner Tom.
+ * its number, its urgent list, calls switched on, owner Tom with his mobile,
+ * and its agreed wording: the drafts, for every kind of text that has one.
  */
 export async function tidewell(db: RecordDb, number = '07700 900100'): Promise<FirmId> {
   const staff = { kind: 'frontline' } as const;
@@ -77,6 +82,11 @@ export async function tidewell(db: RecordDb, number = '07700 900100'): Promise<F
   await setFirmNumber(db, firm, ukMobile(number), staff);
   await setUrgentList(db, firm, ['a leak'], staff);
   await setService(db, firm, 'calls', true, staff);
-  await createOwner(db, firm, { name: 'Tom' });
+  await createOwner(db, firm, { name: 'Tom', mobile: ukMobile(TOMS_MOBILE) });
+  for (const [kind, words] of Object.entries(DRAFT_WORDING) as [MessageKind, string | null][]) {
+    if (words !== null) {
+      await setWording(db, firm, `text:${kind}`, words, staff);
+    }
+  }
   return firm;
 }

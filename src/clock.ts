@@ -3,8 +3,7 @@
 // one.
 //
 // Instants are stored in UTC (rule 18). src/london.ts reads one as the time a
-// person in the UK reads it. Turning a UK time into an instant comes with the
-// due list in slice D.
+// person in the UK reads it, and turns a UK date and time into an instant.
 
 declare const instantBrand: unique symbol;
 

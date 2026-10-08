@@ -72,3 +72,9 @@ function nationalDigits(text: string): string | null {
   const national = /^0(\d{9,10})$/.exec(digits) ?? /^(?:\+44|0044)(\d{9,10})$/.exec(digits);
   return national?.[1] ?? null;
 }
+
+/** A stored number as people write it, such as "07700 900123". */
+export function nationalNumber(number: UkMobile | UkLandline): string {
+  const national = `0${number.slice(3)}`;
+  return `${national.slice(0, 5)} ${national.slice(5)}`;
+}

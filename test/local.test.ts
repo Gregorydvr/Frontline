@@ -4,14 +4,16 @@ import { instantFromIso, pretendClock } from '../src/clock';
 import { createLocalApp } from '../src/local';
 import { exampleFirms, listCustomers } from '../src/record';
 import { openRecord } from '../src/record/db';
+import { testDeps } from './helpers/deps';
 import { report, send, withDetails } from './helpers/vapi';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
+const deps = testDeps(clock);
 
 describe('the version for this machine', () => {
   it('loads the demo firm the first time it is used, once, however many requests arrive', async () => {
-    const app = createLocalApp(() => ({ clock }));
+    const app = createLocalApp(() => deps);
     expect(await exampleFirms(db)).toEqual([]);
 
     const answers = await Promise.all([
@@ -26,12 +28,12 @@ describe('the version for this machine', () => {
     expect(await listCustomers(db, firms[0] as never)).toHaveLength(16);
 
     // A second app, as after a restart, finds it there.
-    await createLocalApp(() => ({ clock })).request('/health', {}, env);
+    await createLocalApp(() => deps).request('/health', {}, env);
     expect(await exampleFirms(db)).toEqual(firms);
   });
 
   it('shows the demo firm in plain text at /local/example', async () => {
-    const app = createLocalApp(() => ({ clock }));
+    const app = createLocalApp(() => deps);
     const answer = await app.request('/local/example', {}, env);
     expect(answer.status).toBe(200);
     expect(answer.headers.get('Content-Type')).toMatch(/^text\/plain/);
@@ -82,7 +84,7 @@ function rowsOf(page: string): string[] {
 }
 
 describe('Calls & bookings on this machine', () => {
-  const app = createLocalApp(() => ({ clock }));
+  const app = createLocalApp(() => deps);
 
   it('shows the demo firm’s day in the example’s look and words', async () => {
     const answer = await app.request('/local/calls', {}, env);
@@ -140,10 +142,30 @@ describe('Calls & bookings on this machine', () => {
   });
 });
 
+describe('texts on this machine', () => {
+  const app = createLocalApp(() => deps);
+
+  it('lists the demo firm’s texts from the record: an urgent call’s alert to Tom, through the stand-in', async () => {
+    const before = deps.texts.sent.length;
+    expect((await send(app, report('mr-price-leak'))).status).toBe(200);
+    const answer = await app.request('/local/texts', {}, env);
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get('Content-Type')).toMatch(/^text\/plain/);
+    expect(await answer.text()).toContain(
+      [
+        'Thu 15 Oct  16:00  urgent_alert to the owner, Tom: sent',
+        '    Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+        '    (1 segment)',
+      ].join('\n'),
+    );
+    expect(deps.texts.sent.length).toBe(before + 1);
+  });
+});
+
 describe('the deployed version', () => {
-  it('has no /local/example or /local/calls page and does not load the demo firm', async () => {
+  it('has no /local/example, /local/calls or /local/texts page and does not load the demo firm', async () => {
     const before = await exampleFirms(db);
-    for (const path of ['/local/example', '/local/calls']) {
+    for (const path of ['/local/example', '/local/calls', '/local/texts']) {
       const answer = await exports.default.fetch(`http://localhost${path}`);
       expect(answer.status).toBe(404);
     }
