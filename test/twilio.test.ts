@@ -13,6 +13,7 @@ import { ukMobile } from '../src/phone';
 import { isFromTwilio, LARGEST_TWILIO_FORM, TwilioTexts, twilioSignature } from '../src/providers/texts/twilio';
 import {
   addDue,
+  isNumberOptedOut,
   createCustomer,
   createJob,
   createVisit,
@@ -260,6 +261,27 @@ describe('a text that comes in', () => {
     expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
     expect(await listOptOuts(db, firm, mrAhmed)).toEqual(['every']);
     expect(await listOptOuts(db, firm, mrsGreen)).toEqual([]);
+  });
+
+  it('keeps the number opted out for a customer made on it later, as when the same person gives their name another way', async () => {
+    await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    // Next week she rings and her name is taken down as "Saira Ahmed".
+    const later = await createCustomer(db, firm, { name: 'Saira Ahmed', mobile: ukMobile('07700 900003') });
+    const job = await createJob(db, firm, { customer: later, about: 'Radiator swap', place: '27 Station Road', urgent: false });
+    const visit = await createVisit(db, firm, { job, startsAt: instantFromIso('2026-10-01T15:00:00+01:00'), kind: 'quote_visit' });
+    const reminder = await addDue(db, firm, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: clock.now() });
+    const sentBefore = deps.texts.sent.length;
+    expect(await runDue(db, deps, firm, reminder)).toEqual({ ran: 'done', outcome: 'not_sent' });
+    expect(deps.texts.sent.length).toBe(sentBefore);
+    expect(await isNumberOptedOut(db, firm, ukMobile('07700 900003'))).toBe(true);
+  });
+
+  it('keeps a STOP from a number that is not yet a customer’s, and START takes it off', async () => {
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ From: '+447700900777', Body: 'STOP' }));
+    expect(await isNumberOptedOut(db, firm, ukMobile('07700 900777'))).toBe(true);
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ From: '+447700900777', Body: 'START' }));
+    expect(await isNumberOptedOut(db, firm, ukMobile('07700 900777'))).toBe(false);
   });
 
   it('opts the number back in on START or UNSTOP, and says so on the job', async () => {

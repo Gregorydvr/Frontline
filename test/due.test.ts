@@ -328,6 +328,17 @@ describe('quiet hours: no text to a customer from 8pm to 8am UK time (open quest
     const late = await addDue(db, firm, { action: 'send_reminder', visit, runAt: instantFromIso('2026-10-25T20:00:00Z'), latestAt: instantFromIso('2026-10-26T00:00:00Z') });
     clock.set(instantFromIso('2026-10-25T20:00:00Z'));
     expect(await runDue(db, deps, firm, late)).toEqual({ ran: 'skipped', outcome: 'too_late' });
+    // Held at 00:30 on the Sunday, still in summer time: it waits until 8am,
+    // which is after the clocks go back at 2am, so 08:00 UTC, not 07:00.
+    const sunday = await addDue(db, firm, {
+      action: 'send_reminder',
+      visit,
+      runAt: instantFromIso('2026-10-25T00:30:00+01:00'),
+      latestAt: instantFromIso('2026-10-26T00:00:00Z'),
+    });
+    clock.set(instantFromIso('2026-10-25T00:30:00+01:00'));
+    expect(await runDue(db, deps, firm, sunday)).toEqual({ ran: 'held' });
+    expect(await getDue(db, firm, sunday)).toMatchObject({ state: 'waiting', runAt: instantFromIso('2026-10-25T08:00:00Z') });
   });
 });
 

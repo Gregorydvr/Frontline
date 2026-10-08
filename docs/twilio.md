@@ -48,7 +48,7 @@ When Twilio refuses a text because the customer unsubscribed with Twilio, Front-
 
 ## STOP
 
-Front-line handles STOP itself (Greg's answer to open question 2, 8 October 2026). A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT, in any capitals, opts every one of the firm's customers on that mobile out of every text from the firm. START or UNSTOP opts them back in. The customer's job shows the text and "No more texts will go to them." (or "Texts can go to them again."). If Twilio refuses a text because the customer unsubscribed with Twilio itself (error 21610), they are recorded as opted out too.
+Front-line handles STOP itself (Greg's answer to open question 2, 8 October 2026). A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT, in any capitals, opts that mobile out of every text from the firm: every customer of the firm on it now, and any made on it later. START or UNSTOP opts it back in. The customer's job shows the text and "No more texts will go to them." (or "Texts can go to them again."). If Twilio refuses a text because the customer unsubscribed with Twilio itself (error 21610), the customer and the number are recorded as opted out too.
 
 **Check**, in the console:
 

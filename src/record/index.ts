@@ -28,7 +28,7 @@ export { createVisit, getVisit, listVisitsForJob, listVisitsFrom } from './visit
 export { findCallByProviderId, getCall, listCallsBetween, markCallBooked, recordCall } from './calls';
 export { addHistory, historyBetween, historyForCustomer, historyForJob } from './history';
 export { firmWording, setWording } from './wording';
-export { listOptOuts, optIn, optOut } from './opt-outs';
+export { isNumberOptedOut, listOptOuts, optIn, optOut, optOutNumber } from './opt-outs';
 export { addDue, cancelDue, claimDue, findDue, finishDue, getDue, listDueForCall, releaseDue } from './due';
 export {
   claimMessage,

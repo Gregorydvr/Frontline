@@ -288,10 +288,18 @@ describe('when the provider does not take it', () => {
     expect(await historyForJob(db, firm, job)).toEqual([]);
   });
 
-  it('a customer who unsubscribed with the provider is recorded as such, and opted out of every text here too', async () => {
+  it('a customer who unsubscribed with the provider is recorded as such, and the number is opted out of every text here too', async () => {
     deps.texts.willAnswer('unsubscribed');
     expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'failed', why: 'unsubscribed' });
     expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
+    // Another customer on the same mobile gets nothing either.
+    const mrAhmed = await createCustomer(db, firm, { name: 'Mr Ahmed', mobile: ukMobile('07700 900003') });
+    const again = await addDue(db, firm, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: clock.now() });
+    expect(await send(deps.texts, db, firm, reminder({ due: again, to: { kind: 'customer', customer: mrAhmed } }))).toMatchObject({
+      result: 'not_sent',
+      why: 'opted_out',
+    });
+    expect(deps.texts.sent).toEqual([]);
   });
 
   it('when it is not clear whether it went, it is marked for staff and never sent again', async () => {

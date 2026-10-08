@@ -118,6 +118,9 @@ beforeAll(async () => {
     await record.recordTextIn(db, firm, { provider: 'fake', providerId: `in-${newId()}`, from: '+447700900005', words: 'See you then.', consent: null });
     await record.optOut(db, firm, clarke.id, 'visit_reminder', frontline);
   }
+  // The first firm alone has Mrs Ahmed's number opted out: the second firm
+  // must not see it.
+  await record.optOutNumber(db, a, mrsAhmedsMobile);
 
   const owners = (await record.listOwners(db, a)).map((owner) => owner.id);
   const customers = await record.listCustomers(db, a);
@@ -460,6 +463,14 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     for (const customer of ofA.customers) {
       await refused(record.optIn(db, b, customer.id, 'every', frontline));
     }
+  },
+  async optOutNumber() {
+    await record.optOutNumber(db, b, ukMobile('07700 900015'));
+    expect(await record.isNumberOptedOut(db, b, ukMobile('07700 900015'))).toBe(true);
+  },
+  async isNumberOptedOut() {
+    expect(await record.isNumberOptedOut(db, a, mrsAhmedsMobile)).toBe(true);
+    expect(await record.isNumberOptedOut(db, b, mrsAhmedsMobile)).toBe(false);
   },
   async listOptOuts() {
     for (const customer of ofA.customers) {

@@ -2,7 +2,8 @@
 // send() checks them before every text to a customer (rule 3 in CLAUDE.md).
 // Each change records who made it, in the same step.
 
-import { Refused, runTogether, type RecordDb } from './db';
+import { isUkMobile, type UkMobile } from '../phone';
+import { Refused, run, runTogether, type RecordDb } from './db';
 import { optOutEntry } from './history';
 import { MESSAGE_KINDS, type Actor, type CustomerId, type FirmId, type OptOutKind } from './types';
 
@@ -52,6 +53,35 @@ export async function listOptOuts(db: RecordDb, firm: FirmId, customer: Customer
     .bind(firm, customer)
     .all<{ kind: OptOutKind }>();
   return results.map((row) => row.kind);
+}
+
+/**
+ * Opts a mobile out of every text from the firm, whichever customer the text
+ * is for, such as when the provider says the number unsubscribed with it. A
+ * STOP texted to the firm does this too, in the same step as the text
+ * (recordTextIn()).
+ */
+export async function optOutNumber(db: RecordDb, firm: FirmId, mobile: UkMobile): Promise<void> {
+  if (!isUkMobile(mobile)) {
+    throw new Refused();
+  }
+  await run(
+    db.d1
+      .prepare('INSERT OR IGNORE INTO opted_out_numbers (firm_id, mobile, at) VALUES (?, ?, ?)')
+      .bind(firm, mobile, db.clock.now()),
+  );
+}
+
+/** Whether a mobile is opted out of every text from the firm. */
+export async function isNumberOptedOut(db: RecordDb, firm: FirmId, mobile: UkMobile): Promise<boolean> {
+  if (!isUkMobile(mobile)) {
+    throw new Refused();
+  }
+  const row = await db.d1
+    .prepare('SELECT 1 AS yes FROM opted_out_numbers WHERE firm_id = ? AND mobile = ?')
+    .bind(firm, mobile)
+    .first<{ yes: number }>();
+  return row !== null;
 }
 
 function checkKind(kind: OptOutKind): void {

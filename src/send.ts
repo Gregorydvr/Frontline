@@ -35,10 +35,12 @@ import {
   getFirm,
   getMessage,
   getOwner,
+  isNumberOptedOut,
   listOptOuts,
   markMessageFailed,
   markMessageSent,
   optOut,
+  optOutNumber,
 } from './record';
 import { Refused, type RecordDb } from './record/db';
 import { CLAIM_HOLDS_FOR } from './record/due';
@@ -105,7 +107,11 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
       throw new Refused();
     }
     const optedOut = await listOptOuts(db, firmId, customer.id);
-    if (optedOut.includes('every') || optedOut.some((opted) => opted === out.kind)) {
+    if (
+      optedOut.includes('every') ||
+      optedOut.some((opted) => opted === out.kind) ||
+      (customer.mobile !== null && (await isNumberOptedOut(db, firmId, customer.mobile)))
+    ) {
       return notSent(db, firmId, out, 'opted_out');
     }
     toNumber = customer.mobile;
@@ -159,9 +165,11 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
     await markMessageFailed(db, firmId, message, answer.reason, answer.code);
     log('text_failed', { firm: firmId, message });
     if (answer.reason === 'unsubscribed' && out.to.kind === 'customer') {
-      // They texted STOP to the provider itself: they are opted out of every
-      // text here too, so our record and the provider's agree.
+      // The number texted STOP to the provider itself: it, and the customer,
+      // are opted out of every text here too, so our record and the
+      // provider's agree.
       await optOut(db, firmId, out.to.customer, 'every', { kind: 'customer' });
+      await optOutNumber(db, firmId, toNumber);
     }
     return { result: 'failed', message, why: answer.reason };
   }

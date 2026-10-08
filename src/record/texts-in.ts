@@ -39,10 +39,10 @@ export type RecordedTextIn =
  * A text from a number that is not a customer's is kept with no customer,
  * for staff to see. The same text arriving twice is kept once.
  *
- * A STOP opts every one of the firm's customers on that mobile out of every
- * kind of text, since texts go to the number; a START opts them back in. It
- * is written in the same step as the text, with who did it, so a repeat of
- * the same text changes nothing more.
+ * A STOP opts the number out of every text from the firm, and every one of
+ * the firm's customers on it, since texts go to the number; a START opts them
+ * back in. It is written in the same step as the text, with who did it, so a
+ * repeat of the same text changes nothing more.
  */
 export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn): Promise<RecordedTextIn> {
   if (!TEXT_PROVIDERS.includes(input.provider)) {
@@ -77,6 +77,16 @@ export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn)
     statements.push(textInEntry(db, firm, { text, customer: found.customer, job: found.job }));
   }
   const consented = input.consent === null || from === null || !isUkMobile(from) ? [] : await customersOn(db, firm, from);
+  // The number itself, so a customer made later on it is covered too.
+  if (input.consent !== null && from !== null && isUkMobile(from)) {
+    statements.push(
+      input.consent === 'stop'
+        ? db.d1
+            .prepare('INSERT OR IGNORE INTO opted_out_numbers (firm_id, mobile, at) VALUES (?, ?, ?)')
+            .bind(firm, from, db.clock.now())
+        : db.d1.prepare('DELETE FROM opted_out_numbers WHERE firm_id = ? AND mobile = ?').bind(firm, from),
+    );
+  }
   for (const customer of consented) {
     const about = { customer, job: customer === found?.customer ? found.job : null };
     if (input.consent === 'stop') {

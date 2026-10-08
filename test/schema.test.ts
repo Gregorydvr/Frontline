@@ -31,6 +31,7 @@ describe('the tables', () => {
       'jobs',
       'messages',
       'opt_outs',
+      'opted_out_numbers',
       'owners',
       'texts_in',
       'visits',
