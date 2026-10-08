@@ -12,6 +12,12 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | Open question 2: a customer's STOP stops every text from the firm to that number. A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT (any capitals, spaces trimmed) opts every one of the firm's customers on that mobile out of every kind of text; START or UNSTOP opts them back in. It is written in the same step as the stored text. Nothing else a customer writes is acted on. A refusal from the provider because the customer unsubscribed with it is recorded as an opt-out too. Greg, answering the slice D pull request |
+| 8 Oct 2026 | After a customer's STOP or START, their job shows "No more texts will go to them." or "Texts can go to them again.", after the text itself. Neither is in Done for you. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 3: "passed straight to you" means a text alert to the owner at once. Putting the live call through may come later, firm by firm. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 7: the owner's alert reads "Front-line: urgent call from {customer}, {place}. {summary} Their number: {number}." A link to the job is added once the owner can log in (slice F). An urgent call whose caller's details did not all come through still alerts the owner, as "Front-line: urgent call. Not all their details came through. {summary} Their number: {number}." Greg, answering the slice D pull request |
+| 8 Oct 2026 | Open question 8: no text goes to a customer from 8pm to 8am UK time, any day, Sundays included. A text due then waits until 8am, unless 8am is past its latest time; then it is skipped and recorded. Alerts to the owner go at any hour. The same hours for every firm for now. Greg, answering the slice D pull request |
+| 8 Oct 2026 | STOP handling and quiet hours are built in the slice D pull request, which completes slice D. Greg, answering the slice D pull request |
 | 8 Oct 2026 | Every text goes out through `send()` in `src/send.ts`, which makes its words itself from the firm's agreed wording for the kind and facts from the record. Nobody hands it words. A firm with no agreed wording for a kind gets no text of that kind. Lint fails anything else that hands a text to a provider. Greg, approving the slice D plan |
 | 8 Oct 2026 | Every text comes from a row in the due list. A text is claimed before it goes, as "this row, to this person", and the database refuses a second claim, so the same text cannot go twice. A text not sent (opted out, no mobile, no wording, no number) is claimed and recorded too, so it is not tried again. Greg, approving the slice D plan |
 | 8 Oct 2026 | Before a text to a customer, `send()` checks the stop button, then the firm's switch for the kind's service, then the customer's opt-out. Texts are GSM-7 only and their segments are counted. Greg, approving the slice D plan |
@@ -117,12 +123,12 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 ## Open
 
 1. The words for the opt-out line and the confirm-your-details link in the first text. A solicitor is to see the opt-out wording.
-2. What a customer's STOP does, given that Twilio's own handling can block every later text from that number. Until answered, a STOP is stored and shown like any other text, and changes no opt-out.
-3. What "passed straight to you" means for an urgent call: the live call put through, a text alert, or both. Slice D builds the text alert, which the brief asks for.
+2. Answered 8 Oct 2026: see Settled. (What a customer's STOP does.)
+3. Answered 8 Oct 2026: see Settled. (What "passed straight to you" means for an urgent call.)
 4. How long a visit takes, and when no reminder is sent because the visit is too soon.
 5. When a second call from the same customer joins their open job, and when it starts a new one.
 6. How long an owner stays logged in.
-7. The words of the owner's alert for an urgent call. Until answered, the draft is a named gap, and a firm with no agreed words for the alert gets no alert: it is recorded as not sent.
-8. Quiet hours, and whether anything is held back on a Sunday. Until answered, texts go whenever they are due.
+7. Answered 8 Oct 2026: see Settled. (The words of the owner's alert for an urgent call.)
+8. Answered 8 Oct 2026: see Settled. (Quiet hours, and Sundays.)
 9. The web address for the app and for customers' links. It should be kept apart from the addresses used for outreach emails.
 10. Whether Vapi moves to its EU region.

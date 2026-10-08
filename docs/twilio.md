@@ -15,7 +15,7 @@ npx wrangler secret put TWILIO_ACCOUNT_SID --env practice
 npx wrangler secret put TWILIO_AUTH_TOKEN --env practice
 ```
 
-and likewise with `--env live`. If either is missing, nothing is sent to Twilio: every text is recorded as refused, and every request from Twilio is refused with 401.
+and likewise with `--env live`. Without both, nothing is sent to Twilio: every text is recorded as refused. Requests from Twilio are checked with the auth token alone, so without it every one is refused with 401.
 
 This machine (`npm run dev`) and the tests never use Twilio. `npm run dev` warns that the two secrets are missing; that is expected.
 
@@ -37,7 +37,7 @@ Twilio signs the address exactly as it was given, so `PUBLIC_ADDRESS` must be th
 
 ## What Front-line reads from Twilio's requests
 
-Both addresses are outside the practice gate. Each checks the `X-Twilio-Signature` header against the auth token before it reads anything, and refuses with 401 otherwise.
+Both addresses are outside the practice gate. Each refuses a body over 64 KB with 413 before reading it (real ones are a few KB), then checks the `X-Twilio-Signature` header against the auth token before it reads anything, and refuses with 401 otherwise.
 
 | Address | Fields read | **Check** |
 |---|---|---|
@@ -48,12 +48,12 @@ When Twilio refuses a text because the customer unsubscribed with Twilio, Front-
 
 ## STOP
 
+Front-line handles STOP itself (Greg's answer to open question 2, 8 October 2026). A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT, in any capitals, opts every one of the firm's customers on that mobile out of every text from the firm. START or UNSTOP opts them back in. The customer's job shows the text and "No more texts will go to them." (or "Texts can go to them again."). If Twilio refuses a text because the customer unsubscribed with Twilio itself (error 21610), they are recorded as opted out too.
+
 **Check**, in the console:
 
-1. Whether Twilio applies its own STOP handling to texts from a UK 07 number. If it does, a customer who texts STOP gets no more texts from that number, whatever Front-line's record says.
-2. Whether Twilio sends its own reply to STOP, and in what words.
-
-What Front-line itself does with a STOP is open question 2 in `docs/decisions.md`. Until it is answered, a STOP is stored and shown on the customer's job like any other text.
+1. Whether Twilio applies its own STOP handling to texts from a UK 07 number. If it does, its list of words should match the one above, so Twilio's record and Front-line's agree.
+2. Whether Twilio sends its own reply to STOP, and in what words. Front-line sends none: nothing answers a customer automatically in Release 1.
 
 ## One of each, captured on practice
 

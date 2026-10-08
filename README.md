@@ -52,7 +52,7 @@ It prints 200. Refresh http://localhost:8787/local/calls and Mrs Hall's call is 
 
 ### Send an urgent call
 
-Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so an alert to the owner is made at once. Open http://localhost:8787/local/texts: the alert to Tom is listed as `not_sent (no_wording)`, because the words of the owner's alert are not agreed yet (open question 7 in `docs/decisions.md`), and no text goes without words the firm agreed.
+Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so Tom is alerted at once. Open http://localhost:8787/local/texts: the alert is listed as sent, with its words: "Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016." It went to the stand-in, not to a phone.
 
 ### Run the clock by hand
 
