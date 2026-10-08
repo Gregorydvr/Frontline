@@ -7,13 +7,15 @@
 // - "feed", in Done for you: names the customer. "Sent Mrs Green a confirmation."
 //
 // The words are data, kept apart from the code below. They come from the
-// example app and the brief; the pull request for slice B lists the few that
-// are new. Lines in the app keep the example's curly apostrophe. Texts to
-// customers, which must use straight ones, come in slice D.
+// example app and the brief; the pull requests for slices B and D list the
+// few that are new. A firm can have its own words for any line, stored with
+// its agreed wording (src/record/wording.ts); where it has none, these are
+// used. Lines in the app keep the example's curly apostrophe. Texts, which
+// must use straight ones, are made in src/messages.ts.
 
 import type { Instant } from './clock';
 import { inLondon, londonDay, MONTHS, WEEKDAYS } from './london';
-import type { HistoryEntry, HistoryKind, VisitKind } from './record/types';
+import type { FirmWording, HistoryEntry, HistoryKind, VisitKind } from './record/types';
 
 export type LineForm = 'job' | 'feed';
 
@@ -28,8 +30,10 @@ export type LineForm = 'job' | 'feed';
  * - {caller}: who rang, for a caller who is not a customer, such as "a supplier"
  * - {message}: the one line about their call, such as "Your order is ready to
  *   collect." Left out when there is none.
+ * - {words}: what a customer wrote in a text, as they wrote it
+ * A form that is null is not shown in that place.
  */
-export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineForm, string>> | null>> = {
+export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineForm, string | null>> | null>> = {
   call_answered: {
     job: 'Answered the call.',
     feed: 'Call from {customer} answered.',
@@ -61,6 +65,17 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   // The example never needed these words. They come with slice F, which
   // builds the screen for a call with details missing.
   details_missing: null,
+  // New in slice D, after the example's "Voice note: “Running 20 minutes
+  // late.”". A customer's text is shown on their job, not in Done for you,
+  // which lists what was done for the owner.
+  text_received: {
+    job: 'Text: “{words}”',
+    feed: null,
+  },
+  // What the owner reads about an opt-out waits on open question 2 in
+  // docs/decisions.md (what a customer's STOP does).
+  opted_out: null,
+  opted_in: null,
   // For the control room, in slice G.
   service_on: null,
   service_off: null,
@@ -68,6 +83,7 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   stop_off: null,
   number_set: null,
   urgent_list_set: null,
+  owner_mobile_set: null,
 };
 
 /** The words for each kind of visit. */
@@ -77,12 +93,17 @@ export const VISIT_WORDS: Readonly<Record<VisitKind, { name: string; short: stri
   service: { name: 'service', short: 'service' },
 };
 
-/** The line the owner reads for one entry, or null for a kind the owner is not shown. */
-export function historyLine(entry: HistoryEntry, form: LineForm): string | null {
-  const words = HISTORY_WORDS[entry.kind]?.[form];
-  if (words === undefined) {
+/**
+ * The line the owner reads for one entry, or null for a kind the owner is not
+ * shown in that place. The firm's own words for the line are used when it
+ * has them.
+ */
+export function historyLine(entry: HistoryEntry, form: LineForm, firmWords: FirmWording = {}): string | null {
+  const ours = HISTORY_WORDS[entry.kind]?.[form];
+  if (ours === undefined || ours === null) {
     return null;
   }
+  const words = firmWords[`line:${entry.kind}:${form}`]?.words ?? ours;
   // A gap left empty at the end, such as a missing {message}, leaves no space behind.
   return words.replace(/\{([^{}]+)\}/g, (_, gap: string) => fill(gap, entry)).trimEnd();
 }
@@ -105,6 +126,8 @@ function fill(gap: string, entry: HistoryEntry): string {
       return callOf(entry).caller ?? missing('This line needs who rang');
     case 'message':
       return callOf(entry).summary ?? '';
+    case 'words':
+      return (entry.textIn ?? missing('This line needs the text')).words;
     default:
       throw new RangeError('The words have a gap this does not know');
   }

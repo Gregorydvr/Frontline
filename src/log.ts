@@ -15,7 +15,31 @@ export type LogEvent =
   | 'call_stored'
   | 'call_repeated'
   | 'urgent_not_on_list'
-  | 'call_while_calls_off';
+  | 'call_while_calls_off'
+  // Texts going out (src/send.ts and src/providers/texts/).
+  | 'text_sent'
+  | 'text_held'
+  | 'text_not_sent'
+  | 'text_failed'
+  | 'text_unclear'
+  | 'text_already'
+  | 'texts_not_set_up'
+  // Requests from Twilio (src/app.ts).
+  | 'twilio_refused'
+  | 'twilio_unreadable'
+  | 'text_in_for_unknown_number'
+  | 'text_in_stored'
+  | 'text_in_repeated'
+  | 'delivery_recorded'
+  | 'delivery_for_unknown_text'
+  // The clock and the due list (src/due.ts).
+  | 'due_queued'
+  | 'due_unreadable'
+  | 'due_failed'
+  | 'due_too_late'
+  | 'due_claim_lost'
+  | 'alert_nobody_to_tell'
+  | 'reminder_visit_changed';
 
 const ERROR_NAMES = [
   'Error',

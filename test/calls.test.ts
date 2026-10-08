@@ -10,6 +10,7 @@ import { instantFromIso, pretendClock } from '../src/clock';
 import { historyLine } from '../src/history-lines';
 import { jobState } from '../src/job-state';
 import { ukMobile } from '../src/phone';
+import { runDue } from '../src/due';
 import {
   getCall,
   historyBetween,
@@ -17,18 +18,26 @@ import {
   historyForJob,
   listCallsBetween,
   listCustomers,
+  listDueForCall,
   listJobs,
+  listMessagesBetween,
+  listOwners,
   listVisitsForJob,
+  setOwnerMobile,
   setService,
+  setStopButton,
+  setWording,
 } from '../src/record';
 import { openRecord } from '../src/record/db';
 import type { FirmId } from '../src/record/types';
 import { firmRows } from './helpers/db';
-import { asAnotherCall, report, send, tidewell, withDetails, type Report, type ReportName } from './helpers/vapi';
+import { testDeps } from './helpers/deps';
+import { asAnotherCall, report, send, tidewell, TOMS_MOBILE, withDetails, type Report, type ReportName } from './helpers/vapi';
 
 const clock = pretendClock(instantFromIso('2026-10-15T15:45:00+01:00'));
 const db = openRecord(env.DB, clock);
-const app = createApp(() => ({ clock }));
+const deps = testDeps(clock);
+const app = createApp(() => deps);
 const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
 
 // Each test has a firm of its own, on a number of its own.
@@ -101,7 +110,7 @@ describe('a call from someone who is not a customer (step 5)', () => {
   });
 });
 
-describe('an urgent call (step 6, apart from the alert)', () => {
+describe('an urgent call (step 6)', () => {
   it('makes one customer, one job marked urgent, and an urgent call, with no visit', async () => {
     expect((await send(app, to('mr-price-leak'))).status).toBe(200);
 
@@ -139,18 +148,88 @@ describe('an urgent call (step 6, apart from the alert)', () => {
     });
   });
 
-  it('writes the call answered and the details taken, and not yet "passed straight to you"', async () => {
+  it('alerts the owner at once, before Vapi has its answer, from the firm’s number', async () => {
+    const sentBefore = deps.texts.sent.length;
+    expect((await send(app, to('mr-price-leak'))).status).toBe(200);
+
+    expect(deps.texts.sent.slice(sentBefore)).toEqual([
+      {
+        from: number,
+        to: TOMS_MOBILE,
+        body: 'Test alert: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+        providerId: expect.stringMatching(/^fake-/) as unknown,
+      },
+    ]);
+    const [message] = await listMessagesBetween(db, firm, ...allTime);
+    expect(message).toMatchObject({
+      kind: 'urgent_alert',
+      state: 'sent',
+      toNumber: TOMS_MOBILE,
+      fromNumber: number,
+      segments: 1,
+      sentAt: clock.now(),
+    });
+  });
+
+  it('writes the call answered and the details taken, then "passed straight to you" once the alert has gone', async () => {
     await send(app, to('mr-price-leak'));
     const [job] = await listJobs(db, firm);
     const [call] = await calls();
     if (job === undefined || call === undefined) throw new Error('No job or call');
 
-    // Nothing reaches the owner until slice D sends the alert, and the
-    // history records only what really happened.
-    expect(await callHistory()).toEqual(['call_answered', 'details_taken']);
+    expect(await callHistory()).toEqual(['call_answered', 'details_taken', 'passed_to_owner']);
     const forJob = await historyForJob(db, firm, job.id);
-    expect(forJob.map((entry) => [entry.kind, entry.call?.id])).toEqual([['call_answered', call.id]]);
-    expect(forJob.map((entry) => historyLine(entry, 'job'))).toEqual(['Answered the call.']);
+    expect(forJob.map((entry) => [entry.kind, entry.call?.id ?? null])).toEqual([
+      ['call_answered', call.id],
+      ['passed_to_owner', null],
+    ]);
+    expect(forJob.map((entry) => historyLine(entry, 'job'))).toEqual(['Answered the call.', 'Passed straight to you.']);
+    const feed = (await historyBetween(db, firm, ...allTime)).map((entry) => historyLine(entry, 'feed'));
+    expect(feed).toContain('Call from Mr Price. Passed straight to you.');
+  });
+
+  it('does not say "passed straight to you" when the alert could not go, and keeps the call', async () => {
+    await setWording(db, firm, 'text:urgent_alert', 'Test alert: {customer}.', { kind: 'frontline' });
+    deps.texts.willAnswer('refused');
+    expect((await send(app, to('mr-price-leak'))).status).toBe(200);
+
+    expect(await callHistory()).toEqual(['call_answered', 'details_taken']);
+    expect(await listMessagesBetween(db, firm, ...allTime)).toMatchObject([{ kind: 'urgent_alert', state: 'failed', reason: 'refused' }]);
+    expect(await calls()).toMatchObject([{ outcome: 'urgent' }]);
+  });
+
+  it('sends no alert to an owner with no mobile, and records why', async () => {
+    const [tom] = await listOwners(db, firm);
+    if (tom === undefined) throw new Error('No owner');
+    await setOwnerMobile(db, firm, tom.id, null, { kind: 'frontline' });
+    const sentBefore = deps.texts.sent.length;
+    await send(app, to('mr-price-leak'));
+
+    expect(deps.texts.sent.length).toBe(sentBefore);
+    expect(await listMessagesBetween(db, firm, ...allTime)).toMatchObject([
+      { kind: 'urgent_alert', state: 'not_sent', reason: 'no_mobile', words: null },
+    ]);
+    expect(await callHistory()).not.toContain('passed_to_owner');
+  });
+
+  it('still alerts the owner with the stop button on, which is for texts to customers', async () => {
+    await setStopButton(db, firm, true, { kind: 'frontline' });
+    await send(app, to('mr-price-leak'));
+    expect(await listMessagesBetween(db, firm, ...allTime)).toMatchObject([{ kind: 'urgent_alert', state: 'sent' }]);
+  });
+
+  it('writes the alert with the call, in the same step, and it cannot go twice when run again', async () => {
+    await send(app, to('mr-price-leak'));
+    const [call] = await calls();
+    if (call === undefined) throw new Error('No call');
+    const [alert, ...others] = await listDueForCall(db, firm, call.id);
+    expect(others).toEqual([]);
+    expect(alert).toMatchObject({ action: 'alert_owner', state: 'done', outcome: 'sent', runAt: clock.now() });
+
+    const sentBefore = deps.texts.sent.length;
+    if (alert === undefined) throw new Error('No alert');
+    expect(await runDue(db, deps, firm, alert.id)).toEqual({ ran: 'not_ours' });
+    expect(deps.texts.sent.length).toBe(sentBefore);
   });
 
   it('is urgent whatever capitals and spaces the agent used for the item', async () => {
@@ -188,7 +267,9 @@ describe('the same report twice', () => {
     expect(await calls()).toHaveLength(1);
     expect(await listCustomers(db, firm)).toHaveLength(1);
     expect(await listJobs(db, firm)).toHaveLength(1);
-    expect(await callHistory()).toEqual(['call_answered', 'details_taken']);
+    expect(await callHistory()).toEqual(['call_answered', 'details_taken', 'passed_to_owner']);
+    // And one alert to the owner.
+    expect(await listMessagesBetween(db, firm, ...allTime)).toHaveLength(1);
   });
 });
 
@@ -201,11 +282,14 @@ describe('finding the customer', () => {
     expect(customers).toHaveLength(1);
     expect(await listJobs(db, firm)).toHaveLength(2);
     expect(await calls()).toHaveLength(2);
-    // Their details were taken once, on the first call.
+    // Their details were taken once, on the first call. Each call, being
+    // urgent, was passed to the owner.
     expect((await historyForCustomer(db, firm, customers[0]?.id as never)).map((entry) => entry.kind)).toEqual([
       'call_answered',
       'details_taken',
+      'passed_to_owner',
       'call_answered',
+      'passed_to_owner',
     ]);
   });
 
@@ -336,7 +420,12 @@ describe('what is kept from a report', () => {
     await send(app, to('mr-price-leak'));
     await send(app, to('mr-price-leak'));
     const lines = logged.mock.calls.map(([line]) => String(line));
-    expect(lines.map((line) => (JSON.parse(line) as { event: string }).event)).toEqual(['call_stored', 'call_repeated']);
+    // The second report is the same call, so its alert is not sent again.
+    expect(lines.map((line) => (JSON.parse(line) as { event: string }).event)).toEqual([
+      'call_stored',
+      'text_sent',
+      'call_repeated',
+    ]);
     for (const line of lines) {
       expect(line).not.toMatch(/Price|07700|\+447700|Bridge|leak|vapi|2a7d4b63-/i);
     }

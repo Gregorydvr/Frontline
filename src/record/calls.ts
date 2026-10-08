@@ -8,6 +8,7 @@ import { newId } from '../ids';
 import { isUkLandline, isUkMobile, type UkLandline, type UkMobile } from '../phone';
 import { insertCustomer } from './customers';
 import { line, Refused, run, runTogether, type RecordDb } from './db';
+import { insertDue } from './due';
 import { callEntry } from './history';
 import { insertJob } from './jobs';
 import {
@@ -18,6 +19,7 @@ import {
   type CallOutcome,
   type CallProvider,
   type CustomerId,
+  type DueId,
   type FirmId,
   type JobId,
   type NewCall,
@@ -27,10 +29,18 @@ import {
 
 const frontline = { kind: 'frontline' } as const;
 
+/**
+ * How long the owner's alert about an urgent call stays worth sending, if it
+ * cannot go at once: a day. Past that it is skipped, and that is recorded.
+ */
+export const ALERT_LATEST_AFTER = 24 * 3_600_000;
+
 export interface RecordedCall {
   call: CallId;
   customer: CustomerId | null;
   job: JobId | null;
+  /** For an urgent call, the row in the due list that alerts the owner. */
+  alert: DueId | null;
 }
 
 /**
@@ -40,7 +50,8 @@ export interface RecordedCall {
  * - for one of the firm's customers, a new job and the call answered
  * - for someone who is not a customer, a message taken
  * - for a call whose details are missing, just that
- * A call with an urgent item is urgent, and so is its job. A call the record
+ * A call with an urgent item is urgent, and so is its job, and a row in the
+ * due list to alert the owner at once is written with it. A call the record
  * already holds is refused, and nothing is written.
  */
 export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Promise<RecordedCall> {
@@ -124,8 +135,17 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       db.clock.now(),
     );
 
+  // The owner hears of an urgent call about a job. The row is written in the
+  // same step as the call, so either both are kept or neither is.
+  let alert: DueId | null = null;
+  if (urgentItem !== null && job !== null) {
+    alert = newId() as DueId;
+    const now = db.clock.now();
+    after.push(insertDue(db, firm, alert, { action: 'alert_owner', call, runAt: now, latestAt: instant(now + ALERT_LATEST_AFTER) }));
+  }
+
   await runTogether(db.d1, [...before, insertCall, ...after]);
-  return { call, customer, job };
+  return { call, customer, job, alert };
 }
 
 function newJob(customer: CustomerId, about: string, place: string, urgentItem: string | null) {

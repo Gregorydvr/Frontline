@@ -168,7 +168,7 @@ describe('firms', () => {
 describe('owners', () => {
   it('stores and reads back the owner', async () => {
     const owner = await createOwner(db, firm, { name: 'Tom' });
-    const expected = { id: owner, name: 'Tom', createdAt: clock.now() };
+    const expected = { id: owner, name: 'Tom', mobile: null, createdAt: clock.now() };
     expect(await getOwner(db, firm, owner)).toEqual(expected);
     expect(await listOwners(db, firm)).toEqual([expected]);
   });
@@ -327,6 +327,8 @@ describe('history', () => {
       job,
       visit: { id: visit, kind: 'quote_visit', startsAt: instantFromIso('2026-10-19T09:00:00+01:00') },
       call: null,
+      textIn: null,
+      textKind: null,
       service: null,
     });
 

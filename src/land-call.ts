@@ -20,11 +20,12 @@ import {
 } from './record';
 import type { RecordedCall } from './record/calls';
 import { Refused, type RecordDb } from './record/db';
-import type { CallFor, CallId, Customer, Firm, FirmId } from './record/types';
+import type { CallFor, CallId, Customer, DueId, Firm, FirmId } from './record/types';
 import type { CallDetails, CallReport } from './vapi-report';
 
 export type Landed =
-  | { result: 'stored'; firm: FirmId; call: CallId }
+  /** Stored. An urgent call comes with the row in the due list that alerts the owner. */
+  | { result: 'stored'; firm: FirmId; call: CallId; alert: DueId | null }
   /** The record already held this call, so nothing changed. */
   | { result: 'repeat'; firm: FirmId; call: CallId }
   /** No firm has the number that was rung. Nothing was kept. */
@@ -79,7 +80,7 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
     // firm's calls are being answered while the service is off.
     log('call_while_calls_off', { firm: firm.id, call: made.call });
   }
-  return { result: 'stored', firm: firm.id, call: made.call };
+  return { result: 'stored', firm: firm.id, call: made.call, alert: made.alert };
 }
 
 /**

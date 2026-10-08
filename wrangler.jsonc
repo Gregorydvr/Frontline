@@ -33,7 +33,23 @@
   // - VAPI_SECRET: the token Vapi sends with each report as a call ends
   //   (docs/vapi.md). On this machine it goes in .dev.vars; the tests make up
   //   their own. Greg sets a different one for practice and for live.
-  "secrets": { "required": ["VAPI_SECRET"] },
+  // - TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN: Front-line's Twilio account,
+  //   for sending texts and checking that a request is from Twilio
+  //   (docs/twilio.md). Greg sets them for practice and live. This machine
+  //   sends nothing to Twilio, so it never needs them; the tests make up their
+  //   own.
+  "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+
+  // PUBLIC_ADDRESS: where this copy can be reached from outside, such as
+  // https://practice.example, with no slash at the end. Twilio reports on
+  // each text's delivery to PUBLIC_ADDRESS/twilio/status. Empty on this
+  // machine, which sends nothing to Twilio. The address for practice and live
+  // waits on open question 9 in docs/decisions.md.
+  "vars": { "PUBLIC_ADDRESS": "" },
+
+  // The clock: every minute, the due list's rows whose time has come go on
+  // the queue (src/due.ts).
+  "triggers": { "crons": ["* * * * *"] },
 
   // This machine only.
   "d1_databases": [
@@ -45,13 +61,21 @@
     }
   ],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "frontline-local-files" }],
+  // The queue the clock puts due rows on, and the worker that takes them off:
+  // this same Worker. A row that fails is offered again by the clock, so the
+  // queue does not retry.
   "queues": {
-    "producers": [{ "binding": "DUE", "queue": "frontline-local-due" }]
+    "producers": [{ "binding": "DUE", "queue": "frontline-local-due" }],
+    "consumers": [{ "queue": "frontline-local-due", "max_batch_size": 10, "max_batch_timeout": 1, "max_retries": 0 }]
   },
 
   "env": {
     "practice": {
-      "secrets": { "required": ["VAPI_SECRET"] },
+      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+      // A placeholder until open question 9 is answered. Greg puts the
+      // address of the practice copy here.
+      "vars": { "PUBLIC_ADDRESS": "" },
+      "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
           "binding": "DB",
@@ -78,11 +102,16 @@
             // Greg creates the practice queue in the EU with this name.
             "queue": "frontline-practice-due"
           }
-        ]
+        ],
+        "consumers": [{ "queue": "frontline-practice-due", "max_batch_size": 10, "max_batch_timeout": 1, "max_retries": 0 }]
       }
     },
     "live": {
-      "secrets": { "required": ["VAPI_SECRET"] },
+      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+      // A placeholder until open question 9 is answered. Greg puts the
+      // address of the live copy here.
+      "vars": { "PUBLIC_ADDRESS": "" },
+      "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
           "binding": "DB",
@@ -109,7 +138,8 @@
             // Greg creates the live queue in the EU with this name.
             "queue": "frontline-live-due"
           }
-        ]
+        ],
+        "consumers": [{ "queue": "frontline-live-due", "max_batch_size": 10, "max_batch_timeout": 1, "max_retries": 0 }]
       }
     }
   }

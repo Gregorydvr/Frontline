@@ -4,14 +4,17 @@ import { clockWords, HISTORY_WORDS, historyLine, whenWords } from '../src/histor
 import { idFromBytes } from '../src/ids';
 import {
   HISTORY_KINDS,
+  LINE_GAPS,
   type CallId,
   type CustomerId,
   type HistoryEntry,
   type HistoryId,
   type HistoryKind,
   type JobId,
+  type TextInId,
   type VisitId,
   type VisitKind,
+  type WordingId,
 } from '../src/record/types';
 
 const at = instantFromIso('2026-10-15T08:10:00+01:00');
@@ -26,6 +29,8 @@ function entry(kind: HistoryKind, visit?: { kind: VisitKind; startsAt: Instant }
     job: idFromBytes(new Uint8Array(16).fill(3)) as JobId,
     visit: visit ? { id: idFromBytes(new Uint8Array(16).fill(4)) as VisitId, ...visit } : null,
     call: null,
+    textIn: null,
+    textKind: null,
     service: null,
   };
 }
@@ -115,13 +120,41 @@ describe('historyLine', () => {
   it('uses only gaps it knows how to fill, and no pronouns on the job page', () => {
     for (const words of Object.values(HISTORY_WORDS)) {
       if (words === null) continue;
-      expect(words.job).not.toMatch(/\b(her|his|him|she|he)\b/i);
+      expect(words.job ?? '').not.toMatch(/\b(her|his|him|she|he)\b/i);
       for (const form of Object.values(words)) {
-        for (const [, gap] of form.matchAll(/\{([^{}]+)\}/g)) {
-          expect(['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when', 'caller', 'message']).toContain(gap);
+        for (const [, gap] of (form ?? '').matchAll(/\{([^{}]+)\}/g)) {
+          expect(LINE_GAPS).toContain(gap);
         }
       }
     }
+  });
+
+  it('shows a customer’s text on the job page, in their own words, and not in Done for you', () => {
+    const text = {
+      ...entry('text_received'),
+      by: { kind: 'customer' } as const,
+      textIn: { id: idFromBytes(new Uint8Array(16).fill(6)) as TextInId, words: 'Yes please. A Wednesday afternoon if you can.' },
+    };
+    expect(historyLine(text, 'job')).toBe('Text: “Yes please. A Wednesday afternoon if you can.”');
+    expect(historyLine(text, 'feed')).toBeNull();
+    expect(() => historyLine({ ...text, textIn: null }, 'job')).toThrow(RangeError);
+  });
+
+  it('shows nothing yet for an opt-out, whose words wait on open question 2', () => {
+    for (const kind of ['opted_out', 'opted_in', 'owner_mobile_set'] as const) {
+      expect(historyLine(entry(kind), 'job')).toBeNull();
+      expect(historyLine(entry(kind), 'feed')).toBeNull();
+    }
+  });
+
+  it('uses the firm’s own words for a line when it has them, with the same gaps', () => {
+    const own = {
+      'line:confirmation_sent:feed': { id: idFromBytes(new Uint8Array(16).fill(7)) as WordingId, words: 'Confirmed {customer}’s visit.' },
+    };
+    expect(historyLine(entry('confirmation_sent'), 'feed', own)).toBe('Confirmed Mrs Green’s visit.');
+    // Only the line it is for.
+    expect(historyLine(entry('confirmation_sent'), 'job', own)).toBe('Sent a confirmation.');
+    expect(historyLine(entry('call_answered'), 'feed', own)).toBe('Call from Mrs Green answered.');
   });
 
   it('refuses to make a line without what it needs', () => {

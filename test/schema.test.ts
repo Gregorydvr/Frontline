@@ -21,8 +21,21 @@ import {
 const db = openRecord(env.DB, pretendClock(instantFromIso('2026-10-15T08:10:00+01:00')));
 
 describe('the tables', () => {
-  it('are the six of slice B and the calls of slice C', async () => {
-    expect(await recordTables(env.DB)).toEqual(['calls', 'customers', 'firms', 'history', 'jobs', 'owners', 'visits']);
+  it('are the six of slice B, the calls of slice C, and the sending and due list of slice D', async () => {
+    expect(await recordTables(env.DB)).toEqual([
+      'calls',
+      'customers',
+      'due',
+      'firms',
+      'history',
+      'jobs',
+      'messages',
+      'opt_outs',
+      'owners',
+      'texts_in',
+      'visits',
+      'wording',
+    ]);
   });
 
   it('all have a firm_id that must be filled in, apart from firms itself', async () => {

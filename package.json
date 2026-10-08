@@ -10,9 +10,9 @@
     "dev": "wrangler d1 migrations apply DB --local && wrangler dev src/local.ts",
     "test": "vitest run",
     "check": "npm run check:types && npm run check:lint && npm test",
-    "check:types": "wrangler types --check && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
+    "check:types": "wrangler types --check --strict-vars=false && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
     "check:lint": "eslint --max-warnings 0 .",
-    "types": "wrangler types"
+    "types": "wrangler types --strict-vars=false"
   },
   "dependencies": {
     "hono": "4.13.13"

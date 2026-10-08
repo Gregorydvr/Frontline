@@ -22,6 +22,8 @@ import type { VisitKind } from '../record/types';
 
 export const EXAMPLE_FIRM = 'Tidewell Heating';
 export const EXAMPLE_OWNER = 'Tom';
+/** Tom's mobile, for his alerts. */
+export const EXAMPLE_OWNER_MOBILE = '07700 900101';
 /** The number Tidewell Heating's customers ring and text. */
 export const EXAMPLE_NUMBER = '07700 900100';
 /** What counts as urgent: "Anything urgent, like a leak, comes straight to you." */

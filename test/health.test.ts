@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { version } from '../package.json';
 import { createApp } from '../src/app';
 import { instantFromIso, pretendClock } from '../src/clock';
+import { testDeps } from './helpers/deps';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -26,7 +27,7 @@ describe('the Worker', () => {
 describe('createApp', () => {
   it('gives every request the clock it was built with', async () => {
     const clock = pretendClock(instantFromIso('2026-09-28T10:15:00Z'));
-    const app = createApp(() => ({ clock }));
+    const app = createApp(() => testDeps(clock));
     app.get('/test/now', (c) => c.json({ now: c.get('deps').clock.now() }));
 
     const first = await app.request('/test/now', {}, env);
@@ -40,7 +41,7 @@ describe('createApp', () => {
   it('answers an unexpected error with a plain 500 and logs its type, never its message', async () => {
     const logged = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const app = createApp(() => ({ clock: pretendClock(instantFromIso('2026-09-28T10:15:00Z')) }));
+    const app = createApp(() => testDeps(pretendClock(instantFromIso('2026-09-28T10:15:00Z'))));
     app.get('/test/fail', () => {
       throw new TypeError('Mrs Ahmed, 27 Station Road, 07700 900123');
     });
@@ -56,7 +57,7 @@ describe('createApp', () => {
   it('keeps the answer of a refusal on purpose, such as a 401, and logs nothing', async () => {
     const logged = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const app = createApp(() => ({ clock: pretendClock(instantFromIso('2026-09-28T10:15:00Z')) }));
+    const app = createApp(() => testDeps(pretendClock(instantFromIso('2026-09-28T10:15:00Z'))));
     app.get('/test/refuse', () => {
       throw new HTTPException(401);
     });

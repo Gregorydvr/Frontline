@@ -8,6 +8,7 @@
 import type { Instant } from '../clock';
 import { capitalised, VISIT_WORDS, whenWords } from '../history-lines';
 import { clock24, londonDayAround, shortDate } from '../london';
+import { nationalNumber, type UkLandline, type UkMobile } from '../phone';
 import { listCallsBetween, listVisitsFrom } from '../record';
 import type { RecordDb } from '../record/db';
 import type { Call, CallOutcome, DiaryVisit, FirmId } from '../record/types';
@@ -86,8 +87,6 @@ function icon(id: string): Html {
 }
 
 /** A number as people write it, such as "07700 900123", or "Number withheld". */
-function numberWords(number: string | null): string {
-  if (number === null) return CALLS_WORDS.withheld;
-  const national = `0${number.slice(3)}`;
-  return `${national.slice(0, 5)} ${national.slice(5)}`;
+function numberWords(number: UkMobile | UkLandline | null): string {
+  return number === null ? CALLS_WORDS.withheld : nationalNumber(number);
 }
