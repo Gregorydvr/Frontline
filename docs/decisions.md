@@ -12,6 +12,15 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | The code lives at the root of the repository. `CLAUDE.md`, `docs/` and `reference/` moved up from `frontline-starter/` unchanged. Greg, answering a question while the slice A plan was made |
+| 8 Oct 2026 | Routes use Hono, which is built for Workers and can list every route for the cross-firm tests. Greg, approving the slice A plan |
+| 8 Oct 2026 | Queries are plain SQL in D1 prepared statements with bound values, written only in `src/record/`. No query builder or ORM. Greg, approving the slice A plan |
+| 8 Oct 2026 | Tests use Vitest 4 with `@cloudflare/vitest-plugin`, running in the Workers runtime against a local D1. Migrations are applied in tests with the plugin's helpers, which use the same table as Wrangler (`d1_migrations`). Greg, approving the slice A plan |
+| 8 Oct 2026 | TypeScript 6.0 (strict), linted by ESLint with typescript-eslint. TypeScript 7 waits until typescript-eslint supports it. Versions are pinned exactly. Greg, approving the slice A plan |
+| 8 Oct 2026 | The top level of `wrangler.jsonc` is this machine (`npm run dev` and the tests). `practice` and `live` are environments used only for deploys. Greg, approving the slice A plan |
+| 8 Oct 2026 | `GET /health` answers with the version in `package.json`. Greg, approving the slice A plan |
+| 8 Oct 2026 | Ids are 128 random bits from the cryptographic random source, written as 26 characters of lowercase Crockford base 32. Greg, approving the slice A plan |
+| 8 Oct 2026 | Logs go through `log()` in `src/log.ts`, which takes an event from a fixed list and fields that are ids, numbers, true or false, or an error's type. An error's message is never logged. Greg, approving the slice A plan |
 | 6 Oct 2026 | Built with Claude Code, as one codebase on Cloudflare: Workers, D1 and R2. TypeScript throughout |
 | 5 and 6 Oct 2026 | Customers are messaged by text from an 07 number bought for each firm through Twilio. The same number takes the firm's calls. No WhatsApp at launch. The aim is the least set-up for the firm |
 | 3 Oct 2026 | The example app is the working design: its look, its layout and its wording. Greg has asked for no changes to it. Ease of use comes first |
@@ -45,6 +54,8 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Practice and the control room sit behind Cloudflare Access. Proposed in the build brief, 6 Oct 2026. Not in the plan | Slices C and G |
 | Every due row has a latest time, after which it is skipped and not sent late. Proposed in the build brief, 6 Oct 2026 | Slice D |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
+| An amount with pence shows two digits: "£2,457.50". A negative amount starts with the example's minus sign: "−£5". The brief gives only "£2,457" and "£8.87". Proposed in the slice A pull request, 8 Oct 2026 | Every screen that shows money |
+| Rule 8's "no SQL anywhere else" covers the application in `src/`. Tests may read the database directly, but only through `test/helpers/db.ts`, for example to prove that a delete left nothing behind. Proposed in the slice A pull request, 8 Oct 2026 | Slice B's check for SQL outside `src/record/`, and slice G |
 
 ## Open
 

@@ -50,7 +50,7 @@ One slice is one task, one branch and one pull request. Do them in order. Do not
 
 Mark a slice `[x]` in this file when its pull request is ready.
 
-### [ ] A. The skeleton and the checks
+### [x] A. The skeleton and the checks
 
 - One Cloudflare Worker in strict TypeScript. `GET /health` answers with the version.
 - Wrangler set up with two environments, `practice` and `live`. Name the bindings for the database, the file store and the queue. Leave their ids as placeholders with a comment: Greg creates the real ones.
