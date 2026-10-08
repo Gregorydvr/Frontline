@@ -12,6 +12,9 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | The owner's alert about an urgent call stays worth sending for a day; after that it is skipped and recorded. Greg, answering the slice D pull request |
+| 8 Oct 2026 | A reminder's `{owner}` is the firm's first owner's name, or the firm's name if it has no owner. Greg, answering the slice D pull request |
+| 8 Oct 2026 | The queue does not try a row again itself; a row that fails is left claimed and the clock offers it again once its claim runs out. Greg, answering the slice D pull request |
 | 8 Oct 2026 | `findDue()` is a fourth record function that takes no firm, beside `createFirm()`, `exampleFirms()` and `findFirmByNumber()`, because the clock finds what is due for every firm at once. It gives only firm and row ids. Greg, answering the slice D pull request |
 | 8 Oct 2026 | Alerts to the owner come from the firm's own number. Greg, answering the slice D pull request |
 | 8 Oct 2026 | One Twilio account holds every firm's number, with one auth token to check Twilio's requests. Greg, answering the slice D pull request |
@@ -114,9 +117,6 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
 | The stop button, the service switches and opt-outs are about texts to customers. An alert to the owner is never held by them, and goes when the firm's calls service is off, since the call is still kept. How the slice D plan reads rule 3 | Slice D |
 | A customer's text is shown on the job page as `Text: “…”`, after the example's `Voice note: “…”`, and not in Done for you. New wording, proposed in the slice D plan | Slices D and F |
-| The owner's alert about an urgent call stays worth sending for a day; after that it is skipped and recorded. Proposed in the slice D pull request | Slice D |
-| A reminder's `{owner}` is the firm's first owner's name, or the firm's name if it has no owner. Proposed in the slice D pull request | Slices D and E |
-| The queue does not try a row again itself; a row that fails is left claimed and the clock offers it again once its claim runs out. Proposed in the slice D pull request | Slice D |
 | The fields read from Twilio's requests (`To`, `From`, `Body`, `MessageSid`, `MessageStatus`, `ErrorCode`) and its error 21610 for an unsubscribed customer are as Twilio is known to send them, not yet checked against real ones. See `docs/twilio.md` | Slice D, until Greg captures real ones on practice |
 | The demo firm's past confirmations and reminders stay as history only, with no made-up texts behind them. The alert row written with Mr Price's urgent call is cancelled, since the example passes it on with its own entry. Proposed in the slice D plan | Slices D and G |
 
