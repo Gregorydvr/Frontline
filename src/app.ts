@@ -11,15 +11,19 @@ export interface AppEnv {
 
 /**
  * The Worker's routes. `makeDeps` builds what each request is given: the real
- * clock and providers in the Worker, pretend ones in tests.
+ * clock and providers in the Worker, pretend ones in tests. `extend` adds to
+ * the app before its own routes, so anything it adds sees every request; only
+ * the version for this machine (src/local.ts) uses it.
  */
-export function createApp(makeDeps: (env: Env) => Deps): Hono<AppEnv> {
+export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppEnv>) => void): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.use(async (c, next) => {
     c.set('deps', makeDeps(c.env));
     await next();
   });
+
+  extend?.(app);
 
   app.get('/health', (c) => c.json({ version }, 200, { 'Cache-Control': 'no-store' }));
 

@@ -29,6 +29,72 @@ const fakesTheClock = [
   { object: 'vi', property: 'setSystemTime', message: 'Use pretendClock from src/clock.ts.' },
 ];
 
+// Rule 8: all database access goes through the record layer in src/record/.
+// No SQL anywhere else, apart from the migration files and the one test
+// helper allowed to read the database directly (docs/decisions.md, 8 Oct).
+// test/fixtures/lint/ holds deliberate mistakes that show both rules work.
+const D1_TYPES = new Set(['D1Database', 'D1DatabaseSession', 'D1PreparedStatement']);
+// Uppercase, as the record layer writes it, so ordinary words do not match.
+const LOOKS_LIKE_SQL =
+  /\b(?:SELECT\b[\s\S]*\bFROM|INSERT\s+(?:OR\s+[A-Z]+\s+)?INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM|(?:CREATE|DROP|ALTER)\s+(?:TABLE|INDEX|TRIGGER|VIEW)|PRAGMA\s+[a-z_]+)\b/;
+
+const frontline = {
+  rules: {
+    // Using the database: anything done to a D1 database, session or
+    // statement. The types tell which objects those are, whatever they are
+    // called.
+    'database-outside-record': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { used: 'Rule 8: only the record layer in src/record/ uses the database.' },
+      },
+      create(context) {
+        const services = context.sourceCode.parserServices;
+        if (!services?.program) return {};
+        const checker = services.program.getTypeChecker();
+        const isD1 = (type) =>
+          (type.isUnion() ? type.types : [type]).some((part) =>
+            D1_TYPES.has((part.getSymbol() ?? part.aliasSymbol)?.getName() ?? ''),
+          );
+        const typeOf = (node) => checker.getTypeAtLocation(services.esTreeNodeToTSNodeMap.get(node));
+        return {
+          // db.prepare(…), maybe?.exec(…)
+          MemberExpression(node) {
+            if (isD1(typeOf(node.object))) context.report({ node, messageId: 'used' });
+          },
+          // const { prepare } = db
+          ObjectPattern(node) {
+            if (isD1(typeOf(node))) context.report({ node, messageId: 'used' });
+          },
+        };
+      },
+    },
+    // Writing SQL: any string that reads like a query.
+    'sql-outside-record': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { sql: 'Rule 8: SQL goes only in src/record/ and migrations/.' },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            if (typeof node.value === 'string' && LOOKS_LIKE_SQL.test(node.value)) {
+              context.report({ node, messageId: 'sql' });
+            }
+          },
+          TemplateLiteral(node) {
+            if (LOOKS_LIKE_SQL.test(node.quasis.map((quasi) => quasi.value.cooked ?? '').join(' '))) {
+              context.report({ node, messageId: 'sql' });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default defineConfig(
   { ignores: ['node_modules/', '.wrangler/', 'reference/', 'worker-configuration.d.ts'] },
   js.configs.recommended,
@@ -40,12 +106,26 @@ export default defineConfig(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    // A disable comment that no longer silences anything fails the check. The
+    // deliberate mistakes in test/fixtures/lint/ rely on this.
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
+    plugins: { frontline },
   },
   {
     rules: {
       'no-console': 'error',
       'no-restricted-properties': ['error', ...readsTheClock, ...guessable, ...fakesTheClock],
       'no-restricted-syntax': ['error', ...readsTheClockSyntax],
+      'frontline/database-outside-record': 'error',
+      'frontline/sql-outside-record': 'error',
+    },
+  },
+  {
+    // The record layer, and the one test helper that reads the database.
+    files: ['src/record/**', 'test/helpers/db.ts'],
+    rules: {
+      'frontline/database-outside-record': 'off',
+      'frontline/sql-outside-record': 'off',
     },
   },
   {

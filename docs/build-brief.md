@@ -66,7 +66,7 @@ Mark a slice `[x]` in this file when its pull request is ready.
 
 In the plan for this slice, name the router, the way queries are written and the test set-up you would choose, with one line of reason for each.
 
-### [ ] B. The record and the wall
+### [x] B. The record and the wall
 
 - Tables for firms, customers, jobs and the history. Later slices add the tables they need.
 - The record layer in `src/record/`. It is the only code that touches the database, and every function in it takes the firm.
