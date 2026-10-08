@@ -287,17 +287,41 @@ describe('a text that comes in', () => {
   it('opts the number back in on START or UNSTOP, and says so on the job', async () => {
     const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
     const job = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
-    await optOut(db, firm, mrsAhmed, 'visit_reminder', { kind: 'frontline' });
     await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
     clock.advance(60_000);
     await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'Start' }));
     expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
+    expect(await isNumberOptedOut(db, firm, ukMobile('07700 900003'))).toBe(false);
     clock.advance(60_000);
     await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
     await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'UNSTOP' }));
     expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
     const lines = (await historyForJob(db, firm, job)).map((entry) => historyLine(entry, 'job'));
     expect(lines.slice(0, 4)).toEqual(['Text: “STOP”', 'No more texts will go to them.', 'Text: “Start”', 'Texts can go to them again.']);
+  });
+
+  it('undoes only what STOP did: an opt-out staff set stays after START', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    const mrAhmed = await createCustomer(db, firm, { name: 'Mr Ahmed', mobile: ukMobile('07700 900003') });
+    // Staff opted Mrs Ahmed out of reminders, and Mr Ahmed out of every text.
+    await optOut(db, firm, mrsAhmed, 'visit_reminder', { kind: 'frontline' });
+    await optOut(db, firm, mrAhmed, 'every', { kind: 'frontline' });
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every', 'visit_reminder']);
+    clock.advance(60_000);
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'START' }));
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['visit_reminder']);
+    expect(await listOptOuts(db, firm, mrAhmed)).toEqual(['every']);
+    expect(await isNumberOptedOut(db, firm, ukMobile('07700 900003'))).toBe(false);
+  });
+
+  it('keeps an opt-out staff set after a STOP made the same one, so START leaves it', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    await optOut(db, firm, mrsAhmed, 'every', { kind: 'frontline' });
+    clock.advance(60_000);
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'START' }));
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
   });
 
   it('acts on nothing else a customer writes: words are data, never instructions', async () => {

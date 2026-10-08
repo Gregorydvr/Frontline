@@ -7,7 +7,11 @@ import { Refused, run, runTogether, type RecordDb } from './db';
 import { optOutEntry } from './history';
 import { MESSAGE_KINDS, type Actor, type CustomerId, type FirmId, type OptOutKind } from './types';
 
-/** Opts one of the firm's customers out of a kind of text, or every kind, and records who did it. */
+/**
+ * Opts one of the firm's customers out of a kind of text, or every kind, and
+ * records who did it. One made by the customer, by STOP, is marked so that a
+ * START undoes it; one staff set is not, and stays.
+ */
 export async function optOut(
   db: RecordDb,
   firm: FirmId,
@@ -19,11 +23,29 @@ export async function optOut(
   // The customer must be this firm's: the opt-out's link refuses another
   // firm's, and the history entry with it.
   await runTogether(db.d1, [
-    db.d1
-      .prepare('INSERT OR IGNORE INTO opt_outs (firm_id, customer_id, kind, at) VALUES (?, ?, ?, ?)')
-      .bind(firm, customer, kind, db.clock.now()),
+    optOutStatement(db, firm, customer, kind, by.kind === 'customer'),
     optOutEntry(db, firm, 'opted_out', by, { customer, job: null }, kind),
   ]);
+}
+
+/**
+ * The statement that opts a customer out. Only opt-outs.ts and texts-in.ts
+ * use it. A STOP over an opt-out staff set leaves it staff's; staff setting
+ * one over a STOP's makes it theirs, so a START no longer undoes it.
+ */
+export function optOutStatement(
+  db: RecordDb,
+  firm: FirmId,
+  customer: CustomerId,
+  kind: OptOutKind,
+  byStop: boolean,
+): D1PreparedStatement {
+  return db.d1
+    .prepare(
+      `INSERT INTO opt_outs (firm_id, customer_id, kind, at, by_stop) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (firm_id, customer_id, kind) DO UPDATE SET by_stop = MIN(opt_outs.by_stop, excluded.by_stop)`,
+    )
+    .bind(firm, customer, kind, db.clock.now(), byStop ? 1 : 0);
 }
 
 /**

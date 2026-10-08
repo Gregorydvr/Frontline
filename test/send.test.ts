@@ -33,6 +33,7 @@ import { openRecord, Refused } from '../src/record/db';
 import { CLAIM_HOLDS_FOR } from '../src/record/due';
 import type { CustomerId, DueId, FirmId, JobId, VisitId } from '../src/record/types';
 import { send, type Outgoing } from '../src/send';
+import { optOutsMadeByStop } from './helpers/db';
 import { testDeps, type TestDeps } from './helpers/deps';
 import { tidewell, TOMS_MOBILE } from './helpers/vapi';
 
@@ -292,6 +293,7 @@ describe('when the provider does not take it', () => {
     deps.texts.willAnswer('unsubscribed');
     expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'failed', why: 'unsubscribed' });
     expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
+    expect(await optOutsMadeByStop(env.DB, mrsAhmed)).toEqual(['every']);
     // Another customer on the same mobile gets nothing either.
     const mrAhmed = await createCustomer(db, firm, { name: 'Mr Ahmed', mobile: ukMobile('07700 900003') });
     const again = await addDue(db, firm, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: clock.now() });

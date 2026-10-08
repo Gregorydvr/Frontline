@@ -8,6 +8,7 @@ import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { line, Refused, runTogether, type RecordDb } from './db';
 import { optOutEntry, textInEntry } from './history';
+import { optOutStatement } from './opt-outs';
 import { TEXT_LIMITS, TEXT_PROVIDERS, type CustomerId, type FirmId, type JobId, type TextIn, type TextInId, type TextProvider } from './types';
 
 export interface NewTextIn {
@@ -40,8 +41,8 @@ export type RecordedTextIn =
  * for staff to see. The same text arriving twice is kept once.
  *
  * A STOP opts the number out of every text from the firm, and every one of
- * the firm's customers on it, since texts go to the number; a START opts them
- * back in. It is written in the same step as the text, with who did it, so a
+ * the firm's customers on it, since texts go to the number; a START undoes
+ * what a STOP did, and leaves any opt-out staff set. It is written in the same step as the text, with who did it, so a
  * repeat of the same text changes nothing more.
  */
 export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn): Promise<RecordedTextIn> {
@@ -91,14 +92,13 @@ export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn)
     const about = { customer, job: customer === found?.customer ? found.job : null };
     if (input.consent === 'stop') {
       statements.push(
-        db.d1
-          .prepare("INSERT OR IGNORE INTO opt_outs (firm_id, customer_id, kind, at) VALUES (?, ?, 'every', ?)")
-          .bind(firm, customer, db.clock.now()),
+        optOutStatement(db, firm, customer, 'every', true),
         optOutEntry(db, firm, 'opted_out', { kind: 'customer' }, about, 'every'),
       );
     } else {
+      // A START undoes only what a STOP did: an opt-out staff set stays.
       statements.push(
-        db.d1.prepare('DELETE FROM opt_outs WHERE firm_id = ? AND customer_id = ?').bind(firm, customer),
+        db.d1.prepare('DELETE FROM opt_outs WHERE firm_id = ? AND customer_id = ? AND by_stop = 1').bind(firm, customer),
         optOutEntry(db, firm, 'opted_in', { kind: 'customer' }, about, 'every'),
       );
     }

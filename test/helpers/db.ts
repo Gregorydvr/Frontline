@@ -104,3 +104,12 @@ export async function insertCallEntryPastTheRecord(
     .bind(entry.id, entry.firm, entry.customer, entry.job, entry.call)
     .run();
 }
+
+/** The kinds of text a customer is opted out of by their own STOP, which a START undoes. */
+export async function optOutsMadeByStop(db: D1Database, customer: string): Promise<string[]> {
+  const { results } = await db
+    .prepare('SELECT kind FROM opt_outs WHERE customer_id = ? AND by_stop = 1 ORDER BY kind')
+    .bind(customer)
+    .all<{ kind: string }>();
+  return results.map((row) => row.kind);
+}
