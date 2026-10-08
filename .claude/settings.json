@@ -1,0 +1,6 @@
+{
+  "env": {
+    "WRANGLER_SEND_METRICS": "false",
+    "CLOUDFLARE_CF_FETCH_ENABLED": "false"
+  }
+}

@@ -1,0 +1,113 @@
+// Wrangler config for Front-line.
+//
+// Three copies of the system (section 5 of docs/build-brief.md):
+// - The top level is this machine: `npm run dev` and the tests. Its bindings
+//   are local only. Wrangler keeps them in .wrangler/ and never contacts
+//   Cloudflare for them. Never deploy without `--env`.
+// - `practice` and `live` are the deployed copies. Greg deploys them from his
+//   own machine with `--env practice` or `--env live`. Never from a cloud
+//   session.
+//
+// Under `practice` and `live`, the database ids are placeholders, and the
+// file store and queue names are the names proposed for them. Greg creates the
+// real ones in Cloudflare's EU jurisdiction, then puts the database ids here
+// (and changes a name here if he picks a different one).
+//
+// Wrangler 4 creates a missing file store or queue by itself during a deploy.
+// Until Greg has created them, deploy with `--x-provision=false` so that
+// nothing is created by accident. A deploy with the placeholder database id
+// fails.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "frontline",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Wrangler's usage data is off for this project. A few of Wrangler's
+  // one-off events ignore this setting; WRANGLER_SEND_METRICS=false in the
+  // environment stops them all (see README.md).
+  "send_metrics": false,
+
+  // The names of the secrets the Worker needs. None yet: slice C adds the
+  // first. Listing them here, in each copy, keeps the generated types the same
+  // whether or not a local .dev.vars exists.
+  "secrets": { "required": [] },
+
+  // This machine only.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "frontline-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "frontline-local-files" }],
+  "queues": {
+    "producers": [{ "binding": "DUE", "queue": "frontline-local-due" }]
+  },
+
+  "env": {
+    "practice": {
+      "secrets": { "required": [] },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          // The id is a placeholder. Greg creates the practice database in the
+          // EU (`wrangler d1 create frontline-practice --jurisdiction eu`) and
+          // puts its id here.
+          "database_name": "frontline-practice",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          // Greg creates the practice file store in the EU with this name.
+          "bucket_name": "frontline-practice-files",
+          "jurisdiction": "eu"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "DUE",
+            // Greg creates the practice queue in the EU with this name.
+            "queue": "frontline-practice-due"
+          }
+        ]
+      }
+    },
+    "live": {
+      "secrets": { "required": [] },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          // The id is a placeholder. Greg creates the live database in the
+          // EU (`wrangler d1 create frontline-live --jurisdiction eu`) and
+          // puts its id here.
+          "database_name": "frontline-live",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          // Greg creates the live file store in the EU with this name.
+          "bucket_name": "frontline-live-files",
+          "jurisdiction": "eu"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "DUE",
+            // Greg creates the live queue in the EU with this name.
+            "queue": "frontline-live-due"
+          }
+        ]
+      }
+    }
+  }
+}
