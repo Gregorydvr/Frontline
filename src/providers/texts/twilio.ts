@@ -74,8 +74,51 @@ export class TwilioTexts implements Texts {
 /** A request from Twilio, read as the form it sends: each name with its values, in order. */
 export type TwilioForm = [string, string][];
 
-export async function readTwilioForm(request: Request): Promise<TwilioForm> {
-  return [...new URLSearchParams(await request.text())];
+/**
+ * The largest form read from Twilio. Real ones are a few KB: a text is at most
+ * 1,600 characters, and there are about twenty fields. Anything bigger is
+ * refused before it is read, since the signature can only be checked once
+ * the whole form has been.
+ */
+export const LARGEST_TWILIO_FORM = 64 * 1024;
+
+/** Reads the form Twilio sent, or gives null when it is larger than any Twilio sends. */
+export async function readTwilioForm(request: Request): Promise<TwilioForm | null> {
+  const declared = request.headers.get('Content-Length');
+  if (declared !== null && !(Number(declared) <= LARGEST_TWILIO_FORM)) {
+    return null;
+  }
+  const body = await readUpTo(request, LARGEST_TWILIO_FORM);
+  return body === null ? null : [...new URLSearchParams(body)];
+}
+
+/** The body as text, read no further than `limit` bytes; null when it is longer. */
+async function readUpTo(request: Request, limit: number): Promise<string | null> {
+  if (request.body === null) {
+    return '';
+  }
+  const reader = request.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value }: ReadableStreamReadResult<Uint8Array> = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const whole = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    whole.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return new TextDecoder().decode(whole);
 }
 
 /** The first value of one field of the form, or null. */
@@ -89,9 +132,15 @@ export function formField(form: TwilioForm, name: string): string | null {
  * token (HMAC-SHA1) and written in base 64.
  */
 export async function twilioSignature(authToken: string, url: string, form: TwilioForm): Promise<string> {
+  // In one pass, so a form of many repeated fields costs no more than its size.
   const byName = new Map<string, string[]>();
   for (const [name, value] of form) {
-    byName.set(name, [...(byName.get(name) ?? []), value]);
+    const values = byName.get(name);
+    if (values === undefined) {
+      byName.set(name, [value]);
+    } else {
+      values.push(value);
+    }
   }
   let data = url;
   for (const name of [...byName.keys()].sort()) {

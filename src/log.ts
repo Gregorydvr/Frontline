@@ -26,10 +26,12 @@ export type LogEvent =
   | 'texts_not_set_up'
   // Requests from Twilio (src/app.ts).
   | 'twilio_refused'
+  | 'twilio_too_large'
   | 'twilio_unreadable'
   | 'text_in_for_unknown_number'
   | 'text_in_stored'
   | 'text_in_repeated'
+  | 'text_in_consent'
   | 'delivery_recorded'
   | 'delivery_for_unknown_text'
   // The clock and the due list (src/due.ts).

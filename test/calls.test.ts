@@ -26,7 +26,6 @@ import {
   setOwnerMobile,
   setService,
   setStopButton,
-  setWording,
 } from '../src/record';
 import { openRecord } from '../src/record/db';
 import type { FirmId } from '../src/record/types';
@@ -156,7 +155,7 @@ describe('an urgent call (step 6)', () => {
       {
         from: number,
         to: TOMS_MOBILE,
-        body: 'Test alert: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+        body: 'Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
         providerId: expect.stringMatching(/^fake-/) as unknown,
       },
     ]);
@@ -189,7 +188,6 @@ describe('an urgent call (step 6)', () => {
   });
 
   it('does not say "passed straight to you" when the alert could not go, and keeps the call', async () => {
-    await setWording(db, firm, 'text:urgent_alert', 'Test alert: {customer}.', { kind: 'frontline' });
     deps.texts.willAnswer('refused');
     expect((await send(app, to('mr-price-leak'))).status).toBe(200);
 
@@ -377,6 +375,31 @@ describe('a call with its details missing', () => {
   it('is still urgent when the item is on the list, though the address is missing', async () => {
     await send(app, withDetails(to('mr-price-leak'), (data) => ({ ...data, address: undefined })));
     expect(await calls()).toMatchObject([{ customer: null, outcome: 'urgent', urgentItem: 'a leak' }]);
+  });
+
+  it('still alerts the owner at once, saying not all the details came through', async () => {
+    const sentBefore = deps.texts.sent.length;
+    await send(app, withDetails(to('mr-price-leak'), (data) => ({ ...data, address: undefined })));
+
+    expect(deps.texts.sent.slice(sentBefore).map((text) => [text.to, text.body])).toEqual([
+      [TOMS_MOBILE, 'Front-line: urgent call. Not all their details came through. A leak under the kitchen sink. Their number: 07700 900016.'],
+    ]);
+    const [call] = await calls();
+    if (call === undefined) throw new Error('No call');
+    expect(await listDueForCall(db, firm, call.id)).toMatchObject([{ action: 'alert_owner', state: 'done', outcome: 'sent' }]);
+    expect(await listMessagesBetween(db, firm, ...allTime)).toMatchObject([
+      { kind: 'urgent_alert_details_missing', state: 'sent', job: null, call: call.id },
+    ]);
+    // There is no job, so nowhere to say it was passed on.
+    expect(await callHistory()).toEqual(['details_missing']);
+  });
+
+  it('ends the line about the call as a sentence before the number', async () => {
+    const sentBefore = deps.texts.sent.length;
+    await send(app, withDetails(to('mr-price-leak'), (data) => ({ ...data, summary: 'Water all over the kitchen floor' })));
+    expect(deps.texts.sent[sentBefore]?.body).toBe(
+      'Front-line: urgent call from Mr Price, 6 Bridge Street. Water all over the kitchen floor. Their number: 07700 900016.',
+    );
   });
 
   it('keeps a customer’s call without its summary when the summary is not usable', async () => {

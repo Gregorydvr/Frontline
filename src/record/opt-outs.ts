@@ -21,7 +21,7 @@ export async function optOut(
     db.d1
       .prepare('INSERT OR IGNORE INTO opt_outs (firm_id, customer_id, kind, at) VALUES (?, ?, ?, ?)')
       .bind(firm, customer, kind, db.clock.now()),
-    optOutEntry(db, firm, 'opted_out', by, customer, kind),
+    optOutEntry(db, firm, 'opted_out', by, { customer, job: null }, kind),
   ]);
 }
 
@@ -41,7 +41,7 @@ export async function optIn(
     db.d1
       .prepare("DELETE FROM opt_outs WHERE firm_id = ?1 AND customer_id = ?2 AND (kind = ?3 OR ?3 = 'every')")
       .bind(firm, customer, kind),
-    optOutEntry(db, firm, 'opted_in', by, customer, kind),
+    optOutEntry(db, firm, 'opted_in', by, { customer, job: null }, kind),
   ]);
 }
 

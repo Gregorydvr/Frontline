@@ -139,20 +139,26 @@ export async function finishDue(
 
 /**
  * Puts a claimed row back to wait, such as a text to a customer while the
- * firm's stop button is on. The clock offers it again in a few minutes,
- * until it is done or past its latest time.
+ * firm's stop button is on: the clock offers it again in a few minutes, until
+ * it is done or past its latest time. Given a time, the row waits until then
+ * instead, such as 8am after quiet hours; a time past the row's latest is
+ * refused, and the row is left as it was.
  */
-export async function releaseDue(db: RecordDb, firm: FirmId, due: DueId, claim: Id): Promise<boolean> {
+export async function releaseDue(db: RecordDb, firm: FirmId, due: DueId, claim: Id, until: Instant | null = null): Promise<boolean> {
   if (!isId(claim)) {
     throw new Refused();
   }
+  const runAt = until === null ? null : instant(until);
   const result = await run(
     db.d1
       .prepare(
-        `UPDATE due SET state = 'waiting', claim = NULL, claimed_at = NULL
-         WHERE firm_id = ?1 AND id = ?2 AND state = 'claimed' AND claim = ?3`,
+        `UPDATE due SET state = 'waiting', claim = NULL, claimed_at = NULL,
+                        run_at = COALESCE(?4, run_at),
+                        queued_at = CASE WHEN ?4 IS NULL THEN queued_at ELSE NULL END
+         WHERE firm_id = ?1 AND id = ?2 AND state = 'claimed' AND claim = ?3
+           AND (?4 IS NULL OR ?4 <= latest_at)`,
       )
-      .bind(firm, due, claim),
+      .bind(firm, due, claim, runAt),
   );
   return result.meta.changes === 1;
 }

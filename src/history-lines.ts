@@ -72,10 +72,17 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
     job: 'Text: “{words}”',
     feed: null,
   },
-  // What the owner reads about an opt-out waits on open question 2 in
-  // docs/decisions.md (what a customer's STOP does).
-  opted_out: null,
-  opted_in: null,
+  // After a customer's STOP or START, on the job their text went on. Greg,
+  // 8 Oct 2026. An opt-out made some other way names no job, so it shows on
+  // no job page.
+  opted_out: {
+    job: 'No more texts will go to them.',
+    feed: null,
+  },
+  opted_in: {
+    job: 'Texts can go to them again.',
+    feed: null,
+  },
   // For the control room, in slice G.
   service_on: null,
   service_off: null,

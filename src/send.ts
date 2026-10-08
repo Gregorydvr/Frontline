@@ -10,7 +10,11 @@
 //   switch hold the text: it is not claimed, and whoever asked can try again.
 //   An opt-out, or no mobile, means it is not sent, and that is recorded.
 //   An alert to the owner is not held by any of these: they are about texts
-//   to customers.
+//   to customers. A text that would go to a customer in quiet hours, 8pm to
+//   8am UK time, is held too, until 8am.
+// - A text this row in the due list already claimed is found first, so a row
+//   run again after its worker stopped finds what happened, whatever the
+//   stop button says now.
 // - The words must be GSM-7, and the segments are counted (rule 4).
 // - The text is claimed: its row in the due list and who it is to can be
 //   written once, so the same text cannot go twice (rule 3).
@@ -19,7 +23,8 @@
 
 import { isGsm7 } from './gsm';
 import { log } from './log';
-import { makeWords, type Facts } from './messages';
+import type { Instant } from './clock';
+import { makeWords, quietUntil, type Facts } from './messages';
 import type { UkMobile } from './phone';
 import type { Texts } from './providers/texts';
 import {
@@ -33,6 +38,7 @@ import {
   listOptOuts,
   markMessageFailed,
   markMessageSent,
+  optOut,
 } from './record';
 import { Refused, type RecordDb } from './record/db';
 import { CLAIM_HOLDS_FOR } from './record/due';
@@ -65,6 +71,8 @@ export type SendResult =
   | { result: 'sent'; message: MessageId }
   /** Not claimed. The stop button is on, or the firm's switch for the service is off. */
   | { result: 'held'; why: 'stopped' | 'service_off' }
+  /** Not claimed. It would reach a customer in quiet hours; it can go from `until`. */
+  | { result: 'held'; why: 'quiet_hours'; until: Instant }
   | { result: 'not_sent'; message: MessageId; why: MessageReason }
   | { result: 'failed'; message: MessageId; why: 'refused' | 'unsubscribed' | 'unclear' }
   /** Claimed before, by this row in the due list, and where it got to. Nothing more was sent. */
@@ -75,6 +83,10 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   const firm = await getFirm(db, firmId);
   if (firm === null || !Object.hasOwn(MESSAGE_KINDS, out.kind) || kind.to !== out.to.kind) {
     throw new Refused();
+  }
+  const earlier = await findMessageForDue(db, firmId, out.due, out.to);
+  if (earlier !== null) {
+    return already(db, firmId, earlier.id);
   }
 
   let toNumber: UkMobile | null;
@@ -118,6 +130,11 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   if (words === '' || !isGsm7(words)) {
     return notSent(db, firmId, out, 'not_gsm7');
   }
+  const until = out.to.kind === 'customer' ? quietUntil(db.clock.now()) : null;
+  if (until !== null) {
+    log('text_held', { firm: firmId, due: out.due });
+    return { result: 'held', why: 'quiet_hours', until };
+  }
 
   const claimed = await claim(db, firmId, out, {
     going: { toNumber, fromNumber: firm.phoneNumber, words, wording: wording.id },
@@ -141,6 +158,11 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   if (!answer.ok) {
     await markMessageFailed(db, firmId, message, answer.reason, answer.code);
     log('text_failed', { firm: firmId, message });
+    if (answer.reason === 'unsubscribed' && out.to.kind === 'customer') {
+      // They texted STOP to the provider itself: they are opted out of every
+      // text here too, so our record and the provider's agree.
+      await optOut(db, firmId, out.to.customer, 'every', { kind: 'customer' });
+    }
     return { result: 'failed', message, why: answer.reason };
   }
   await markMessageSent(db, firmId, message, texts.provider, answer.providerId);

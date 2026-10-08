@@ -138,23 +138,25 @@ export function callEntry(
 
 /**
  * The statement for an entry about a customer opting out of a kind of text,
- * or back in. Only opt-outs.ts uses it, in the same step as the change.
+ * or back in. Only opt-outs.ts and texts-in.ts use it, in the same step as
+ * the change. One made by a customer's STOP or START text also names the job
+ * the text went on, so the owner sees it there.
  */
 export function optOutEntry(
   db: RecordDb,
   firm: FirmId,
   kind: 'opted_out' | 'opted_in',
   by: Actor,
-  customer: CustomerId,
+  about: { customer: CustomerId; job: JobId | null },
   textKind: OptOutKind,
 ): D1PreparedStatement {
   const [actor, owner, staff] = actorColumns(by);
   return db.d1
     .prepare(
-      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, text_kind)
-       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, text_kind)
+       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
     )
-    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, customer, textKind);
+    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, about.customer, about.job, textKind);
 }
 
 /**

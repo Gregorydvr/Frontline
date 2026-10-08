@@ -145,14 +145,20 @@ describe('Calls & bookings on this machine', () => {
 describe('texts on this machine', () => {
   const app = createLocalApp(() => deps);
 
-  it('lists the demo firm’s texts from the record: an urgent call’s alert is not sent while its words are not agreed', async () => {
+  it('lists the demo firm’s texts from the record: an urgent call’s alert to Tom, through the stand-in', async () => {
     const before = deps.texts.sent.length;
     expect((await send(app, report('mr-price-leak'))).status).toBe(200);
     const answer = await app.request('/local/texts', {}, env);
     expect(answer.status).toBe(200);
     expect(answer.headers.get('Content-Type')).toMatch(/^text\/plain/);
-    expect(await answer.text()).toContain('Thu 15 Oct  16:00  urgent_alert to the owner, Tom: not_sent (no_wording)\n');
-    expect(deps.texts.sent.length).toBe(before);
+    expect(await answer.text()).toContain(
+      [
+        'Thu 15 Oct  16:00  urgent_alert to the owner, Tom: sent',
+        '    Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+        '    (1 segment)',
+      ].join('\n'),
+    );
+    expect(deps.texts.sent.length).toBe(before + 1);
   });
 });
 

@@ -135,10 +135,11 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       db.clock.now(),
     );
 
-  // The owner hears of an urgent call about a job. The row is written in the
-  // same step as the call, so either both are kept or neither is.
+  // The owner hears of every urgent call, including one whose details did
+  // not all come through. The row is written in the same step as the call,
+  // so either both are kept or neither is.
   let alert: DueId | null = null;
-  if (urgentItem !== null && job !== null) {
+  if (urgentItem !== null) {
     alert = newId() as DueId;
     const now = db.clock.now();
     after.push(insertDue(db, firm, alert, { action: 'alert_owner', call, runAt: now, latestAt: instant(now + ALERT_LATEST_AFTER) }));

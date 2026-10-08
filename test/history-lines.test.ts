@@ -140,11 +140,18 @@ describe('historyLine', () => {
     expect(() => historyLine({ ...text, textIn: null }, 'job')).toThrow(RangeError);
   });
 
-  it('shows nothing yet for an opt-out, whose words wait on open question 2', () => {
-    for (const kind of ['opted_out', 'opted_in', 'owner_mobile_set'] as const) {
-      expect(historyLine(entry(kind), 'job')).toBeNull();
+  it('shows a customer’s STOP and START on the job page, and not in Done for you', () => {
+    const by = { kind: 'customer' } as const;
+    expect(historyLine({ ...entry('opted_out'), by, textKind: 'every' }, 'job')).toBe('No more texts will go to them.');
+    expect(historyLine({ ...entry('opted_in'), by, textKind: 'every' }, 'job')).toBe('Texts can go to them again.');
+    for (const kind of ['opted_out', 'opted_in'] as const) {
       expect(historyLine(entry(kind), 'feed')).toBeNull();
     }
+  });
+
+  it('shows the owner nothing for their own mobile being set', () => {
+    expect(historyLine(entry('owner_mobile_set'), 'job')).toBeNull();
+    expect(historyLine(entry('owner_mobile_set'), 'feed')).toBeNull();
   });
 
   it('uses the firm’s own words for a line when it has them, with the same gaps', () => {

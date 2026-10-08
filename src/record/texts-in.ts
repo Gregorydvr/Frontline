@@ -7,7 +7,7 @@ import { instant, type Instant } from '../clock';
 import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { line, Refused, runTogether, type RecordDb } from './db';
-import { textInEntry } from './history';
+import { optOutEntry, textInEntry } from './history';
 import { TEXT_LIMITS, TEXT_PROVIDERS, type CustomerId, type FirmId, type JobId, type TextIn, type TextInId, type TextProvider } from './types';
 
 export interface NewTextIn {
@@ -16,10 +16,16 @@ export interface NewTextIn {
   /** The number it came from, as the provider gave it, or null when it gave none. */
   from: string | null;
   words: string;
+  /**
+   * Whether the text is one of the words that opt a number out of every text
+   * from this firm, or back in (src/messages.ts decides), or neither.
+   */
+  consent: 'stop' | 'start' | null;
 }
 
 export type RecordedTextIn =
-  | { result: 'stored'; text: TextInId; customer: CustomerId | null; job: JobId | null }
+  /** Stored, with the customers a STOP or START opted out or in. */
+  | { result: 'stored'; text: TextInId; customer: CustomerId | null; job: JobId | null; consented: CustomerId[] }
   /** The record already held this text, so nothing changed. */
   | { result: 'repeat'; text: TextInId };
 
@@ -32,6 +38,11 @@ export type RecordedTextIn =
  *   newest job
  * A text from a number that is not a customer's is kept with no customer,
  * for staff to see. The same text arriving twice is kept once.
+ *
+ * A STOP opts every one of the firm's customers on that mobile out of every
+ * kind of text, since texts go to the number; a START opts them back in. It
+ * is written in the same step as the text, with who did it, so a repeat of
+ * the same text changes nothing more.
  */
 export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn): Promise<RecordedTextIn> {
   if (!TEXT_PROVIDERS.includes(input.provider)) {
@@ -39,6 +50,10 @@ export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn)
   }
   line(input.providerId, TEXT_LIMITS.providerId);
   if (typeof input.words !== 'string' || input.words.length > TEXT_LIMITS.textIn) {
+    throw new Refused();
+  }
+  // Checked, since types can be got round.
+  if (input.consent !== null && !(['stop', 'start'] as const).includes(input.consent)) {
     throw new Refused();
   }
   const from = input.from !== null && /^\+\d{6,15}$/.test(input.from) ? input.from : null;
@@ -61,6 +76,23 @@ export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn)
   if (found !== null) {
     statements.push(textInEntry(db, firm, { text, customer: found.customer, job: found.job }));
   }
+  const consented = input.consent === null || from === null || !isUkMobile(from) ? [] : await customersOn(db, firm, from);
+  for (const customer of consented) {
+    const about = { customer, job: customer === found?.customer ? found.job : null };
+    if (input.consent === 'stop') {
+      statements.push(
+        db.d1
+          .prepare("INSERT OR IGNORE INTO opt_outs (firm_id, customer_id, kind, at) VALUES (?, ?, 'every', ?)")
+          .bind(firm, customer, db.clock.now()),
+        optOutEntry(db, firm, 'opted_out', { kind: 'customer' }, about, 'every'),
+      );
+    } else {
+      statements.push(
+        db.d1.prepare('DELETE FROM opt_outs WHERE firm_id = ? AND customer_id = ?').bind(firm, customer),
+        optOutEntry(db, firm, 'opted_in', { kind: 'customer' }, about, 'every'),
+      );
+    }
+  }
   try {
     await runTogether(db.d1, statements);
   } catch (thrown) {
@@ -72,7 +104,16 @@ export async function recordTextIn(db: RecordDb, firm: FirmId, input: NewTextIn)
     }
     return { result: 'repeat', text: first };
   }
-  return { result: 'stored', text, customer: found?.customer ?? null, job: found?.job ?? null };
+  return { result: 'stored', text, customer: found?.customer ?? null, job: found?.job ?? null, consented };
+}
+
+/** The ids of this firm's customers on this mobile. */
+async function customersOn(db: RecordDb, firm: FirmId, mobile: UkMobile): Promise<CustomerId[]> {
+  const { results } = await db.d1
+    .prepare('SELECT id FROM customers WHERE firm_id = ? AND mobile = ? ORDER BY created_at, id')
+    .bind(firm, mobile)
+    .all<{ id: string }>();
+  return results.map((row) => row.id as CustomerId);
 }
 
 /** The firm's texts that came in from one instant up to, not including, another, in the order they came. */
@@ -110,12 +151,14 @@ async function whoAndWhich(
               COALESCE(
                 (SELECT m.job_id FROM messages m
                  WHERE m.firm_id = c.firm_id AND m.customer_id = c.id AND m.job_id IS NOT NULL
+                   AND m.state IN ('sent', 'delivered')
                  ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1),
                 (SELECT j.id FROM jobs j WHERE j.firm_id = c.firm_id AND j.customer_id = c.id
                  ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1)) AS job_id
        FROM customers c
        WHERE c.firm_id = ?1 AND c.mobile = ?2
-       ORDER BY (SELECT MAX(m.created_at) FROM messages m WHERE m.firm_id = c.firm_id AND m.customer_id = c.id) DESC NULLS LAST,
+       ORDER BY (SELECT MAX(m.created_at) FROM messages m
+                 WHERE m.firm_id = c.firm_id AND m.customer_id = c.id AND m.state IN ('sent', 'delivered')) DESC NULLS LAST,
                 c.created_at DESC, c.rowid DESC
        LIMIT 1`,
     )

@@ -279,6 +279,11 @@ export const MESSAGE_KINDS = {
   visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'] },
   /** The owner's alert about an urgent call. */
   urgent_alert: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['customer', 'place', 'summary', 'number'] },
+  /**
+   * The owner's alert about an urgent call whose caller's name, job or
+   * address did not come through, so there is no customer or job to name.
+   */
+  urgent_alert_details_missing: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['summary', 'number'] },
 } as const satisfies Record<
   string,
   { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind; gaps: readonly string[] }

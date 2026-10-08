@@ -10,7 +10,7 @@ import { runDue } from '../src/due';
 import { historyLine } from '../src/history-lines';
 import { newId } from '../src/ids';
 import { ukMobile } from '../src/phone';
-import { isFromTwilio, TwilioTexts, twilioSignature } from '../src/providers/texts/twilio';
+import { isFromTwilio, LARGEST_TWILIO_FORM, TwilioTexts, twilioSignature } from '../src/providers/texts/twilio';
 import {
   addDue,
   createCustomer,
@@ -19,7 +19,9 @@ import {
   getMessage,
   historyForJob,
   listMessagesBetween,
+  listOptOuts,
   listTextsInBetween,
+  optOut,
 } from '../src/record';
 import { openRecord } from '../src/record/db';
 import type { FirmId } from '../src/record/types';
@@ -51,6 +53,12 @@ describe('Twilio’s signature', () => {
     expect(await twilioSignature('12345', 'https://mycompany.com/myapp.php?foo=1&bar=2', [...form].reverse())).toBe(
       'RSOYDt4T1cUTdK1PDd93/VVr8B8=',
     );
+  });
+
+  it('takes each different value of a repeated field once, in order, as Twilio’s own package does', async () => {
+    const url = 'https://practice.example/twilio/texts';
+    expect(await twilioSignature('12345', url, [['x', '2'], ['x', '1'], ['x', '1']])).toBe(await twilioSignature('12345', url, [['x', '1'], ['x', '2']]));
+    expect(await twilioSignature('12345', url, [['x', '2'], ['x', '1']])).not.toBe(await twilioSignature('12345', url, [['x', '1']]));
   });
 
   it('is checked against our token, and anything else is refused', async () => {
@@ -197,6 +205,24 @@ describe('a text that comes in', () => {
     expect(await historyForJob(db, firm, newer)).toEqual([]);
   });
 
+  it('goes on the job of the last text actually sent to the customer, not one that was not sent', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    const older = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+    const visit = await createVisit(db, firm, { job: older, startsAt: instantFromIso('2026-10-01T15:00:00+01:00'), kind: 'quote_visit' });
+    await runDue(db, deps, firm, await addDue(db, firm, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: clock.now() }));
+    // Later, a reminder about a newer job that was not sent: she had opted out of reminders.
+    clock.advance(60_000);
+    const newer = await createJob(db, firm, { customer: mrsAhmed, about: 'Radiator swap', place: '27 Station Road', urgent: false });
+    const newerVisit = await createVisit(db, firm, { job: newer, startsAt: instantFromIso('2026-10-01T16:00:00+01:00'), kind: 'quote_visit' });
+    await optOut(db, firm, mrsAhmed, 'visit_reminder', { kind: 'frontline' });
+    expect(
+      await runDue(db, deps, firm, await addDue(db, firm, { action: 'send_reminder', visit: newerVisit, runAt: clock.now(), latestAt: clock.now() })),
+    ).toEqual({ ran: 'done', outcome: 'not_sent' });
+
+    await postToTwilioRoute(app, '/twilio/texts', textIn());
+    expect((await listTextsInBetween(db, firm, ...allTime))[0]?.job).toBe(older);
+  });
+
   it('keeps a text from a number that is not a customer’s, with no customer and nothing on any job', async () => {
     await postToTwilioRoute(app, '/twilio/texts', textIn({ From: '+447700900999' }));
     expect(await listTextsInBetween(db, firm, ...allTime)).toMatchObject([{ from: '+447700900999', customer: null, job: null }]);
@@ -210,11 +236,74 @@ describe('a text that comes in', () => {
     expect(await listTextsInBetween(db, firm, ...allTime)).toHaveLength(1);
   });
 
-  it('stores a STOP like any other text, until open question 2 says what it does', async () => {
+  it.each(['STOP', 'stop', '  Stop ', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'End', 'quit'])(
+    'opts the number out of every text from this firm on %j, and says so on the job',
+    async (word) => {
+      const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+      const job = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+      expect((await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: word }))).status).toBe(200);
+
+      expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
+      const lines = (await historyForJob(db, firm, job)).map((entry) => [entry.by.kind, historyLine(entry, 'job')]);
+      expect(lines).toEqual([
+        ['customer', `Text: “${word}”`],
+        ['customer', 'No more texts will go to them.'],
+      ]);
+    },
+  );
+
+  it('opts out every customer of this firm on that mobile, since texts go to the number', async () => {
     const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
-    await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+    const mrAhmed = await createCustomer(db, firm, { name: 'Mr Ahmed', mobile: ukMobile('07700 900003') });
+    const mrsGreen = await createCustomer(db, firm, { name: 'Mrs Green', mobile: ukMobile('07700 900015') });
     await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
-    expect(await listTextsInBetween(db, firm, ...allTime)).toMatchObject([{ words: 'STOP' }]);
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
+    expect(await listOptOuts(db, firm, mrAhmed)).toEqual(['every']);
+    expect(await listOptOuts(db, firm, mrsGreen)).toEqual([]);
+  });
+
+  it('opts the number back in on START or UNSTOP, and says so on the job', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    const job = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+    await optOut(db, firm, mrsAhmed, 'visit_reminder', { kind: 'frontline' });
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    clock.advance(60_000);
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'Start' }));
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
+    clock.advance(60_000);
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'UNSTOP' }));
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
+    const lines = (await historyForJob(db, firm, job)).map((entry) => historyLine(entry, 'job'));
+    expect(lines.slice(0, 4)).toEqual(['Text: “STOP”', 'No more texts will go to them.', 'Text: “Start”', 'Texts can go to them again.']);
+  });
+
+  it('acts on nothing else a customer writes: words are data, never instructions', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    for (const words of ['Please stop texting me', 'STOP.', 'stop it', 'Cancel the visit please', 'START NOW']) {
+      await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: words }));
+    }
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
+    expect(await listTextsInBetween(db, firm, ...allTime)).toHaveLength(5);
+  });
+
+  it('writes nothing more when the same STOP arrives again', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    const job = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+    const fields = textIn({ Body: 'STOP' });
+    await Promise.all([1, 2, 3].map(() => postToTwilioRoute(app, '/twilio/texts', fields)));
+    expect((await historyForJob(db, firm, job)).map((entry) => entry.kind)).toEqual(['text_received', 'opted_out']);
+  });
+
+  it('stops the reminders: after a STOP the next one is not sent, and that is recorded', async () => {
+    const mrsAhmed = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile('07700 900003') });
+    const job = await createJob(db, firm, { customer: mrsAhmed, about: 'Boiler replacement', place: '27 Station Road', urgent: false });
+    const visit = await createVisit(db, firm, { job, startsAt: instantFromIso('2026-10-01T15:00:00+01:00'), kind: 'quote_visit' });
+    await postToTwilioRoute(app, '/twilio/texts', textIn({ Body: 'STOP' }));
+    const reminder = await addDue(db, firm, { action: 'send_reminder', visit, runAt: clock.now(), latestAt: clock.now() });
+    const sentBefore = deps.texts.sent.length;
+    expect(await runDue(db, deps, firm, reminder)).toEqual({ ran: 'done', outcome: 'not_sent' });
+    expect(deps.texts.sent.length).toBe(sentBefore);
   });
 
   it('is refused, and nothing in it read or kept, without Twilio’s signature', async () => {
@@ -234,6 +323,30 @@ describe('a text that comes in', () => {
     );
     expect(noToken.status).toBe(401);
     expect(await firmRows(env.DB, firm)).toEqual(before);
+  });
+
+  it('refuses a form larger than any Twilio sends before reading it, and keeps nothing', async () => {
+    const before = await firmRows(env.DB, firm);
+    const big = textIn({ Body: 'x'.repeat(LARGEST_TWILIO_FORM) });
+    expect((await postToTwilioRoute(app, '/twilio/texts', big)).status).toBe(413);
+    // Said to be too large, whatever the body.
+    const declared = await app.request(
+      'http://localhost/twilio/status',
+      { method: 'POST', headers: { 'Content-Length': String(LARGEST_TWILIO_FORM + 1), 'X-Twilio-Signature': 'a' }, body: 'x=1' },
+      env,
+    );
+    expect(declared.status).toBe(413);
+    expect(await firmRows(env.DB, firm)).toEqual(before);
+  });
+
+  it('refuses a form of thousands of repeated fields without a good signature, quickly', async () => {
+    const body = 'x=&'.repeat(20_000);
+    const answer = await app.request(
+      'http://localhost/twilio/texts',
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': 'a' }, body },
+      env,
+    );
+    expect(answer.status).toBe(401);
   });
 
   it('answers 404 for a number no firm has, and 400 for a text without its fields', async () => {

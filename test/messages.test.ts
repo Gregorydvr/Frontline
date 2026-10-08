@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { instantFromIso, pretendClock } from '../src/clock';
 import { loadExample } from '../src/example/load';
 import { isGsm7, notGsm7, segments } from '../src/gsm';
-import { DRAFT_WORDING, makeWords } from '../src/messages';
+import { DRAFT_WORDING, makeWords, quietUntil, stopOrStart } from '../src/messages';
 import { ukMobile } from '../src/phone';
 import {
   createCustomer,
@@ -46,8 +46,23 @@ describe('the drafts', () => {
     }
   });
 
-  it('leave the owner’s urgent alert as a named gap until its words are agreed (open question 7)', () => {
-    expect(DRAFT_WORDING.urgent_alert).toBeNull();
+  it('make the owner’s urgent alert in Greg’s words, in one segment (open question 7)', () => {
+    const words = makeWords(DRAFT_WORDING.urgent_alert ?? '', {
+      customer: 'Mr Price',
+      place: '6 Bridge Street',
+      summary: 'A leak under the kitchen sink.',
+      number: '07700 900016',
+    });
+    expect(words).toBe('Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.');
+    expect(segments(words)).toBe(1);
+    const missing = makeWords(DRAFT_WORDING.urgent_alert_details_missing ?? '', { summary: null, number: 'withheld' });
+    expect(missing).toBe('Front-line: urgent call. Not all their details came through. Their number: withheld.');
+  });
+
+  it('have words for every kind of text', () => {
+    for (const [kind, draft] of Object.entries(DRAFT_WORDING)) {
+      expect(draft, kind).not.toBeNull();
+    }
   });
 
   it('make the reminder in the brief, with a straight apostrophe, in one segment', () => {
@@ -61,8 +76,9 @@ describe('the demo firm’s agreed wording', () => {
   it('is the drafts, for every kind that has one, all GSM-7', async () => {
     const firm = await loadExample(env.DB);
     const words = await firmWording(db, firm);
-    expect(words['text:visit_reminder']?.words).toBe(DRAFT_WORDING.visit_reminder);
-    expect(words['text:urgent_alert']).toBeUndefined();
+    for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
+      expect(words[`text:${kind}`]?.words, kind).toBe(DRAFT_WORDING[kind]);
+    }
     for (const { words: agreed } of Object.values(words)) {
       expect(isGsm7(agreed)).toBe(true);
     }
@@ -156,5 +172,45 @@ describe('the owner’s mobile', () => {
     expect((await getOwner(db, firm, tom.id))?.mobile).toBe('+447700900102');
     expect(await historyKinds(env.DB, firm)).toMatchObject({ owner_mobile_set: 2 });
     await expect(setOwnerMobile(db, firm, tom.id, '07700 900102' as never, frontline)).rejects.toThrow(Refused);
+  });
+});
+
+describe('stopOrStart', () => {
+  it('knows the stop words and start words as the whole text, in any capitals', () => {
+    for (const word of ['STOP', 'stop', ' Stop\n', 'STOPALL', 'unsubscribe', 'CANCEL', 'end', 'QUIT']) {
+      expect(stopOrStart(word), word).toBe('stop');
+    }
+    for (const word of ['START', 'start', 'Unstop']) {
+      expect(stopOrStart(word), word).toBe('start');
+    }
+  });
+
+  it('acts on nothing else', () => {
+    for (const words of ['', 'Please stop', 'STOP.', 'STOP STOP', 'Cancel the visit', 'yes', 'start now', 'S T O P']) {
+      expect(stopOrStart(words), words).toBeNull();
+    }
+  });
+});
+
+describe('quietUntil', () => {
+  it('is 8am the next morning from 8pm, 8am the same morning before 8am, and nothing in the day', () => {
+    expect(quietUntil(instantFromIso('2026-09-30T20:00:00+01:00'))).toBe(instantFromIso('2026-10-01T08:00:00+01:00'));
+    expect(quietUntil(instantFromIso('2026-09-30T23:59:00+01:00'))).toBe(instantFromIso('2026-10-01T08:00:00+01:00'));
+    expect(quietUntil(instantFromIso('2026-10-01T00:00:00+01:00'))).toBe(instantFromIso('2026-10-01T08:00:00+01:00'));
+    expect(quietUntil(instantFromIso('2026-10-01T07:59:00+01:00'))).toBe(instantFromIso('2026-10-01T08:00:00+01:00'));
+    expect(quietUntil(instantFromIso('2026-10-01T08:00:00+01:00'))).toBeNull();
+    expect(quietUntil(instantFromIso('2026-10-01T19:59:00+01:00'))).toBeNull();
+  });
+
+  it('works in UK time over the clock changes and the end of a month', () => {
+    // Saturday 24 October, 21:00 summer time: 8am on Sunday 25th is after the clocks go back.
+    expect(quietUntil(instantFromIso('2026-10-24T21:00:00+01:00'))).toBe(instantFromIso('2026-10-25T08:00:00Z'));
+    // Saturday 27 March 2027, 22:00: 8am on Sunday 28th is after the clocks go forward.
+    expect(quietUntil(instantFromIso('2027-03-27T22:00:00Z'))).toBe(instantFromIso('2027-03-28T08:00:00+01:00'));
+    expect(quietUntil(instantFromIso('2026-10-31T20:30:00Z'))).toBe(instantFromIso('2026-11-01T08:00:00Z'));
+    // Every time in the acceptance story is in the day.
+    for (const at of ['2026-09-28T11:16:00+01:00', '2026-09-30T13:00:00+01:00', '2026-10-15T08:11:00+01:00', '2026-10-18T13:00:00+01:00', '2026-10-25T13:00:00Z']) {
+      expect(quietUntil(instantFromIso(at)), at).toBeNull();
+    }
   });
 });

@@ -11,6 +11,7 @@
 // - alert_owner: text the firm's owner about an urgent call, at once
 // - send_reminder: text the customer the reminder for a visit tomorrow
 
+import type { Instant } from './clock';
 import type { Deps } from './deps';
 import { isId } from './ids';
 import { clockWords } from './history-lines';
@@ -99,8 +100,15 @@ export async function runDue(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: Firm
   }
 
   const outcome = await act(db, deps, firm, row);
-  if (outcome === 'held') {
-    await releaseDue(db, firm, due, row.claim);
+  if (typeof outcome === 'object') {
+    // Held: back to wait, or, after quiet hours, until 8am. A row whose
+    // latest time comes before then is skipped now.
+    if (outcome.until !== null && outcome.until > row.latestAt) {
+      await finishDue(db, firm, due, row.claim, 'too_late');
+      log('due_too_late', { firm, due });
+      return { ran: 'skipped', outcome: 'too_late' };
+    }
+    await releaseDue(db, firm, due, row.claim, outcome.until);
     return { ran: 'held' };
   }
   if (!(await finishDue(db, firm, due, row.claim, outcome))) {
@@ -111,7 +119,12 @@ export async function runDue(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: Firm
   return { ran: 'done', outcome };
 }
 
-async function act(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | 'held'> {
+/** A row whose text cannot go yet: it waits, until a given time or to be offered again. */
+interface Held {
+  until: Instant | null;
+}
+
+async function act(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
   switch (row.action) {
     case 'alert_owner':
       return alertOwner(db, deps, firm, row);
@@ -123,34 +136,52 @@ async function act(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: C
 /**
  * Texts each of the firm's owners about an urgent call: who rang, where,
  * what about, and their number. Once one has gone, the job's history says it
- * was passed straight to the owner.
+ * was passed straight to the owner. A call whose caller's details did not
+ * all come through has no customer or job to name, so it gets the other
+ * wording, with what there is.
  */
 async function alertOwner(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: ClaimedDue): Promise<DueOutcome> {
   const call = row.call === null ? null : await getCall(db, firm, row.call);
   const job = call === null || call.job === null ? null : await getJob(db, firm, call.job);
   const owners = await listOwners(db, firm);
-  if (call === null || job === null || call.customer === null || owners.length === 0) {
+  if (call === null || owners.length === 0) {
     log('alert_nobody_to_tell', { firm, due: row.id });
     return 'nobody_to_tell';
   }
+  const number = call.from === null ? 'withheld' : nationalNumber(call.from);
+  const summary = asSentence(call.summary);
   const results: SendResult[] = [];
   for (const owner of owners) {
+    const to = { kind: 'owner', owner: owner.id } as const;
     results.push(
-      await send(deps.texts, db, firm, {
-        due: row.id,
-        kind: 'urgent_alert',
-        to: { kind: 'owner', owner: owner.id },
-        about: { job: job.id, visit: null, call: call.id },
-        facts: {
-          customer: call.customer.name,
-          place: job.place,
-          summary: call.summary,
-          number: call.from === null ? 'withheld' : nationalNumber(call.from),
-        },
-      }),
+      await send(
+        deps.texts,
+        db,
+        firm,
+        job === null || call.customer === null
+          ? {
+              due: row.id,
+              kind: 'urgent_alert_details_missing',
+              to,
+              about: { job: null, visit: null, call: call.id },
+              facts: { summary, number },
+            }
+          : {
+              due: row.id,
+              kind: 'urgent_alert',
+              to,
+              about: { job: job.id, visit: null, call: call.id },
+              facts: { customer: call.customer.name, place: job.place, summary, number },
+            },
+      ),
     );
   }
   return outcomeOf(results);
+}
+
+/** The one line about a call, ending as a sentence ends, so the words after it read on. */
+function asSentence(summary: string | null): string | null {
+  return summary === null || /[.!?]$/.test(summary) ? summary : `${summary}.`;
 }
 
 /**
@@ -163,7 +194,7 @@ async function sendReminder(
   deps: Pick<Deps, 'texts'>,
   firm: FirmId,
   row: ClaimedDue,
-): Promise<DueOutcome | 'held'> {
+): Promise<DueOutcome | Held> {
   const visit = row.visit === null ? null : await getVisit(db, firm, row.visit);
   if (visit?.state !== 'booked' || londonDay(visit.startsAt) - londonDay(db.clock.now()) !== 1) {
     log('reminder_visit_changed', { firm, due: row.id });
@@ -188,7 +219,10 @@ async function sendReminder(
       time: clockWords(at.hour, at.minute),
     },
   });
-  return result.result === 'held' ? 'held' : outcomeOf([result]);
+  if (result.result === 'held') {
+    return { until: result.why === 'quiet_hours' ? result.until : null };
+  }
+  return outcomeOf([result]);
 }
 
 /** How a row's texts came out: sent if any went, failed if any failed, otherwise not sent. */

@@ -283,6 +283,54 @@ describe('the stop button and the service switch hold texts until their latest t
   });
 });
 
+describe('quiet hours: no text to a customer from 8pm to 8am UK time (open question 8)', () => {
+  it('moves a reminder due at 06:00 to 08:00 that morning, then sends it', async () => {
+    const visit = await visitAt('2026-10-01T15:00:00+01:00');
+    const row = await addDue(db, firm, {
+      action: 'send_reminder',
+      visit,
+      runAt: instantFromIso('2026-09-30T06:00:00+01:00'),
+      latestAt: instantFromIso('2026-10-01T00:00:00+01:00'),
+    });
+    clock.set(instantFromIso('2026-09-30T06:00:00+01:00'));
+    expect(await runDue(db, deps, firm, row)).toEqual({ ran: 'held' });
+    expect(await getDue(db, firm, row)).toMatchObject({ state: 'waiting', runAt: instantFromIso('2026-09-30T08:00:00+01:00') });
+    expect(deps.texts.sent).toEqual([]);
+
+    clock.set(instantFromIso('2026-09-30T07:59:00+01:00'));
+    expect(await queuedNow()).toEqual([]);
+    clock.set(instantFromIso('2026-09-30T08:00:00+01:00'));
+    expect(await queuedNow()).toEqual([row]);
+    expect(await runDue(db, deps, firm, row)).toEqual({ ran: 'done', outcome: 'sent' });
+    expect(deps.texts.sent).toHaveLength(1);
+  });
+
+  it('skips a text held at 21:00 whose latest time comes before 8am, and records it', async () => {
+    const visit = await visitAt('2026-10-01T15:00:00+01:00');
+    const row = await addDue(db, firm, {
+      action: 'send_reminder',
+      visit,
+      runAt: instantFromIso('2026-09-30T21:00:00+01:00'),
+      latestAt: instantFromIso('2026-10-01T00:00:00+01:00'),
+    });
+    clock.set(instantFromIso('2026-09-30T21:00:00+01:00'));
+    expect(await runDue(db, deps, firm, row)).toEqual({ ran: 'skipped', outcome: 'too_late' });
+    expect(await getDue(db, firm, row)).toMatchObject({ state: 'skipped', outcome: 'too_late' });
+    expect(deps.texts.sent).toEqual([]);
+  });
+
+  it('starts at 8pm and ends at 8am, in UK time across the clock change', async () => {
+    const visit = await visitAt('2026-10-26T15:00:00Z');
+    // 19:59 on Sunday 25 October, after the clocks went back, is 19:59 UTC.
+    const row = await addDue(db, firm, { action: 'send_reminder', visit, runAt: instantFromIso('2026-10-25T19:59:00Z'), latestAt: instantFromIso('2026-10-26T00:00:00Z') });
+    clock.set(instantFromIso('2026-10-25T19:59:00Z'));
+    expect(await runDue(db, deps, firm, row)).toEqual({ ran: 'done', outcome: 'sent' });
+    const late = await addDue(db, firm, { action: 'send_reminder', visit, runAt: instantFromIso('2026-10-25T20:00:00Z'), latestAt: instantFromIso('2026-10-26T00:00:00Z') });
+    clock.set(instantFromIso('2026-10-25T20:00:00Z'));
+    expect(await runDue(db, deps, firm, late)).toEqual({ ran: 'skipped', outcome: 'too_late' });
+  });
+});
+
 describe('the rows themselves', () => {
   it('refuse a latest time before the time to run, and an action not on the list', async () => {
     await expect(addDue(db, firm, { action: 'send_reminder', runAt: clock.now(), latestAt: instant(clock.now() - 1) })).rejects.toThrow(Refused);

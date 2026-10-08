@@ -51,6 +51,7 @@ let visit: VisitId;
 let due: DueId;
 
 beforeEach(async () => {
+  clock.set(instantFromIso('2026-09-30T13:00:00+01:00'));
   deps = testDeps(clock);
   numbers += 1;
   number = `+447700900${String(numbers)}`;
@@ -213,6 +214,37 @@ describe('what stops a text to a customer (rule 3)', () => {
   });
 });
 
+describe('quiet hours (open question 8)', () => {
+  it('hold a text to a customer from 8pm, until 8am, without claiming it', async () => {
+    clock.set(instantFromIso('2026-09-30T20:00:00+01:00'));
+    expect(await send(deps.texts, db, firm, reminder())).toEqual({
+      result: 'held',
+      why: 'quiet_hours',
+      until: instantFromIso('2026-10-01T08:00:00+01:00'),
+    });
+    expect(await texts()).toEqual([]);
+  });
+
+  it('never hold an alert to the owner, which goes at any hour', async () => {
+    clock.set(instantFromIso('2026-10-01T02:00:00+01:00'));
+    const [tom] = await listOwners(db, firm);
+    const sent = await send(deps.texts, db, firm, {
+      due,
+      kind: 'urgent_alert',
+      to: { kind: 'owner', owner: tom?.id ?? (null as never) },
+      about: { job, visit: null, call: null },
+      facts: { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016' },
+    });
+    expect(sent.result).toBe('sent');
+  });
+
+  it('still record an opt-out at night at once: it is not a hold', async () => {
+    clock.set(instantFromIso('2026-09-30T23:00:00+01:00'));
+    await optOut(db, firm, mrsAhmed, 'every', frontline);
+    expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'not_sent', why: 'opted_out' });
+  });
+});
+
 describe('a text cannot go twice', () => {
   it('the same row in the due list, to the same person, is claimed once', async () => {
     expect((await send(deps.texts, db, firm, reminder())).result).toBe('sent');
@@ -226,6 +258,17 @@ describe('a text cannot go twice', () => {
     expect(results.map((result) => result.result).sort()).toEqual(['already', 'already', 'sent']);
     expect(deps.texts.sent).toHaveLength(1);
     expect(await texts()).toHaveLength(1);
+  });
+
+  it('a text that went is found before the stop button is looked at, so a row run again records what happened', async () => {
+    // A worker sent Mrs Ahmed's reminder, then stopped before marking its row
+    // done. Then the stop button went on, and the row came round again.
+    expect((await send(deps.texts, db, firm, reminder())).result).toBe('sent');
+    await setStopButton(db, firm, true, frontline);
+    expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'already', state: 'sent' });
+    clock.set(instantFromIso('2026-09-30T21:00:00+01:00'));
+    expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'already', state: 'sent' });
+    expect(deps.texts.sent).toHaveLength(1);
   });
 
   it('a text not sent is claimed too, so it is not tried again', async () => {
@@ -245,11 +288,10 @@ describe('when the provider does not take it', () => {
     expect(await historyForJob(db, firm, job)).toEqual([]);
   });
 
-  it('a customer who unsubscribed with the provider is recorded as such', async () => {
+  it('a customer who unsubscribed with the provider is recorded as such, and opted out of every text here too', async () => {
     deps.texts.willAnswer('unsubscribed');
     expect(await send(deps.texts, db, firm, reminder())).toMatchObject({ result: 'failed', why: 'unsubscribed' });
-    // What that does to their opt-outs waits on open question 2.
-    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual([]);
+    expect(await listOptOuts(db, firm, mrsAhmed)).toEqual(['every']);
   });
 
   it('when it is not clear whether it went, it is marked for staff and never sent again', async () => {

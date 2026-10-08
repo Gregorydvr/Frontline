@@ -5,6 +5,7 @@ import type { Deps } from './deps';
 import { runDue } from './due';
 import { landCall } from './land-call';
 import { errorName, log } from './log';
+import { stopOrStart } from './messages';
 import { isUkMobile } from './phone';
 import { formField, isFromTwilio, readTwilioForm } from './providers/texts/twilio';
 import { findFirmByNumber, recordDelivery, recordTextIn } from './record';
@@ -76,9 +77,14 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   // Where Twilio sends a text that came in to a firm's number
   // (docs/twilio.md). Outside the practice gate, so it checks Twilio's
   // signature before it reads anything. The text is stored against the
-  // customer and shown on their job's page. Nothing answers it in Release 1.
+  // customer and shown on their job's page. A STOP or START opts the number
+  // out or back in. Nothing answers it in Release 1.
   app.post('/twilio/texts', async (c) => {
     const form = await readTwilioForm(c.req.raw);
+    if (form === null) {
+      log('twilio_too_large');
+      return c.body(null, 413);
+    }
     if (!(await isFromTwilio(c.env.TWILIO_AUTH_TOKEN, c.req.url, form, c.req.header('X-Twilio-Signature')))) {
       log('twilio_refused');
       return c.body(null, 401);
@@ -96,8 +102,17 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
       log('text_in_for_unknown_number');
       return c.body(null, 404);
     }
-    const stored = await recordTextIn(db, firm, { provider: 'twilio', providerId, from: formField(form, 'From'), words });
+    const stored = await recordTextIn(db, firm, {
+      provider: 'twilio',
+      providerId,
+      from: formField(form, 'From'),
+      words,
+      consent: stopOrStart(words),
+    });
     log(stored.result === 'stored' ? 'text_in_stored' : 'text_in_repeated', { firm, text: stored.text });
+    if (stored.result === 'stored' && stored.consented.length > 0) {
+      log('text_in_consent', { firm, text: stored.text, customers: stored.consented.length });
+    }
     return c.body(NO_REPLY, 200, { 'Content-Type': 'text/xml' });
   });
 
@@ -106,6 +121,10 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   // only moves forward: delivered, or failed.
   app.post('/twilio/status', async (c) => {
     const form = await readTwilioForm(c.req.raw);
+    if (form === null) {
+      log('twilio_too_large');
+      return c.body(null, 413);
+    }
     if (!(await isFromTwilio(c.env.TWILIO_AUTH_TOKEN, c.req.url, form, c.req.header('X-Twilio-Signature')))) {
       log('twilio_refused');
       return c.body(null, 401);

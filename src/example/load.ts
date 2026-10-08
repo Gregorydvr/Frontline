@@ -72,9 +72,7 @@ export async function loadExample(
   await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
   await setUrgentList(db, firm, EXAMPLE_URGENT_LIST, frontline);
   await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) });
-  // The wording agreed at set-up: the drafts, for each kind that has one. The
-  // owner's urgent alert has none until open question 7 is answered, so the
-  // demo firm sends no alert.
+  // The wording agreed at set-up: the drafts, for each kind that has one.
   for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
     const draft = DRAFT_WORDING[kind];
     if (draft !== null) {
