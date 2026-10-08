@@ -12,6 +12,7 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | The GitHub check runs on every pull request and on every push to `main`. Its actions are pinned to exact commits, not tags. `.gitignore` also covers `.env` files, which Wrangler reads for local secrets. Greg, answering the slice A pull request |
 | 8 Oct 2026 | Money is shown as "£2,457" for whole pounds and "£8.87" or "£2,457.50" when there are pence, always with two digits of pence. A negative amount starts with the example's minus sign: "−£5". Greg, answering the slice A pull request |
 | 8 Oct 2026 | Rule 8's "no SQL anywhere else" covers the application in `src/`. Tests may read the database directly, but only through `test/helpers/db.ts`, for example to prove that a delete left nothing behind. Greg, answering the slice A pull request |
 | 8 Oct 2026 | Wrangler runs with `WRANGLER_SEND_METRICS=false` and `CLOUDFLARE_CF_FETCH_ENABLED=false`, so that it sends no usage data and downloads nothing from Cloudflare. `.claude/settings.json` sets them for every Claude Code session, and the GitHub check sets them too. Greg, answering the slice A pull request |

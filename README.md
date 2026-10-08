@@ -35,7 +35,7 @@ npm run check   # types, lint and every test: this must pass before a push
 npm test        # the tests only
 ```
 
-The tests run inside the Workers runtime against a local database. GitHub runs `npm run check` on every pull request.
+The tests run inside the Workers runtime against a local database. GitHub runs `npm run check` on every pull request and after every merge to `main`.
 
 ## Changing the database
 
