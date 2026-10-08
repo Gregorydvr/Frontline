@@ -12,6 +12,12 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | `findDue()` is a fourth record function that takes no firm, beside `createFirm()`, `exampleFirms()` and `findFirmByNumber()`, because the clock finds what is due for every firm at once. It gives only firm and row ids. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Alerts to the owner come from the firm's own number. Greg, answering the slice D pull request |
+| 8 Oct 2026 | One Twilio account holds every firm's number, with one auth token to check Twilio's requests. Greg, answering the slice D pull request |
+| 8 Oct 2026 | A text that failed is not tried again automatically in Release 1, since a retry after an unclear failure could send it twice. It is logged now, and listed for staff in slice G. Greg, answering the slice D pull request |
+| 8 Oct 2026 | The stop button and a service switched off hold texts to customers: a held text goes if the button is turned off, or the service on, before its latest time, and is skipped and recorded otherwise. An opt-out is not a hold: that text never goes. Greg, answering the slice D pull request |
+| 8 Oct 2026 | Words from a caller (a name, an address, a summary) are made fit for a text when they go into one: curly quotes and dashes become straight, and any other character a text cannot carry becomes "?". Greg, answering the slice D pull request |
 | 8 Oct 2026 | Open question 2: a customer's STOP stops every text from the firm to that number. A text that is exactly STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT (any capitals, spaces trimmed) opts every one of the firm's customers on that mobile out of every kind of text; START or UNSTOP opts them back in. It is written in the same step as the stored text. Nothing else a customer writes is acted on. A refusal from the provider because the customer unsubscribed with it is recorded as an opt-out too. Greg, answering the slice D pull request |
 | 8 Oct 2026 | After a customer's STOP or START, their job shows "No more texts will go to them." or "Texts can go to them again.", after the text itself. Neither is in Done for you. Greg, answering the slice D pull request |
 | 8 Oct 2026 | Open question 3: "passed straight to you" means a text alert to the owner at once. Putting the live call through may come later, firm by firm. Greg, answering the slice D pull request |
@@ -106,13 +112,7 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Until slice F, Calls & bookings is served only on this machine, at `/local/calls`. Proposed in the slice C pull request | Slices C and F |
 | Practice and the control room sit behind Cloudflare Access. Proposed in the build brief, 6 Oct 2026. Not in the plan | Slices C and G |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
-| `findDue()` is a fourth record function that takes no firm, beside `createFirm()`, `exampleFirms()` and `findFirmByNumber()`, because the clock finds what is due for every firm at once. It gives only firm and row ids. Proposed in the slice D plan | Slice D, and the settled decision on the wall |
-| Alerts to the owner come from the firm's own number. Proposed in the slice D plan | Slice D |
-| One Twilio account holds every firm's number, with one auth token to check Twilio's requests. Proposed in the slice D plan | Slice D, and `docs/twilio.md` |
-| A text that failed is not tried again automatically in Release 1, since a retry after an unclear failure could send it twice. It is logged now, and listed for staff in slice G. Proposed in the slice D plan | Slices D and G |
-| The stop button and a service switched off hold texts to customers: a held text goes if the button is turned off, or the service on, before its latest time, and is skipped and recorded otherwise. An opt-out is not a hold: that text never goes. How the slice D plan reads step 8 of the acceptance story | Slices D and E |
 | The stop button, the service switches and opt-outs are about texts to customers. An alert to the owner is never held by them, and goes when the firm's calls service is off, since the call is still kept. How the slice D plan reads rule 3 | Slice D |
-| Words from a caller (a name, an address, a summary) are made fit for a text when they go into one: curly quotes and dashes become straight, and any other character a text cannot carry becomes "?". Proposed in the slice D plan | Slice D |
 | A customer's text is shown on the job page as `Text: “…”`, after the example's `Voice note: “…”`, and not in Done for you. New wording, proposed in the slice D plan | Slices D and F |
 | The owner's alert about an urgent call stays worth sending for a day; after that it is skipped and recorded. Proposed in the slice D pull request | Slice D |
 | A reminder's `{owner}` is the firm's first owner's name, or the firm's name if it has no owner. Proposed in the slice D pull request | Slices D and E |
