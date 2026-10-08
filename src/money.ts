@@ -15,9 +15,9 @@ export function pence(amount: number): Pence {
 }
 
 /**
- * Shows an amount the way the example app does: "£2,457" for whole pounds,
+ * Shows an amount as settled in docs/decisions.md: "£2,457" for whole pounds,
  * "£8.87" or "£2,457.50" when there are pence. A negative amount starts with
- * the example's minus sign, as in "−£5".
+ * the example app's minus sign, as in "−£5".
  */
 export function formatMoney(amount: Pence): string {
   const whole = pence(amount);
