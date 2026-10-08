@@ -2,25 +2,47 @@
 
 import { instant } from '../clock';
 import { newId } from '../ids';
-import { isUkMobile, type UkMobile } from '../phone';
+import { isUkLandline, isUkMobile, type UkLandline, type UkMobile } from '../phone';
 import { Refused, run, words, type RecordDb } from './db';
-import type { Customer, CustomerId, FirmId } from './types';
+import { NO_TEXT_REASONS, type Customer, type CustomerId, type FirmId, type NoTextReason } from './types';
 
-export async function createCustomer(
-  db: RecordDb,
-  firm: FirmId,
-  input: { name: string; mobile: UkMobile | null },
-): Promise<CustomerId> {
+export interface NewCustomer {
+  name: string;
+  mobile: UkMobile | null;
+  /** A landline they rang from. */
+  landline?: UkLandline | null;
+  /** Why no text can reach them. Needed when there is no mobile, and only then. */
+  noText?: NoTextReason | null;
+}
+
+export async function createCustomer(db: RecordDb, firm: FirmId, input: NewCustomer): Promise<CustomerId> {
+  const id = newId() as CustomerId;
+  await run(insertCustomer(db, firm, id, input));
+  return id;
+}
+
+/**
+ * The statement that adds a customer, checked first. recordCall() runs it in
+ * the same step as the call.
+ */
+export function insertCustomer(db: RecordDb, firm: FirmId, id: CustomerId, input: NewCustomer): D1PreparedStatement {
+  const landline = input.landline ?? null;
+  const noText = input.noText ?? null;
   if (input.mobile !== null && !isUkMobile(input.mobile)) {
     throw new Refused();
   }
-  const id = newId() as CustomerId;
-  await run(
-    db.d1
-      .prepare('INSERT INTO customers (id, firm_id, name, mobile, created_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, firm, words(input.name), input.mobile, db.clock.now()),
-  );
-  return id;
+  if (landline !== null && !isUkLandline(landline)) {
+    throw new Refused();
+  }
+  if ((input.mobile === null) !== (noText !== null) || (noText !== null && !NO_TEXT_REASONS.includes(noText))) {
+    throw new Refused();
+  }
+  return db.d1
+    .prepare(
+      `INSERT INTO customers (id, firm_id, name, mobile, landline, no_text, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, firm, words(input.name), input.mobile, landline, noText, db.clock.now());
 }
 
 export async function getCustomer(db: RecordDb, firm: FirmId, customer: CustomerId): Promise<Customer | null> {
@@ -51,12 +73,30 @@ export async function findCustomersByMobile(db: RecordDb, firm: FirmId, mobile: 
   return results.map(fromRow);
 }
 
-const SELECT_CUSTOMER = 'SELECT id, name, mobile, created_at FROM customers';
+/** This firm's customers who rang from this landline. Another firm's are never found. */
+export async function findCustomersByLandline(
+  db: RecordDb,
+  firm: FirmId,
+  landline: UkLandline,
+): Promise<Customer[]> {
+  if (!isUkLandline(landline)) {
+    throw new Refused();
+  }
+  const { results } = await db.d1
+    .prepare(`${SELECT_CUSTOMER} WHERE firm_id = ? AND landline = ? ORDER BY created_at, id`)
+    .bind(firm, landline)
+    .all<CustomerRow>();
+  return results.map(fromRow);
+}
+
+const SELECT_CUSTOMER = 'SELECT id, name, mobile, landline, no_text, created_at FROM customers';
 
 interface CustomerRow {
   id: string;
   name: string;
   mobile: string | null;
+  landline: string | null;
+  no_text: string | null;
   created_at: number;
 }
 
@@ -65,6 +105,8 @@ function fromRow(row: CustomerRow): Customer {
     id: row.id as CustomerId,
     name: row.name,
     mobile: row.mobile as UkMobile | null,
+    landline: row.landline as UkLandline | null,
+    noText: row.no_text as NoTextReason | null,
     createdAt: instant(row.created_at),
   };
 }

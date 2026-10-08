@@ -1,0 +1,57 @@
+{
+  "message": {
+    "timestamp": 1792075271802,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-10-15T14:41:00.050Z",
+    "endedAt": "2026-10-15T14:41:09.402Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1792075260050,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1792075260850,
+          "endTime": 1792075267330,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+      "recordingUrl": "https://example.invalid/recordings/5d0a7e96-2c8b-4f51-9e73-4a1b6c9f2ea5-mono.wav"
+    },
+    "analysis": {},
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+447700900400"
+    },
+    "call": {
+      "id": "5d0a7e96-2c8b-4f51-9e73-4a1b6c9f2ea5",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "endedReason": "customer-ended-call",
+      "createdAt": "2026-10-15T14:41:00.050Z",
+      "updatedAt": "2026-10-15T14:41:09.402Z",
+      "startedAt": "2026-10-15T14:41:00.050Z",
+      "endedAt": "2026-10-15T14:41:09.402Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+447700900400"
+      }
+    }
+  }
+}

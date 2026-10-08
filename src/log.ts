@@ -6,7 +6,16 @@
 
 import type { Id } from './ids';
 
-export type LogEvent = 'unhandled_error';
+export type LogEvent =
+  | 'unhandled_error'
+  // A report from Vapi as a call ends (src/land-call.ts and src/app.ts).
+  | 'call_report_refused'
+  | 'call_report_unreadable'
+  | 'call_for_unknown_number'
+  | 'call_stored'
+  | 'call_repeated'
+  | 'urgent_not_on_list'
+  | 'call_while_calls_off';
 
 const ERROR_NAMES = [
   'Error',

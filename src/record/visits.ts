@@ -4,7 +4,17 @@
 import { instant, type Instant } from '../clock';
 import { newId } from '../ids';
 import { Refused, run, type RecordDb } from './db';
-import { VISIT_KINDS, type FirmId, type JobId, type Visit, type VisitId, type VisitKind, type VisitState } from './types';
+import {
+  VISIT_KINDS,
+  type CustomerId,
+  type DiaryVisit,
+  type FirmId,
+  type JobId,
+  type Visit,
+  type VisitId,
+  type VisitKind,
+  type VisitState,
+} from './types';
 
 /** Books a visit for one of this firm's jobs. Another firm's job is refused. */
 export async function createVisit(
@@ -43,6 +53,26 @@ export async function listVisitsForJob(db: RecordDb, firm: FirmId, job: JobId): 
     .bind(firm, job)
     .all<VisitRow>();
   return results.map(fromRow);
+}
+
+/** The firm's booked visits that start at or after an instant, earliest first, each with its customer. */
+export async function listVisitsFrom(db: RecordDb, firm: FirmId, from: Instant): Promise<DiaryVisit[]> {
+  const { results } = await db.d1
+    .prepare(
+      `SELECT v.id, v.job_id, v.starts_at, v.kind, v.state, v.created_at,
+              c.id AS customer_id, c.name AS customer_name
+       FROM visits v
+       JOIN jobs j ON j.firm_id = v.firm_id AND j.id = v.job_id
+       JOIN customers c ON c.firm_id = j.firm_id AND c.id = j.customer_id
+       WHERE v.firm_id = ? AND v.state = 'booked' AND v.starts_at >= ?
+       ORDER BY v.starts_at, v.id`,
+    )
+    .bind(firm, instant(from))
+    .all<VisitRow & { customer_id: string; customer_name: string }>();
+  return results.map((row) => ({
+    ...fromRow(row),
+    customer: { id: row.customer_id as CustomerId, name: row.customer_name },
+  }));
 }
 
 const SELECT_VISIT = 'SELECT id, job_id, starts_at, kind, state, created_at FROM visits';

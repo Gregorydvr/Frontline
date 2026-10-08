@@ -2,7 +2,8 @@
 // will write to the record. It runs on a pretend clock that steps through the
 // example's days, so each record and entry carries the example's own time.
 
-import { instantFromIso, pretendClock } from '../clock';
+import { instantFromIso, pretendClock, type Instant } from '../clock';
+import { newId } from '../ids';
 import { ukMobile } from '../phone';
 import {
   addHistory,
@@ -12,15 +13,21 @@ import {
   createOwner,
   createVisit,
   exampleFirms,
+  markCallBooked,
+  recordCall,
+  setFirmNumber,
   setService,
+  setUrgentList,
 } from '../record';
 import { openRecord } from '../record/db';
-import { SERVICES, type CustomerId, type FirmId, type JobId, type VisitId } from '../record/types';
+import { SERVICES, type CallId, type CustomerId, type FirmId, type JobId, type VisitId } from '../record/types';
 import {
   CUSTOMERS,
   EXAMPLE_FIRM,
+  EXAMPLE_NUMBER,
   EXAMPLE_OWNER,
   EXAMPLE_SET_UP,
+  EXAMPLE_URGENT_LIST,
   TIMELINE,
   VISITS,
   type CustomerKey,
@@ -31,22 +38,29 @@ const frontline = { kind: 'frontline' } as const;
 
 /**
  * Writes the demo firm and everything in it, and gives its id. The wall tests
- * load it a second time under another name, for a firm of the same shape.
+ * load it a second time under another name and number, for a firm of the
+ * same shape.
  */
 export async function loadExample(
   d1: D1Database,
-  firmAs: { name: string; isExample: boolean } = { name: EXAMPLE_FIRM, isExample: true },
+  firmAs: { name: string; isExample: boolean; number: string } = {
+    name: EXAMPLE_FIRM,
+    isExample: true,
+    number: EXAMPLE_NUMBER,
+  },
 ): Promise<FirmId> {
   const clock = pretendClock(instantFromIso(EXAMPLE_SET_UP));
   const db = openRecord(d1, clock);
 
-  const firm = await createFirm(db, firmAs);
+  const firm = await createFirm(db, { name: firmAs.name, isExample: firmAs.isExample });
   for (const service of SERVICES) {
     await setService(db, firm, service, true, frontline);
   }
+  await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
+  await setUrgentList(db, firm, EXAMPLE_URGENT_LIST, frontline);
   await createOwner(db, firm, { name: EXAMPLE_OWNER });
 
-  const people = new Map<CustomerKey, { customer: CustomerId; job: JobId }>();
+  const people = new Map<CustomerKey, { customer: CustomerId; job: JobId; call?: CallId }>();
   const visits = new Map<VisitKey, VisitId>();
   const personOf = (key: CustomerKey) => found(people.get(key));
   const visitOf = (key: VisitKey) => found(visits.get(key));
@@ -60,12 +74,37 @@ export async function loadExample(
 
     switch (step.add) {
       case 'customer': {
-        const { name, mobile, about, place, urgent } = CUSTOMERS[step.customer];
+        const { name, mobile, about, place } = CUSTOMERS[step.customer];
         const customer = await createCustomer(db, firm, { name, mobile: ukMobile(mobile) });
-        const job = await createJob(db, firm, { customer, about, place, urgent });
+        const job = await createJob(db, firm, { customer, about, place, urgent: false });
         people.set(step.customer, { customer, job });
         break;
       }
+      case 'call': {
+        const { name, mobile, about, place } = CUSTOMERS[step.customer];
+        const number = ukMobile(mobile);
+        const made = await recordCall(db, firm, {
+          ...exampleCall(at),
+          from: number,
+          for: { kind: 'new_customer', name, mobile: number, landline: null, noText: null, about, place },
+          urgentItem: step.urgent,
+          summary: step.summary,
+        });
+        if (made.customer === null || made.job === null) {
+          throw new RangeError('A new customer’s call opens their job');
+        }
+        people.set(step.customer, { customer: made.customer, job: made.job, call: made.call });
+        break;
+      }
+      case 'message':
+        await recordCall(db, firm, {
+          ...exampleCall(at),
+          from: ukMobile(step.mobile),
+          for: { kind: 'not_customer', caller: step.caller },
+          urgentItem: null,
+          summary: step.summary,
+        });
+        break;
       case 'visit': {
         const { customer, kind, startsAt } = VISITS[step.visit];
         const visit = await createVisit(db, firm, {
@@ -76,12 +115,11 @@ export async function loadExample(
         visits.set(step.visit, visit);
         break;
       }
-      case 'call_answered':
+      case 'call_booked':
+        await markCallBooked(db, firm, found(personOf(VISITS[step.visit].customer).call), visitOf(step.visit));
+        break;
       case 'passed_to_owner':
         await addHistory(db, firm, { kind: step.add, by: frontline, job: personOf(step.job).job });
-        break;
-      case 'details_taken':
-        await addHistory(db, firm, { kind: step.add, by: frontline, customer: personOf(step.customer).customer });
         break;
       case 'visit_booked':
       case 'confirmation_sent':
@@ -91,6 +129,14 @@ export async function loadExample(
     }
   }
   return firm;
+}
+
+/**
+ * The parts of a call the example does not give. Each load gets its own made
+ * up id for the call, since a call is held only once.
+ */
+function exampleCall(at: Instant) {
+  return { provider: 'vapi', providerCallId: newId(), startedAt: at, endedAt: null, transcript: null } as const;
 }
 
 /** The demo firm, loaded first if no example firm is there yet. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { instantFromIso } from '../src/clock';
-import { inLondon, londonDay } from '../src/london';
+import { clock24, inLondon, londonDay, londonDayAround, shortDate, startOfLondonDay } from '../src/london';
 
 describe('inLondon', () => {
   it('reads a summer instant one hour ahead of UTC', () => {
@@ -50,5 +50,34 @@ describe('londonDay', () => {
     expect(
       londonDay(instantFromIso('2026-10-26T09:00:00Z')) - londonDay(instantFromIso('2026-10-23T09:00:00+01:00')),
     ).toBe(3);
+  });
+});
+
+describe('the UK day', () => {
+  it('starts at UK midnight, an hour before midnight UTC in summer', () => {
+    expect(startOfLondonDay(2026, 10, 15)).toBe(instantFromIso('2026-10-14T23:00:00Z'));
+    expect(startOfLondonDay(2026, 12, 1)).toBe(instantFromIso('2026-12-01T00:00:00Z'));
+  });
+
+  it('runs from midnight to midnight, 25 hours on the day the clocks go back', () => {
+    expect(londonDayAround(instantFromIso('2026-10-15T16:00:00+01:00'))).toEqual({
+      from: instantFromIso('2026-10-15T00:00:00+01:00'),
+      to: instantFromIso('2026-10-16T00:00:00+01:00'),
+    });
+    const { from, to } = londonDayAround(instantFromIso('2026-10-25T12:00:00Z'));
+    expect(to - from).toBe(25 * 3_600_000);
+  });
+
+  it('runs on into the next month', () => {
+    expect(londonDayAround(instantFromIso('2026-10-31T12:00:00Z')).to).toBe(instantFromIso('2026-11-01T00:00:00Z'));
+  });
+});
+
+describe('clock24 and shortDate', () => {
+  it('write a time and a day as the example does, in UK time', () => {
+    const at = instantFromIso('2026-10-16T09:00:00Z');
+    expect(clock24(at)).toBe('10:00');
+    expect(shortDate(at)).toBe('Fri 16 Oct');
+    expect(clock24(instantFromIso('2026-10-15T07:05:00Z'))).toBe('08:05');
   });
 });

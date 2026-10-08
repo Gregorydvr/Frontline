@@ -1,0 +1,100 @@
+{
+  "message": {
+    "timestamp": 1792072205060,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-10-15T13:47:20.015Z",
+    "endedAt": "2026-10-15T13:50:02.660Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1792072040015,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1792072040815,
+          "endTime": 1792072047295,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        },
+        {
+          "role": "user",
+          "message": "Hello. I'd like someone to service my boiler before the winter.",
+          "time": 1792072047895,
+          "endTime": 1792072052595,
+          "secondsFromStart": 7.88,
+          "duration": 4700
+        },
+        {
+          "role": "bot",
+          "message": "I can help with that. Can I take your name and address?",
+          "time": 1792072053195,
+          "endTime": 1792072057454,
+          "secondsFromStart": 13.18,
+          "duration": 4260
+        },
+        {
+          "role": "user",
+          "message": "Mrs Hall, 12 Kiln Lane.",
+          "time": 1792072058055,
+          "endTime": 1792072060535,
+          "secondsFromStart": 18.04,
+          "duration": 2480
+        },
+        {
+          "role": "bot",
+          "message": "Thank you, Mrs Hall. I'll pass this to Tom and he'll be in touch.",
+          "time": 1792072061135,
+          "endTime": 1792072065945,
+          "secondsFromStart": 21.12,
+          "duration": 4810
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: Hello. I'd like someone to service my boiler before the winter.\nAI: I can help with that. Can I take your name and address?\nUser: Mrs Hall, 12 Kiln Lane.\nAI: Thank you, Mrs Hall. I'll pass this to Tom and he'll be in touch.",
+      "recordingUrl": "https://example.invalid/recordings/3b8e5c74-0a69-4d3f-9c51-2e9f4a7d0c83-mono.wav"
+    },
+    "analysis": {
+      "summary": "Mrs Hall asked for a boiler service before the winter.",
+      "structuredData": {
+        "callerType": "customer",
+        "name": "Mrs Hall",
+        "about": "Boiler service",
+        "address": "12 Kiln Lane",
+        "summary": "Boiler due a service before the winter.",
+        "urgentMatch": null
+      },
+      "successEvaluation": "true"
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+441632960001"
+    },
+    "call": {
+      "id": "3b8e5c74-0a69-4d3f-9c51-2e9f4a7d0c83",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "endedReason": "customer-ended-call",
+      "createdAt": "2026-10-15T13:47:20.015Z",
+      "updatedAt": "2026-10-15T13:50:02.660Z",
+      "startedAt": "2026-10-15T13:47:20.015Z",
+      "endedAt": "2026-10-15T13:50:02.660Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+441632960001"
+      }
+    }
+  }
+}

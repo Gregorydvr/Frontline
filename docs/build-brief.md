@@ -79,7 +79,7 @@ In the plan for this slice, name the router, the way queries are written and the
 
 **Done when:** the seed loads in `npm run dev`. Step 9 of the acceptance story passes for every record function. Taking the firm out of any one query makes a cross-firm test fail (show that you tried it on one, then put it back).
 
-### [ ] C. A call lands in the record
+### [x] C. A call lands in the record
 
 - A route that Vapi calls. It checks a shared secret and refuses anything else.
 - When a call ends, Vapi sends a report. From it: find the firm by the number that was rung. Find the customer by the caller's number within that firm, or create one. Open a job. Store the call with its outcome (booked, urgent, or message taken) and write the history.

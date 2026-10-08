@@ -1,0 +1,97 @@
+{
+  "message": {
+    "timestamp": 1792049254304,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-10-15T07:26:05.120Z",
+    "endedAt": "2026-10-15T07:27:31.904Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1792049165120,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1792049165920,
+          "endTime": 1792049172400,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        },
+        {
+          "role": "user",
+          "message": "Hi, it's the merchant. Can you tell Tom his order is ready to collect?",
+          "time": 1792049173000,
+          "endTime": 1792049178420,
+          "secondsFromStart": 7.88,
+          "duration": 5420
+        },
+        {
+          "role": "bot",
+          "message": "Of course. I'll pass that on to Tom now. Is there anything else?",
+          "time": 1792049179020,
+          "endTime": 1792049183780,
+          "secondsFromStart": 13.9,
+          "duration": 4760
+        },
+        {
+          "role": "user",
+          "message": "No, that's it, thanks.",
+          "time": 1792049184380,
+          "endTime": 1792049186800,
+          "secondsFromStart": 19.26,
+          "duration": 2420
+        },
+        {
+          "role": "bot",
+          "message": "Thanks for calling. Goodbye.",
+          "time": 1792049187400,
+          "endTime": 1792049190160,
+          "secondsFromStart": 22.28,
+          "duration": 2760
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: Hi, it's the merchant. Can you tell Tom his order is ready to collect?\nAI: Of course. I'll pass that on to Tom now. Is there anything else?\nUser: No, that's it, thanks.\nAI: Thanks for calling. Goodbye.",
+      "recordingUrl": "https://example.invalid/recordings/1f6c3a52-8e47-4b1d-9a3f-0c7e2d5b8a61-mono.wav"
+    },
+    "analysis": {
+      "summary": "A supplier called to say an order is ready to collect.",
+      "structuredData": {
+        "callerType": "other",
+        "whoRang": "a supplier",
+        "summary": "Your order is ready to collect."
+      },
+      "successEvaluation": "true"
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+447700900300"
+    },
+    "call": {
+      "id": "1f6c3a52-8e47-4b1d-9a3f-0c7e2d5b8a61",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "endedReason": "customer-ended-call",
+      "createdAt": "2026-10-15T07:26:05.120Z",
+      "updatedAt": "2026-10-15T07:27:31.904Z",
+      "startedAt": "2026-10-15T07:26:05.120Z",
+      "endedAt": "2026-10-15T07:27:31.904Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+447700900300"
+      }
+    }
+  }
+}

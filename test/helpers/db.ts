@@ -76,3 +76,31 @@ export async function historyKinds(db: D1Database, firm: string): Promise<Record
     .all<{ kind: string; n: number }>();
   return Object.fromEntries(results.map((row) => [row.kind, row.n]));
 }
+
+/** Writes a call straight into the database, past the record layer, to show the database's own wall. */
+export async function insertCallPastTheRecord(
+  db: D1Database,
+  call: { id: string; firm: string; customer: string | null; job: string | null; providerCallId: string },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO calls (id, firm_id, provider, provider_call_id, started_at, customer_id, job_id, outcome, created_at)
+       VALUES (?, ?, 'vapi', ?, 0, ?, ?, 'message', 0)`,
+    )
+    .bind(call.id, call.firm, call.providerCallId, call.customer, call.job)
+    .run();
+}
+
+/** Writes a history entry naming a call straight into the database, past the record layer. */
+export async function insertCallEntryPastTheRecord(
+  db: D1Database,
+  entry: { id: string; firm: string; call: string; customer: string | null; job: string | null },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO history (id, firm_id, at, seq, actor, kind, customer_id, job_id, call_id)
+       VALUES (?, ?, 0, (SELECT IFNULL(MAX(seq), 0) + 1 FROM history), 'frontline', 'call_answered', ?, ?, ?)`,
+    )
+    .bind(entry.id, entry.firm, entry.customer, entry.job, entry.call)
+    .run();
+}

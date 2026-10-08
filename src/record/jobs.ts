@@ -6,22 +6,28 @@ import { newId } from '../ids';
 import { bit, run, words, type RecordDb } from './db';
 import type { CustomerId, FirmId, Job, JobId } from './types';
 
+export interface NewJob {
+  customer: CustomerId;
+  about: string;
+  place: string;
+  urgent: boolean;
+}
+
 /** Opens a job for one of this firm's customers. Another firm's customer is refused. */
-export async function createJob(
-  db: RecordDb,
-  firm: FirmId,
-  input: { customer: CustomerId; about: string; place: string; urgent: boolean },
-): Promise<JobId> {
+export async function createJob(db: RecordDb, firm: FirmId, input: NewJob): Promise<JobId> {
   const id = newId() as JobId;
-  await run(
-    db.d1
-      .prepare(
-        `INSERT INTO jobs (id, firm_id, customer_id, about, place, urgent, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(id, firm, input.customer, words(input.about), words(input.place), bit(input.urgent), db.clock.now()),
-  );
+  await run(insertJob(db, firm, id, input));
   return id;
+}
+
+/** The statement that opens a job, checked first. recordCall() runs it in the same step as the call. */
+export function insertJob(db: RecordDb, firm: FirmId, id: JobId, input: NewJob): D1PreparedStatement {
+  return db.d1
+    .prepare(
+      `INSERT INTO jobs (id, firm_id, customer_id, about, place, urgent, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, firm, input.customer, words(input.about), words(input.place), bit(input.urgent), db.clock.now());
 }
 
 export async function getJob(db: RecordDb, firm: FirmId, job: JobId): Promise<Job | null> {

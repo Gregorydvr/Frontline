@@ -4,6 +4,7 @@ import { clockWords, HISTORY_WORDS, historyLine, whenWords } from '../src/histor
 import { idFromBytes } from '../src/ids';
 import {
   HISTORY_KINDS,
+  type CallId,
   type CustomerId,
   type HistoryEntry,
   type HistoryId,
@@ -24,7 +25,18 @@ function entry(kind: HistoryKind, visit?: { kind: VisitKind; startsAt: Instant }
     customer: { id: idFromBytes(new Uint8Array(16).fill(2)) as CustomerId, name: 'Mrs Green' },
     job: idFromBytes(new Uint8Array(16).fill(3)) as JobId,
     visit: visit ? { id: idFromBytes(new Uint8Array(16).fill(4)) as VisitId, ...visit } : null,
+    call: null,
     service: null,
+  };
+}
+
+/** An entry about a call with no customer, such as a supplier's. */
+function callEntry(kind: HistoryKind, call: { caller: string | null; summary: string | null }): HistoryEntry {
+  return {
+    ...entry(kind),
+    customer: null,
+    job: null,
+    call: { id: idFromBytes(new Uint8Array(16).fill(5)) as CallId, ...call },
   };
 }
 
@@ -67,8 +79,30 @@ describe('historyLine', () => {
     expect(historyLine(hughes, 'feed')).toBe('Booked Mr Hughes’s quote visit for Monday, 9am.');
   });
 
-  it('shows the owner nothing for details taken, or for switches and the stop button', () => {
-    for (const kind of ['details_taken', 'service_on', 'service_off', 'stop_on', 'stop_off'] as const) {
+  it('writes a message taken as the example’s Done for you does', () => {
+    const supplier = callEntry('message_taken', { caller: 'a supplier', summary: 'Your order is ready to collect.' });
+    expect(historyLine(supplier, 'feed')).toBe('Call from a supplier. Your order is ready to collect.');
+    expect(historyLine(supplier, 'job')).toBe('Call from a supplier. Your order is ready to collect.');
+    expect(historyLine(callEntry('message_taken', { caller: 'a supplier', summary: null }), 'feed')).toBe(
+      'Call from a supplier.',
+    );
+    expect(() => historyLine(callEntry('message_taken', { caller: null, summary: 'Hello.' }), 'feed')).toThrow(
+      RangeError,
+    );
+    expect(() => historyLine({ ...supplier, call: null }, 'feed')).toThrow(RangeError);
+  });
+
+  it('shows the owner nothing for details taken or missing, or for the firm’s set-up', () => {
+    for (const kind of [
+      'details_taken',
+      'details_missing',
+      'service_on',
+      'service_off',
+      'stop_on',
+      'stop_off',
+      'number_set',
+      'urgent_list_set',
+    ] as const) {
       expect(historyLine(entry(kind), 'job')).toBeNull();
       expect(historyLine(entry(kind), 'feed')).toBeNull();
     }
@@ -84,7 +118,7 @@ describe('historyLine', () => {
       expect(words.job).not.toMatch(/\b(her|his|him|she|he)\b/i);
       for (const form of Object.values(words)) {
         for (const [, gap] of form.matchAll(/\{([^{}]+)\}/g)) {
-          expect(['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when']).toContain(gap);
+          expect(['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when', 'caller', 'message']).toContain(gap);
         }
       }
     }

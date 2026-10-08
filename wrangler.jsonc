@@ -27,10 +27,13 @@
   // environment stops them all (see README.md).
   "send_metrics": false,
 
-  // The names of the secrets the Worker needs. None yet: slice C adds the
-  // first. Listing them here, in each copy, keeps the generated types the same
-  // whether or not a local .dev.vars exists.
-  "secrets": { "required": [] },
+  // The names of the secrets the Worker needs. Listing them here, in each
+  // copy, keeps the generated types the same whether or not a local .dev.vars
+  // exists.
+  // - VAPI_SECRET: the token Vapi sends with each report as a call ends
+  //   (docs/vapi.md). On this machine it goes in .dev.vars; the tests make up
+  //   their own. Greg sets a different one for practice and for live.
+  "secrets": { "required": ["VAPI_SECRET"] },
 
   // This machine only.
   "d1_databases": [
@@ -48,7 +51,7 @@
 
   "env": {
     "practice": {
-      "secrets": { "required": [] },
+      "secrets": { "required": ["VAPI_SECRET"] },
       "d1_databases": [
         {
           "binding": "DB",
@@ -79,7 +82,7 @@
       }
     },
     "live": {
-      "secrets": { "required": [] },
+      "secrets": { "required": ["VAPI_SECRET"] },
       "d1_databases": [
         {
           "binding": "DB",

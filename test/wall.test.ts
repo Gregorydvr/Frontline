@@ -9,16 +9,37 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
 import { instantFromIso, pretendClock } from '../src/clock';
 import { loadExample } from '../src/example/load';
-import { ukMobile } from '../src/phone';
+import { ukLandline, ukMobile } from '../src/phone';
 import * as record from '../src/record';
 import { openRecord, Refused, type RecordDb } from '../src/record/db';
-import type { Customer, FirmId, HistoryId, Job, OwnerId, VisitId } from '../src/record/types';
+import type { Call, Customer, FirmId, HistoryId, Job, NewCall, OwnerId, VisitId } from '../src/record/types';
 import { firmRows } from './helpers/db';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
 const frontline = { kind: 'frontline' } as const;
+const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
+let calls = 0;
+
+/** A call from Mrs Ahmed's mobile, as a report would bring it. */
+function newCall(forWhom: NewCall['for']): NewCall {
+  calls += 1;
+  return {
+    provider: 'vapi',
+    providerCallId: `wall-${String(calls)}`,
+    startedAt: clock.now(),
+    endedAt: null,
+    from: mrsAhmedsMobile,
+    for: forWhom,
+    urgentItem: null,
+    summary: 'The boiler keeps cutting out.',
+    transcript: null,
+  };
+}
 const mrsAhmedsMobile = ukMobile('07700 900003');
+const tidewellsNumber = ukMobile('07700 900100');
+const secondFirmsNumber = ukMobile('07700 900200');
+const mrsHallsLandline = ukLandline('01632 960001');
 
 /** The first firm and everything in it. */
 let a: FirmId;
@@ -27,6 +48,7 @@ let ofA: {
   customers: Customer[];
   jobs: Job[];
   visits: VisitId[];
+  calls: Call[];
   entries: HistoryId[];
   /** Every id of the first firm's, to look for in what the second firm is given. */
   ids: string[];
@@ -37,7 +59,11 @@ let jobOfB: Job;
 
 beforeAll(async () => {
   a = await loadExample(env.DB);
-  b = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false });
+  b = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false, number: '07700 900200' });
+  // Each firm also has a customer on the same landline.
+  for (const firm of [a, b]) {
+    await record.createCustomer(db, firm, { name: 'Mrs Hall', mobile: null, landline: mrsHallsLandline, noText: 'landline' });
+  }
 
   const owners = (await record.listOwners(db, a)).map((owner) => owner.id);
   const customers = await record.listCustomers(db, a);
@@ -46,6 +72,7 @@ beforeAll(async () => {
   for (const job of jobs) {
     visits.push(...(await record.listVisitsForJob(db, a, job.id)).map((visit) => visit.id));
   }
+  const calls = await record.listCallsBetween(db, a, ...allTime);
   const far = instantFromIso('2100-01-01T00:00:00Z');
   const entries = (await record.historyBetween(db, a, instantFromIso('2000-01-01T00:00:00Z'), far)).map(
     (entry) => entry.id,
@@ -55,8 +82,17 @@ beforeAll(async () => {
     customers,
     jobs,
     visits,
+    calls,
     entries,
-    ids: [a, ...owners, ...customers.map((c) => c.id), ...jobs.map((j) => j.id), ...visits, ...entries],
+    ids: [
+      a,
+      ...owners,
+      ...customers.map((c) => c.id),
+      ...jobs.map((j) => j.id),
+      ...visits,
+      ...calls.flatMap((call) => [call.id, call.providerCallId]),
+      ...entries,
+    ],
   };
   const [first] = await record.listJobs(db, b);
   if (first === undefined) throw new Error('The second firm has no jobs');
@@ -75,7 +111,6 @@ async function refused(attempt: Promise<unknown>): Promise<void> {
   await expect(attempt).rejects.toThrow(Refused);
 }
 
-const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
 
 // One case for every record function. The type makes this list fail to build
 // when a record function is added without its case.
@@ -91,6 +126,12 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(found).toContain(a);
     expect(found).not.toContain(b);
   },
+  async findFirmByNumber() {
+    // Each number finds its own firm, and only that one.
+    expect(await record.findFirmByNumber(db, secondFirmsNumber)).toBe(b);
+    expect(await record.findFirmByNumber(db, tidewellsNumber)).toBe(a);
+    expect(await record.findFirmByNumber(db, mrsAhmedsMobile)).toBeNull();
+  },
 
   async getFirm() {
     const firm = await record.getFirm(db, b);
@@ -103,6 +144,20 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     await record.setService(db, b, 'calls', true, frontline);
     for (const owner of ofA.owners) {
       await refused(record.setService(db, b, 'calls', false, { kind: 'owner', owner }));
+    }
+  },
+  async setFirmNumber() {
+    await refused(record.setFirmNumber(db, b, tidewellsNumber, frontline));
+    expect((await record.getFirm(db, b))?.phoneNumber).toBe(secondFirmsNumber);
+    for (const owner of ofA.owners) {
+      await refused(record.setFirmNumber(db, b, secondFirmsNumber, { kind: 'owner', owner }));
+    }
+  },
+  async setUrgentList() {
+    await record.setUrgentList(db, b, ['a leak', 'no heating'], frontline);
+    expect((await record.getFirm(db, b))?.urgentList).toEqual(['a leak', 'no heating']);
+    for (const owner of ofA.owners) {
+      await refused(record.setUrgentList(db, b, ['a leak'], { kind: 'owner', owner }));
     }
   },
   async setStopButton() {
@@ -151,6 +206,13 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     nothingOfA(found);
   },
 
+  async findCustomersByLandline() {
+    expect((await record.findCustomersByLandline(db, a, mrsHallsLandline)).length).toBeGreaterThan(0);
+    const found = await record.findCustomersByLandline(db, b, mrsHallsLandline);
+    expect(found.length).toBeGreaterThan(0);
+    nothingOfA(found);
+  },
+
   async createJob() {
     for (const customer of ofA.customers) {
       await refused(
@@ -187,6 +249,71 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
   async listVisitsForJob() {
     for (const job of ofA.jobs) {
       expect(await record.listVisitsForJob(db, b, job.id)).toEqual([]);
+    }
+  },
+
+  async listVisitsFrom() {
+    const visits = await record.listVisitsFrom(db, b, allTime[0]);
+    expect(visits.length).toBeGreaterThan(0);
+    nothingOfA(visits);
+  },
+
+  async recordCall() {
+    // A call to the second firm from Mrs Ahmed's mobile makes its own customer.
+    const made = await record.recordCall(
+      db,
+      b,
+      newCall({
+        kind: 'new_customer',
+        name: 'Mrs Ahmed',
+        mobile: mrsAhmedsMobile,
+        landline: null,
+        noText: null,
+        about: 'Boiler replacement',
+        place: '27 Station Road',
+      }),
+    );
+    nothingOfA(await record.getCall(db, b, made.call));
+    // It cannot open a job for the first firm's customer.
+    for (const customer of ofA.customers) {
+      await refused(
+        record.recordCall(
+          db,
+          b,
+          newCall({ kind: 'customer', customer: customer.id, about: 'Boiler replacement', place: '27 Station Road' }),
+        ),
+      );
+    }
+    // Nor take a call the first firm holds.
+    for (const call of ofA.calls) {
+      await refused(record.recordCall(db, b, { ...newCall({ kind: 'details_missing' }), providerCallId: call.providerCallId }));
+    }
+  },
+  async findCallByProviderId() {
+    for (const call of ofA.calls) {
+      expect(await record.findCallByProviderId(db, b, 'vapi', call.providerCallId)).toBeNull();
+    }
+  },
+  async getCall() {
+    for (const call of ofA.calls) {
+      expect(await record.getCall(db, b, call.id)).toBeNull();
+    }
+  },
+  async listCallsBetween() {
+    const calls = await record.listCallsBetween(db, b, ...allTime);
+    expect(calls.length).toBeGreaterThan(0);
+    nothingOfA(calls);
+  },
+  async markCallBooked() {
+    const [callOfB] = await record.listCallsBetween(db, b, ...allTime);
+    if (callOfB === undefined) throw new Error('The second firm has no calls');
+    for (const call of ofA.calls) {
+      for (const visit of ofA.visits) {
+        await refused(record.markCallBooked(db, b, call.id, visit));
+      }
+    }
+    for (const visit of ofA.visits) {
+      await refused(record.markCallBooked(db, b, callOfB.id, visit));
     }
   },
 
@@ -229,13 +356,13 @@ describe('the wall between firms', () => {
     expect(Object.keys(cases).sort()).toEqual(Object.keys(record).sort());
   });
 
-  it('has every record function take the firm, apart from the two that work on firms themselves', () => {
+  it('has every record function take the firm, apart from the three that find or make a firm', () => {
     type NotTakingTheFirm = {
       [Name in keyof typeof record]: Parameters<(typeof record)[Name]> extends [RecordDb, FirmId, ...unknown[]]
         ? never
         : Name;
     }[keyof typeof record];
-    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<'createFirm' | 'exampleFirms'>();
+    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<'createFirm' | 'exampleFirms' | 'findFirmByNumber'>();
   });
 
   it.each(Object.keys(cases) as (keyof typeof record)[])(

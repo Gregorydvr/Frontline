@@ -1,0 +1,96 @@
+{
+  "message": {
+    "timestamp": 1792074163518,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-10-15T14:20:00.300Z",
+    "endedAt": "2026-10-15T14:22:41.118Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1792074000300,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1792074001100,
+          "endTime": 1792074007580,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        },
+        {
+          "role": "user",
+          "message": "One of my radiators stays cold even with the heating on.",
+          "time": 1792074008180,
+          "endTime": 1792074012490,
+          "secondsFromStart": 7.88,
+          "duration": 4310
+        },
+        {
+          "role": "bot",
+          "message": "I can pass that on. Can I take your name and address?",
+          "time": 1792074013090,
+          "endTime": 1792074017230,
+          "secondsFromStart": 12.79,
+          "duration": 4140
+        },
+        {
+          "role": "user",
+          "message": "Ms Rowe, 3 Ferry Road.",
+          "time": 1792074017830,
+          "endTime": 1792074020250,
+          "secondsFromStart": 17.53,
+          "duration": 2420
+        },
+        {
+          "role": "bot",
+          "message": "Thank you, Ms Rowe. Tom will be in touch.",
+          "time": 1792074020850,
+          "endTime": 1792074024330,
+          "secondsFromStart": 20.55,
+          "duration": 3480
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: One of my radiators stays cold even with the heating on.\nAI: I can pass that on. Can I take your name and address?\nUser: Ms Rowe, 3 Ferry Road.\nAI: Thank you, Ms Rowe. Tom will be in touch.",
+      "recordingUrl": "https://example.invalid/recordings/4c9f6d85-1b7a-4e40-8d62-3f0a5b8e1d94-mono.wav"
+    },
+    "analysis": {
+      "summary": "Ms Rowe reported a radiator that stays cold.",
+      "structuredData": {
+        "callerType": "customer",
+        "name": "Ms Rowe",
+        "about": "Radiator not heating",
+        "address": "3 Ferry Road",
+        "summary": "One radiator stays cold.",
+        "urgentMatch": null
+      },
+      "successEvaluation": "true"
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {},
+    "call": {
+      "id": "4c9f6d85-1b7a-4e40-8d62-3f0a5b8e1d94",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "endedReason": "customer-ended-call",
+      "createdAt": "2026-10-15T14:20:00.300Z",
+      "updatedAt": "2026-10-15T14:22:41.118Z",
+      "startedAt": "2026-10-15T14:20:00.300Z",
+      "endedAt": "2026-10-15T14:22:41.118Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {}
+    }
+  }
+}
