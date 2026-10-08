@@ -12,6 +12,12 @@ When something is decided, move it or add it here in the same pull request, with
 
 | When | Decision |
 |---|---|
+| 8 Oct 2026 | Each history entry is its own line to the owner. Where the example joins a call and its booking in one line ("Answered her call. No hot water since last night. Quote visit booked for Monday, 9am."), the owner sees two, each in the example's words. "Details taken" is not shown to the owner. Greg, answering the slice B pull request |
+| 8 Oct 2026 | New words in the owner's lines: "Sent a reminder about the visit." on a job page, "Reminded Mrs Patel about the visit." in Done for you, "Service booked for…" in place of "Booked the service for…", and "midday" for 12 o'clock. A visit's day is written by name within six days ("Monday, 9am") and as a date beyond ("Wednesday 21 October, 2pm"). Greg, answering the slice B pull request |
+| 8 Oct 2026 | The second firm in the wall tests is "Second Example Firm", holding the same sixteen invented customers as Tidewell Heating. Greg, answering the slice B pull request |
+| 8 Oct 2026 | The demo firm fills in six times the example does not give: Mr Hughes's quote visit Wednesday 7 October 10am, Mr Evans's Monday 12 October 2pm, Mr Khan's Thursday 17 September 2pm, Mr Khan's install Wednesday 30 September 8:30am, Mrs Ahmed's install Thursday 15 October 8:30am, and Mr Davies's service Thursday 15 October 10:30am. Greg, answering the slice B pull request |
+| 8 Oct 2026 | A new firm starts with all five services off and the stop button off. Nothing runs for a firm until staff switch it on. Greg, answering the slice B pull request |
+| 8 Oct 2026 | A firm's own versions of the owner's lines, stored in the database, come in slice D with the firm's agreed wording for texts. Until then the lines are data in one file, `src/history-lines.ts`. Greg, answering the slice B pull request |
 | 8 Oct 2026 | A history entry holds ids, a kind, a time and who did it, never words. The line an owner reads is made from it each time it is shown. The database refuses any edit to an entry. Deleting a person's history when the law requires it comes with slice G. Greg, approving the slice B plan |
 | 8 Oct 2026 | A job's state is worked out from its records each time it is shown, not stored: "Passed to you" if it is urgent, then "On today" with a booked visit on today's UK date, then "Booked" with one still to come, otherwise no state yet. States that come from quotes and invoices will be worked out the same way from their records. Greg, approving the slice B plan |
 | 8 Oct 2026 | The wall holds in two places. Every record function takes the firm and finds or changes only that firm's rows. And every link between tables carries the firm as well as the id, so the database itself refuses a link across firms. Only `createFirm()` and `exampleFirms()` take no firm. `test/wall.test.ts` has a case for each record function and fails when one is missing. Greg, approving the slice B plan |
@@ -67,12 +73,6 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 | Practice and the control room sit behind Cloudflare Access. Proposed in the build brief, 6 Oct 2026. Not in the plan | Slices C and G |
 | Every due row has a latest time, after which it is skipped and not sent late. Proposed in the build brief, 6 Oct 2026 | Slice D |
 | History lines on a job page leave out "her" and "his". Proposed in the build brief, 6 Oct 2026 | Slices B and F |
-| Each history entry is its own line. The example joins a call and its booking in one line ("Answered her call. No hot water since last night. Quote visit booked for Monday, 9am."); here they are two lines in the example's words. "Details taken" is not shown to the owner. Slice B, question 1 for Greg | Slices B and F |
-| New words in the owner's lines: "Sent a reminder about the visit." on a job page, "Reminded Mrs Patel about the visit." in Done for you, "Service booked for…" in place of "Booked the service for…", "midday" for 12 o'clock, and a visit's day written by name within six days ("Monday, 9am") and as a date beyond ("Wednesday 21 October, 2pm"). Slice B, question 2 | Slices B and F |
-| The second firm in the wall tests is "Second Example Firm", holding the same sixteen invented customers as Tidewell Heating. Slice B, question 3 | Slice B tests |
-| Six times the example does not give: Mr Hughes's quote visit Wednesday 7 October 10am, Mr Evans's Monday 12 October 2pm, Mr Khan's Thursday 17 September 2pm, Mr Khan's install Wednesday 30 September 8:30am, Mrs Ahmed's install Thursday 15 October 8:30am, Mr Davies's service Thursday 15 October 10:30am. Slice B, question 4 | The demo firm |
-| A new firm starts with all five services off and the stop button off. Slice B, question 5 | Slices B and G |
-| A firm's own versions of the owner's lines, stored in the database, come in slice D with the firm's agreed wording for texts. Until then the lines are data in one file, `src/history-lines.ts`. Slice B, question 6 | Slice D |
 
 ## Open
 
