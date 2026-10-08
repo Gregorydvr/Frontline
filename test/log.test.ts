@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { idFromBytes } from '../src/ids';
 import { errorName, log } from '../src/log';
+import { Refused } from '../src/record/db';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -37,6 +38,10 @@ describe('errorName', () => {
   it('gives the type of a standard error, never its message', () => {
     expect(errorName(new TypeError('Mrs Ahmed, 27 Station Road'))).toBe('TypeError');
     expect(errorName(new RangeError('07700 900123'))).toBe('RangeError');
+  });
+
+  it("gives the record layer's refusal by its own name", () => {
+    expect(errorName(new Refused())).toBe('Refused');
   });
 
   it('gives "Error" for anything else', () => {

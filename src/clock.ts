@@ -2,8 +2,9 @@
 // in CLAUDE.md). Everything else is given a Clock, so tests can use a pretend
 // one.
 //
-// Instants are stored in UTC (rule 18). Working out a time a person will read,
-// in Europe/London, comes with the due list in slice D.
+// Instants are stored in UTC (rule 18). src/london.ts reads one as the time a
+// person in the UK reads it. Turning a UK time into an instant comes with the
+// due list in slice D.
 
 declare const instantBrand: unique symbol;
 

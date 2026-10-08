@@ -1,0 +1,63 @@
+// What every record function is given: the database and the clock. Only the
+// files in src/record/ talk to the database (rule 8 in CLAUDE.md), and lint
+// enforces it.
+
+import type { Clock } from '../clock';
+
+export interface RecordDb {
+  readonly d1: D1Database;
+  readonly clock: Clock;
+}
+
+export function openRecord(d1: D1Database, clock: Clock): RecordDb {
+  return { d1, clock };
+}
+
+/**
+ * The record will not do what was asked: usually because something named
+ * belongs to another firm or does not exist. It carries no details, so it is
+ * safe to log.
+ */
+export class Refused extends Error {
+  override name = 'Refused';
+  constructor() {
+    super('Refused by the record');
+  }
+}
+
+/** Runs one statement. A broken rule in the database, such as a link to another firm's row, becomes a refusal. */
+export async function run(statement: D1PreparedStatement): Promise<D1Result> {
+  try {
+    return await statement.run();
+  } catch (thrown) {
+    throw refusalOr(thrown);
+  }
+}
+
+/** Runs statements as one step: all of them or none. */
+export async function runTogether(d1: D1Database, statements: D1PreparedStatement[]): Promise<D1Result[]> {
+  try {
+    return await d1.batch(statements);
+  } catch (thrown) {
+    throw refusalOr(thrown);
+  }
+}
+
+function refusalOr(thrown: unknown): unknown {
+  return thrown instanceof Error && /constraint failed|SQLITE_CONSTRAINT/.test(thrown.message)
+    ? new Refused()
+    : thrown;
+}
+
+/** SQLite holds true and false as 1 and 0. */
+export function bit(value: boolean): 0 | 1 {
+  return value ? 1 : 0;
+}
+
+/** Refuses a name or description that is empty. */
+export function words(value: string): string {
+  if (value.trim() === '') {
+    throw new Refused();
+  }
+  return value;
+}

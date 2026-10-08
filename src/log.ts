@@ -17,6 +17,8 @@ const ERROR_NAMES = [
   'SyntaxError',
   'TypeError',
   'URIError',
+  // The record layer's refusal (src/record/db.ts).
+  'Refused',
 ] as const;
 
 /** The type of an error, taken from a fixed list. Never its message. */

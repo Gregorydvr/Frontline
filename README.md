@@ -21,6 +21,10 @@ npm run dev
 
 This brings the local database up to date with `migrations/`, then starts the system at http://localhost:8787. Open http://localhost:8787/health to see the version. Everything runs on this machine, and no account at Cloudflare or any provider is touched.
 
+The first time the system is used, it loads the demo firm: Tidewell Heating, owner Tom, and the example app's sixteen customers and jobs, as records. Open http://localhost:8787/local/example to see it in plain text: each job with its state and its history as the owner would read it, and Done for you on the example's "today", Thursday 15 October 2026. This page and the loading exist only in the version `npm run dev` runs (`src/local.ts`). The deployed copies are built from `src/index.ts` and have neither.
+
+To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again.
+
 Wrangler does contact Cloudflare in two small ways unless told not to:
 
 - It sends usage data. `wrangler.jsonc` turns most of it off; `WRANGLER_SEND_METRICS=false` in your environment turns off the rest.
@@ -38,6 +42,8 @@ npm test        # the tests only
 The tests run inside the Workers runtime against a local database. GitHub runs `npm run check` on every pull request and after every merge to `main`.
 
 ## Changing the database
+
+Only `src/record/` talks to the database, and every function there takes the firm. `npm run check` fails if database code or SQL turns up anywhere else, apart from `migrations/` and `test/helpers/db.ts`. A new record function needs its own case in `test/wall.test.ts`, which tries it as another firm; the tests fail until it has one.
 
 Each change is a plain SQL file in `migrations/`, numbered in order. `npx wrangler d1 migrations create DB <name>` makes the next one. The same files are applied in three places:
 
