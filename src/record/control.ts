@@ -374,7 +374,7 @@ export async function customerFile(db: RecordDb, firm: FirmId, customer: Custome
        ORDER BY created_at`,
     )
     .bind(firm, found.name, nationalDigits(found.mobile), nationalDigits(found.landline))
-    .all<Record<string, unknown>>();
+    .all();
   return {
     firm,
     customer,

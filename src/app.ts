@@ -21,6 +21,7 @@ import {
   recordDelivery,
   recordTextIn,
 } from './record';
+import { controlRoutes } from './control-room';
 import { ownerRoutes } from './owner-app';
 import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import { CUSTOMER_LIMITS, TEXT_LIMITS } from './record/types';
@@ -215,6 +216,9 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
 
   // The owner's app: logging in, and the owner's screens (src/owner-app.ts).
   ownerRoutes(app);
+
+  // The control room, for Front-line's own staff (src/control-room.ts).
+  controlRoutes(app);
 
   app.onError((thrown, c) => {
     // A refusal on purpose, such as a 401 from an auth check, keeps its own

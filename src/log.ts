@@ -70,7 +70,16 @@ export type LogEvent =
   | 'logged_in'
   | 'logged_out'
   | 'owner_request_refused'
-  | 'owner_message_stored';
+  | 'owner_message_stored'
+  // The control room (src/control-room.ts).
+  | 'staff_refused'
+  | 'staff_request_refused'
+  | 'staff_changed_firm'
+  | 'customer_exported'
+  | 'customer_deleted'
+  | 'example_loaded'
+  | 'example_clock_moved'
+  | 'example_reset';
 
 const ERROR_NAMES = [
   'Error',

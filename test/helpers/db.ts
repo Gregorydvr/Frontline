@@ -39,6 +39,8 @@ export async function firmRows(db: D1Database, firm: string): Promise<Record<str
   const rows: Record<string, unknown[]> = {};
   for (const table of await recordTables(db)) {
     const column = table === 'firms' ? 'id' : 'firm_id';
+    // Staff belong to no firm.
+    if (!(await tableColumns(db, table)).some((one) => one.name === column)) continue;
     // Table names come from the database itself, not from a caller.
     const { results } = await db
       .prepare(`SELECT * FROM "${table}" WHERE ${column} = ? ORDER BY rowid`)

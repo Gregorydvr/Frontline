@@ -62,7 +62,10 @@ let firms: Promise<{ a: FirmId; b: FirmId }> | null = null;
  */
 function twoFirms(): Promise<{ a: FirmId; b: FirmId }> {
   firms ??= (async () => {
-    const a = await loadExample(env.DB);
+    // The first firm is not marked as an example here, so its texts go
+    // through Twilio's version, as a real firm's do: an example firm's texts
+    // only ever go to the stand-in.
+    const a = await loadExample(env.DB, { name: 'Tidewell Heating', isExample: false, number: '07700 900100' });
     const b = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false, number: '07700 900200' });
     // The second firm's owner has a mobile of their own, so a login link asked
     // for on it can only be the second firm's.

@@ -29,6 +29,7 @@ import { showExample } from './example/show';
 import { playBookingCall } from './example/play-call';
 import { showTexts } from './example/texts';
 import { EXAMPLE_NOW, EXAMPLE_OWNER } from './example/tidewell';
+import { StandInStaff } from './providers/access/fake';
 import { FakeTexts } from './providers/texts/fake';
 import { createLoginLink, findMessageForDue, listOwners } from './record';
 import { openRecord } from './record/db';
@@ -139,6 +140,11 @@ const localDeps = (env: Env): Deps => ({
   queue: env.DUE,
   linkAddress: linkAddressFrom(env.LINK_ADDRESS),
   appAddress: linkAddressFrom(env.PUBLIC_ADDRESS),
+  copy: 'local',
+  // No Access on this machine: the stand-in vouches for the invented
+  // "Example Staff".
+  staff: new StandInStaff(),
+  controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
 });
 const app = createLocalApp(localDeps);
 
