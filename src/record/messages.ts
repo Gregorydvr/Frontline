@@ -246,6 +246,18 @@ export async function listMessagesBetween(db: RecordDb, firm: FirmId, from: Inst
 }
 
 /**
+ * The firm's texts about one job, in the order they were claimed, so its
+ * page can say when one did not reach the customer.
+ */
+export async function listMessagesForJob(db: RecordDb, firm: FirmId, job: JobId): Promise<Message[]> {
+  const { results } = await db.d1
+    .prepare(`${SELECT_MESSAGE} WHERE firm_id = ? AND job_id = ? ORDER BY created_at, rowid`)
+    .bind(firm, job)
+    .all<MessageRow>();
+  return results.map(fromRow);
+}
+
+/**
  * Whether the firm has ever sent this customer a text, or claimed one that
  * may have gone. The first text a customer gets carries their link and the
  * line on opting out.
@@ -270,6 +282,8 @@ function sentEntry(message: Message): NewHistory | null {
       return message.visit === null ? null : { kind: history, by: frontline, visit: message.visit };
     case 'passed_to_owner':
       return message.job === null ? null : { kind: history, by: frontline, job: message.job };
+    case null:
+      return null;
   }
 }
 

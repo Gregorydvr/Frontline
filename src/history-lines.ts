@@ -15,6 +15,7 @@
 
 import type { Instant } from './clock';
 import { inLondon, londonDay, MONTHS, WEEKDAYS } from './london';
+import { nationalNumber } from './phone';
 import type { FirmWording, HistoryEntry, HistoryKind, VisitKind } from './record/types';
 
 export type LineForm = 'job' | 'feed';
@@ -31,6 +32,8 @@ export type LineForm = 'job' | 'feed';
  * - {message}: the one line about their call, such as "Your order is ready to
  *   collect." Left out when there is none.
  * - {words}: what a customer wrote in a text, as they wrote it
+ * - {number}: the number a call came from, such as "07700 900123", or "a
+ *   withheld number"
  * A form that is null is not shown in that place.
  */
 export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineForm, string | null>> | null>> = {
@@ -81,9 +84,13 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
     job: 'Call from {caller}. {message}',
     feed: 'Call from {caller}. {message}',
   },
-  // The example never needed these words. They come with slice F, which
-  // builds the screen for a call with details missing.
-  details_missing: null,
+  // A call whose details did not all come through has no job page. New in
+  // slice F; flagged in its pull request. {number} is the number it came
+  // from, or "a withheld number".
+  details_missing: {
+    job: null,
+    feed: 'Call from {number}. Details missing.',
+  },
   // New in slice D, after the example's "Voice note: “Running 20 minutes
   // late.”". A customer's text is shown on their job, not in Done for you,
   // which lists what was done for the owner.
@@ -111,6 +118,11 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   urgent_list_set: null,
   owner_mobile_set: null,
   diary_rules_set: null,
+  // An owner logging in and out, and writing to Front-line in Message us:
+  // recorded for who did what (rule 15), and not lines the owner reads.
+  logged_in: null,
+  logged_out: null,
+  owner_message_sent: null,
 };
 
 /** The words for each kind of visit. */
@@ -155,6 +167,10 @@ function fill(gap: string, entry: HistoryEntry): string {
       return callOf(entry).summary ?? '';
     case 'words':
       return (entry.textIn ?? missing('This line needs the text')).words;
+    case 'number': {
+      const from = callOf(entry).from;
+      return from === null ? 'a withheld number' : nationalNumber(from);
+    }
     default:
       throw new RangeError('The words have a gap this does not know');
   }

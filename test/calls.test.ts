@@ -151,15 +151,17 @@ describe('an urgent call (step 6)', () => {
     });
   });
 
-  it('alerts the owner at once, before Vapi has its answer, from the firm’s number', async () => {
+  it('alerts the owner at once, before Vapi has its answer, from the firm’s number, with a link to the job', async () => {
     const sentBefore = deps.texts.sent.length;
     expect((await send(app, to('mr-price-leak'))).status).toBe(200);
 
+    const [job] = await listJobs(db, firm);
+    if (job === undefined) throw new Error('No job');
     expect(deps.texts.sent.slice(sentBefore)).toEqual([
       {
         from: number,
         to: TOMS_MOBILE,
-        body: 'Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+        body: `Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016. https://app.example/jobs/${job.id}`,
         providerId: expect.stringMatching(/^fake-/) as unknown,
       },
     ]);
@@ -169,9 +171,20 @@ describe('an urgent call (step 6)', () => {
       state: 'sent',
       toNumber: TOMS_MOBILE,
       fromNumber: number,
-      segments: 1,
+      segments: 2,
       sentAt: clock.now(),
     });
+  });
+
+  it('alerts the owner as before, with no link, while this copy has no address for the app', async () => {
+    const sentBefore = deps.texts.sent.length;
+    const noAddress = createApp(() => ({ ...deps, appAddress: null }));
+    expect((await send(noAddress, to('mr-price-leak'))).status).toBe(200);
+
+    expect(deps.texts.sent.slice(sentBefore).map((text) => text.body)).toEqual([
+      'Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
+    ]);
+    expect(await listMessagesBetween(db, firm, ...allTime)).toMatchObject([{ kind: 'urgent_alert', state: 'sent', segments: 1 }]);
   });
 
   it('writes the call answered and the details taken, then "passed straight to you" once the alert has gone', async () => {
@@ -358,8 +371,7 @@ describe('a call with its details missing', () => {
     ]);
     const entries = (await historyBetween(db, firm, ...allTime)).filter((entry) => entry.kind === 'details_missing');
     expect(entries).toHaveLength(1);
-    // The owner's words for this come with slice F.
-    expect(historyLine(entries[0] as never, 'feed')).toBeNull();
+    expect(historyLine(entries[0] as never, 'feed')).toBe('Call from 07700 900400. Details missing.');
   });
 
   it.each([
@@ -401,8 +413,8 @@ describe('a call with its details missing', () => {
   it('ends the line about the call as a sentence before the number', async () => {
     const sentBefore = deps.texts.sent.length;
     await send(app, withDetails(to('mr-price-leak'), (data) => ({ ...data, summary: 'Water all over the kitchen floor' })));
-    expect(deps.texts.sent[sentBefore]?.body).toBe(
-      'Front-line: urgent call from Mr Price, 6 Bridge Street. Water all over the kitchen floor. Their number: 07700 900016.',
+    expect(deps.texts.sent[sentBefore]?.body).toMatch(
+      /^Front-line: urgent call from Mr Price, 6 Bridge Street\. Water all over the kitchen floor\. Their number: 07700 900016\. https:\/\/app\.example\/jobs\/[0-9a-z]{26}$/,
     );
   });
 

@@ -208,7 +208,7 @@ describe('what stops a text to a customer (rule 3)', () => {
       kind: 'urgent_alert',
       to: { kind: 'owner', owner: tom?.id ?? (null as never) },
       about: { job, visit: null, call: null },
-      facts: { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016' },
+      facts: { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016', link: null },
     });
     expect(sent.result).toBe('sent');
     expect(deps.texts.sent[0]?.to).toBe(TOMS_MOBILE);
@@ -234,7 +234,7 @@ describe('quiet hours (open question 8)', () => {
       kind: 'urgent_alert',
       to: { kind: 'owner', owner: tom?.id ?? (null as never) },
       about: { job, visit: null, call: null },
-      facts: { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016' },
+      facts: { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016', link: null },
     });
     expect(sent.result).toBe('sent');
   });

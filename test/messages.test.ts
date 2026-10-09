@@ -46,15 +46,15 @@ describe('the drafts', () => {
     }
   });
 
-  it('make the owner’s urgent alert in Greg’s words, in one segment (open question 7)', () => {
-    const words = makeWords(DRAFT_WORDING.urgent_alert ?? '', {
-      customer: 'Mr Price',
-      place: '6 Bridge Street',
-      summary: 'A leak under the kitchen sink.',
-      number: '07700 900016',
-    });
+  it('make the owner’s urgent alert in Greg’s words, in one segment, while there is no link (open question 7)', () => {
+    const facts = { customer: 'Mr Price', place: '6 Bridge Street', summary: 'A leak under the kitchen sink.', number: '07700 900016' };
+    const words = makeWords(DRAFT_WORDING.urgent_alert ?? '', { ...facts, link: null });
     expect(words).toBe('Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.');
     expect(segments(words)).toBe(1);
+    // With the link to the job, last and with no words of its own: two segments.
+    const linked = makeWords(DRAFT_WORDING.urgent_alert ?? '', { ...facts, link: `https://app.example.co.uk/jobs/${'a'.repeat(26)}` });
+    expect(linked).toBe(`${words} https://app.example.co.uk/jobs/${'a'.repeat(26)}`);
+    expect(segments(linked)).toBe(2);
     const missing = makeWords(DRAFT_WORDING.urgent_alert_details_missing ?? '', { summary: null, number: 'withheld' });
     expect(missing).toBe('Front-line: urgent call. Not all their details came through. Their number: withheld.');
   });

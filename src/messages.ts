@@ -23,8 +23,10 @@ import type { MessageKind, VisitKind } from './record/types';
  * - visit_reminder: {owner}, the owner's name; {weekday}, the visit's day,
  *   such as "Thursday"; {time}, such as "3pm"
  * - urgent_alert: {customer}, {place}, {summary}, the one line about the
- *   call, and {number}, the number to ring them on
+ *   call, {number}, the number to ring them on, and {link}, the link to the
+ *   job, empty while this copy has no address for the app
  * - urgent_alert_details_missing: {summary} and {number}
+ * - login_link: {link}, the link that logs the owner in
  *
  * A firm with no agreed wording for a kind gets no text of that kind: send()
  * refuses it.
@@ -45,11 +47,16 @@ export const DRAFT_WORDING: Readonly<Record<MessageKind, string | null>> = {
   visit_reminder: "Reminder: {owner}'s visit is tomorrow, {weekday}, at {time}. See you then.",
   // Greg's answer to open question 7, 8 Oct 2026. "Front-line:" tells the
   // owner it is not a customer's text, since it comes from the firm's own
-  // number. A link to the job comes once the owner can log in (slice F).
-  urgent_alert: 'Front-line: urgent call from {customer}, {place}. {summary} Their number: {number}.',
+  // number. The link to the job, added in slice F, comes last with no words
+  // of its own, so the alert reads as before when there is no link.
+  urgent_alert: 'Front-line: urgent call from {customer}, {place}. {summary} Their number: {number}. {link}',
   // For an urgent call whose caller's details did not all come through.
   // Greg, 8 Oct 2026.
   urgent_alert_details_missing: 'Front-line: urgent call. Not all their details came through. {summary} Their number: {number}.',
+  // The link that logs the owner in. New in slice F; flagged in its pull
+  // request. "15 minutes" is LOGIN_LINK_LASTS in src/record/logins.ts, and a
+  // test checks the two agree.
+  login_link: 'Front-line: here is your link to log in. It works for 15 minutes. If you did not ask for it, ignore this text. {link}',
 };
 
 /**

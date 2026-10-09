@@ -24,6 +24,17 @@ export const systemClock: Clock = {
   now: () => instant(Date.now()),
 };
 
+/**
+ * A clock that reads `start` at the moment it is made, and runs on from there
+ * at the system's pace. Only `npm run dev` uses it (src/local.ts), so the
+ * demo firm shows as it stands on the example's "today". Practice and live
+ * use systemClock.
+ */
+export function startingAt(start: Instant): Clock {
+  const offset = instant(start) - Date.now();
+  return { now: () => instant(Date.now() + offset) };
+}
+
 export function pretendClock(start: Instant): PretendClock {
   let at = instant(start);
   return {

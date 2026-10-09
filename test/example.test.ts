@@ -52,14 +52,14 @@ async function jobPage(name: string): Promise<string[]> {
 }
 
 describe('the demo firm', () => {
-  it('is Tidewell Heating, marked as an example, with owner Tom and all five services on', async () => {
+  it('is Tidewell Heating, marked as an example, with owner Tom and Release 1’s one service on', async () => {
     expect(await exampleFirms(db)).toEqual([firm]);
     const tidewell = await getFirm(db, firm);
     expect(tidewell).toMatchObject({
       name: 'Tidewell Heating',
       isExample: true,
       stopped: false,
-      services: { calls: true, quotes: true, followups: true, paperwork: true, invoices: true },
+      services: { calls: true, quotes: false, followups: false, paperwork: false, invoices: false },
       phoneNumber: '+447700900100',
       urgentList: ['a leak'],
     });
@@ -128,7 +128,7 @@ describe('the demo firm', () => {
       number_set: 1,
       passed_to_owner: 1,
       reminder_sent: 5,
-      service_on: 5,
+      service_on: 1,
       urgent_list_set: 1,
       visit_booked: 10,
     });

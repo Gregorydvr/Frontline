@@ -5,7 +5,7 @@ import { createLocalApp } from '../src/local';
 import { exampleFirms, listCustomers } from '../src/record';
 import { openRecord } from '../src/record/db';
 import { testDeps } from './helpers/deps';
-import { report, send, withDetails } from './helpers/vapi';
+import { report, send } from './helpers/vapi';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
@@ -41,7 +41,7 @@ describe('the version for this machine', () => {
 
     expect(text).toContain('Tidewell Heating (example)\nOwner: Tom\n');
     expect(text).toContain(
-      'Services on: Calls & bookings, Quotes, Follow-ups, Job paperwork, Invoices & reminders\nStop button: off\n',
+      'Services on: Calls & bookings\nStop button: off\n',
     );
     expect(text).toContain('As it stands on Thursday 15 October 2026 at 16:00.');
     expect(text).toContain(
@@ -72,73 +72,30 @@ describe('the version for this machine', () => {
   });
 });
 
-/** The rows of a Calls & bookings page, as the owner reads them. */
-function rowsOf(page: string): string[] {
-  return [...page.matchAll(/<div class="row"><span class="txt">(.*?)<\/span><\/div>/g)].map(([, row]) =>
-    (row ?? '')
-      .replace(/<span class="chip[^"]*">(.*?)<\/span>/g, ' [$1]')
-      .replace(/<span class="t2">/g, ' / ')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&'),
-  );
-}
-
-describe('Calls & bookings on this machine', () => {
+describe('logging in on this machine', () => {
   const app = createLocalApp(() => deps);
 
-  it('shows the demo firm’s day in the example’s look and words', async () => {
-    const answer = await app.request('/local/calls', {}, env);
+  it('shows a button at /local/login that posts back to it', async () => {
+    const answer = await app.request('/local/login', {}, env);
     expect(answer.status).toBe(200);
-    expect(answer.headers.get('Content-Type')).toMatch(/^text\/html/);
-    const page = await answer.text();
-
-    expect(page).toContain('<h1>Calls &amp; bookings</h1><p class="meta">3 calls answered today.</p>');
-    expect(page).toContain('<h2>Today’s calls</h2>');
-    expect(page).toContain('<h2>Coming up</h2>');
-    expect(rowsOf(page)).toEqual([
-      'Mr Price · 11:02 / A leak under the kitchen sink. Passed straight to you. [Passed to you]',
-      'A supplier · 08:26 / Your order is ready to collect. Message taken.',
-      'Mrs Green · 08:10 / No hot water. Quote visit booked for Monday, 9am. [Booked]',
-      'Fri 16 Oct, 10:00 / Mr Clarke · Quote visit',
-      'Mon 19 Oct, 09:00 / Mrs Green · Quote visit',
-      'Tue 20 Oct, 08:30 / Mr Evans · Boiler install',
-      'Wed 21 Oct, 14:00 / Mrs Reid · Boiler service',
-    ]);
-    // The example's look, its font and its chips' icons, and nothing from elsewhere.
-    expect(page).toContain('--cream:#FBF4EB');
-    expect(page).toContain("font-family: 'Archivo'");
-    expect(page).toContain('<symbol id="i-alert"');
-    expect(page).not.toMatch(/<script|https?:\/\//);
+    expect(await answer.text()).toContain('<form method="post">');
   });
 
-  it('tells search engines to keep out and browsers not to keep a copy', async () => {
-    const answer = await app.request('/local/calls', {}, env);
-    expect(answer.headers.get('X-Robots-Tag')).toBe('noindex, nofollow');
-    expect(answer.headers.get('Cache-Control')).toBe('no-store');
-    expect(answer.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
-    expect(await answer.text()).toContain('<meta name="robots" content="noindex, nofollow">');
-  });
-
-  it('shows a new call once its report has landed, and the same report again changes nothing', async () => {
-    expect((await send(app, report('landline-caller'))).status).toBe(200);
-    expect((await send(app, report('landline-caller'))).status).toBe(200);
-    const page = await (await app.request('/local/calls', {}, env)).text();
-    expect(page).toContain('4 calls answered today.');
-    expect(rowsOf(page)[0]).toBe('Mrs Hall · 14:47 / Boiler due a service before the winter. Message taken.');
-  });
-
-  it('shows a call with its details missing by its number', async () => {
-    await send(app, report('hang-up'));
-    const page = await (await app.request('/local/calls', {}, env)).text();
-    expect(rowsOf(page)[0]).toBe('07700 900400 · 15:41 / Details missing.');
-  });
-
-  it('shows what a caller said as plain text, never as part of the page', async () => {
-    const body = withDetails(report('withheld-caller'), (data) => ({ ...data, name: 'Ms <b>Rowe</b>' }));
-    await send(app, body);
-    const page = await (await app.request('/local/calls', {}, env)).text();
-    expect(page).toContain('Ms &lt;b&gt;Rowe&lt;/b&gt; · 15:20');
-    expect(page).not.toContain('<b>Rowe');
+  it('sends Tom a login link through the stand-in, shows it, and the link logs him in to the demo firm', async () => {
+    clock.set(instantFromIso('2026-10-15T16:00:00+01:00'));
+    const before = deps.texts.sent.length;
+    const answer = await app.request('/local/login', { method: 'POST' }, env);
+    expect(answer.status).toBe(200);
+    const words = await answer.text();
+    expect(deps.texts.sent.slice(before)).toMatchObject([{ to: '+447700900101' }]);
+    const link = /href="(https:\/\/app\.example\/in\/[0-9a-z]{26})"/.exec(words)?.[1];
+    if (link === undefined) throw new Error('No link');
+    expect(words).toContain('Front-line: here is your link to log in.');
+    const tapped = await app.request(link, { method: 'POST', headers: { Origin: 'https://app.example' }, redirect: 'manual' }, env);
+    expect(tapped.status).toBe(303);
+    const cookie = (tapped.headers.get('Set-Cookie') ?? '').split(';')[0] ?? '';
+    const home = await app.request('https://app.example/', { headers: { Cookie: cookie } }, env);
+    expect(await home.text()).toContain('<h1>Tidewell Heating</h1><span class="badge">Example</span>');
   });
 });
 
@@ -154,8 +111,7 @@ describe('texts on this machine', () => {
     expect(await answer.text()).toContain(
       [
         'Thu 15 Oct  16:00  urgent_alert to the owner, Tom: sent',
-        '    Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016.',
-        '    (1 segment)',
+        '    Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016. https://app.example/jobs/',
       ].join('\n'),
     );
     expect(deps.texts.sent.length).toBe(before + 1);
@@ -181,16 +137,16 @@ describe('playing a booking call on this machine', () => {
     expect(words).toContain('Quote visit booked for Friday 16 October at 8am. Her confirmation: sent.');
     const link = /href="(https:\/\/links\.example\/d\/[0-9a-z]{26})"/.exec(words)?.[1];
     if (link === undefined) throw new Error('No link');
-    const page = await app.request(new URL(link).pathname, {}, env);
+    const page = await app.request(link, {}, env);
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('value="Mrs Ahmed"');
   });
 });
 
 describe('the deployed version', () => {
-  it('has no /local/example, /local/calls, /local/texts or /local/book page and does not load the demo firm', async () => {
+  it('has no /local/example, /local/login, /local/texts or /local/book page and does not load the demo firm', async () => {
     const before = await exampleFirms(db);
-    for (const path of ['/local/example', '/local/calls', '/local/texts', '/local/book']) {
+    for (const path of ['/local/example', '/local/login', '/local/texts', '/local/book']) {
       const answer = await exports.default.fetch(`http://localhost${path}`);
       expect(answer.status).toBe(404);
     }

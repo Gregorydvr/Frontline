@@ -18,7 +18,7 @@
 // Every time is UK time with its offset. +01:00 is summer time, which runs to
 // Sunday 25 October 2026.
 
-import type { DiaryRules, VisitKind } from '../record/types';
+import type { DiaryRules, Service, VisitKind } from '../record/types';
 
 export const EXAMPLE_FIRM = 'Tidewell Heating';
 export const EXAMPLE_OWNER = 'Tom';
@@ -26,6 +26,11 @@ export const EXAMPLE_OWNER = 'Tom';
 export const EXAMPLE_OWNER_MOBILE = '07700 900101';
 /** The number Tidewell Heating's customers ring and text. */
 export const EXAMPLE_NUMBER = '07700 900100';
+/**
+ * The services switched on: Calls & bookings, the one Release 1 has. The
+ * example's other four come back on with their releases.
+ */
+export const EXAMPLE_SERVICES = ['calls'] as const satisfies readonly Service[];
 /** What counts as urgent: "Anything urgent, like a leak, comes straight to you." */
 export const EXAMPLE_URGENT_LIST = ['a leak'];
 

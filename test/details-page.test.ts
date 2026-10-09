@@ -24,7 +24,7 @@ import { openRecord } from '../src/record/db';
 import { LINK_LASTS } from '../src/record/links';
 import type { CustomerId, FirmId, JobId } from '../src/record/types';
 import { newId } from '../src/ids';
-import { testDeps } from './helpers/deps';
+import { APP_ADDRESS, LINK_ADDRESS, testDeps } from './helpers/deps';
 import { firmRows } from './helpers/db';
 import { tidewell } from './helpers/vapi';
 
@@ -49,14 +49,15 @@ beforeEach(async () => {
   token = await linkForDue(db, firm, { due, customer, job });
 });
 
+/** Opens the page at the address for customers' links, as a customer does. */
 function open(path = `/d/${token}`): Promise<Response> {
-  return Promise.resolve(app.request(path, {}, env));
+  return Promise.resolve(app.request(`${LINK_ADDRESS}${path}`, {}, env));
 }
 
 function post(fields: Record<string, string>, path = `/d/${token}`): Promise<Response> {
   const body = new URLSearchParams(fields).toString();
   return Promise.resolve(
-    app.request(path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(body.length) }, body }, env),
+    app.request(`${LINK_ADDRESS}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(body.length) }, body }, env),
   );
 }
 
@@ -79,6 +80,15 @@ describe('the page', () => {
     expect(page.headers.get('Referrer-Policy')).toBe('no-referrer');
     expect(page.headers.get('Content-Security-Policy')).toContain("form-action 'self'");
     expect(page.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+  });
+
+  it('answers only at the address for customers’ links, never at the owner’s app', async () => {
+    const atTheApp = await app.request(`${APP_ADDRESS}/d/${token}`, {}, env);
+    expect(atTheApp.status).toBe(404);
+    expect(await atTheApp.text()).not.toContain('Mrs Ahmed');
+    // A copy that serves both from one address, such as this machine, answers at any.
+    const oneAddress = createApp(() => ({ ...testDeps(clock), appAddress: LINK_ADDRESS }));
+    expect((await oneAddress.request(`http://localhost:8787/d/${token}`, {}, env)).status).toBe(200);
   });
 
   it('holds nothing personal in its address: only the token', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { instantFromIso, type Instant } from '../src/clock';
 import { clockWords, HISTORY_WORDS, historyLine, whenWords } from '../src/history-lines';
 import { idFromBytes } from '../src/ids';
+import { ukMobile, type UkLandline, type UkMobile } from '../src/phone';
 import {
   HISTORY_KINDS,
   LINE_GAPS,
@@ -36,12 +37,15 @@ function entry(kind: HistoryKind, visit?: { kind: VisitKind; startsAt: Instant }
 }
 
 /** An entry about a call with no customer, such as a supplier's. */
-function callEntry(kind: HistoryKind, call: { caller: string | null; summary: string | null }): HistoryEntry {
+function callEntry(
+  kind: HistoryKind,
+  call: { caller: string | null; summary: string | null; from?: UkMobile | UkLandline | null },
+): HistoryEntry {
   return {
     ...entry(kind),
     customer: null,
     job: null,
-    call: { id: idFromBytes(new Uint8Array(16).fill(5)) as CallId, ...call },
+    call: { id: idFromBytes(new Uint8Array(16).fill(5)) as CallId, from: null, ...call },
   };
 }
 
@@ -97,10 +101,22 @@ describe('historyLine', () => {
     expect(() => historyLine({ ...supplier, call: null }, 'feed')).toThrow(RangeError);
   });
 
-  it('shows the owner nothing for details taken or missing, or for the firm’s set-up', () => {
+  it('says in Done for you that a call’s details were missing, with the number it came from, and has no job page for it', () => {
+    expect(historyLine(callEntry('details_missing', { caller: null, summary: null, from: ukMobile('07700 900123') }), 'feed')).toBe(
+      'Call from 07700 900123. Details missing.',
+    );
+    expect(historyLine(callEntry('details_missing', { caller: null, summary: null, from: null }), 'feed')).toBe(
+      'Call from a withheld number. Details missing.',
+    );
+    expect(historyLine(callEntry('details_missing', { caller: null, summary: null }), 'job')).toBeNull();
+  });
+
+  it('shows the owner nothing for details taken, for the firm’s set-up, or for logging in and Message us', () => {
     for (const kind of [
       'details_taken',
-      'details_missing',
+      'logged_in',
+      'logged_out',
+      'owner_message_sent',
       'service_on',
       'service_off',
       'stop_on',

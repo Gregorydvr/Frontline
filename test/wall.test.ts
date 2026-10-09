@@ -15,6 +15,7 @@ import { newId, type Id } from '../src/ids';
 import { ukLandline, ukMobile } from '../src/phone';
 import * as record from '../src/record';
 import { openRecord, Refused, type RecordDb } from '../src/record/db';
+import type { SessionToken } from '../src/record/logins';
 import type {
   Call,
   Customer,
@@ -24,6 +25,7 @@ import type {
   HoldId,
   Job,
   LinkToken,
+  LoginToken,
   Message,
   NewCall,
   OwnerId,
@@ -80,11 +82,16 @@ let ofA: {
   hold: { id: HoldId; providerCallId: string };
   /** The first firm's link for Mr Clarke. */
   link: LinkToken;
+  /** A link to log the first firm's owner in, not yet used, and the cookie of a login they started. */
+  login: LoginToken;
+  cookie: SessionToken;
   /** Every id of the first firm's, to look for in what the second firm is given. */
   ids: string[];
 };
 /** The second firm, of the same shape. */
 let b: FirmId;
+/** The second firm's own login link, not yet used, and login. */
+let loginOfB: { login: LoginToken; cookie: SessionToken } | null = null;
 let jobOfB: Job;
 
 beforeAll(async () => {
@@ -102,6 +109,7 @@ beforeAll(async () => {
   const waitingBy = new Map<FirmId, DueId>();
   const holdBy = new Map<FirmId, HoldId>();
   const linkBy = new Map<FirmId, LinkToken>();
+  const loginBy = new Map<FirmId, { login: LoginToken; cookie: SessionToken }>();
   for (const firm of [a, b]) {
     const [clarke] = (await record.findCustomersByMobile(db, firm, ukMobile('07700 900005')));
     const [clarkesJob] = clarke === undefined ? [] : await record.listJobsForCustomer(db, firm, clarke.id);
@@ -138,6 +146,20 @@ beforeAll(async () => {
     if (hold === null) throw new Error('Not held');
     holdBy.set(firm, hold);
     linkBy.set(firm, await record.linkForDue(db, firm, { due: reminder, customer: clarke.id, job: clarkesJob.id }));
+    // A link to log the owner in, not yet used; a login the owner started
+    // with another; and what the owner wrote in Message us.
+    const [owner] = await record.listOwners(db, firm);
+    if (owner === undefined) throw new Error('No owner');
+    const unused = await record.createLoginLink(db, firm, { owner: owner.id, job: clarkesJob.id });
+    const used = await record.createLoginLink(db, firm, { owner: owner.id, job: null });
+    // Their texts are sent, as the login page sends them, so no row is left waiting.
+    for (const due of [unused.due, used.due]) {
+      expect(await runDue(db, testDeps(clock), firm, due)).toEqual({ ran: 'done', outcome: 'sent' });
+    }
+    const login = await record.logInWithLink(db, used.token);
+    if (login === null) throw new Error('Not logged in');
+    loginBy.set(firm, { login: unused.token, cookie: login.session });
+    await record.recordOwnerMessage(db, firm, owner.id, 'Please put my day rate up.');
   }
   // The first firm alone has Mrs Ahmed's number opted out: the second firm
   // must not see it.
@@ -166,7 +188,11 @@ beforeAll(async () => {
   const waiting = waitingBy.get(a);
   const holdOfA = holdBy.get(a);
   const linkOfA = linkBy.get(a);
-  if (held === undefined || waiting === undefined || holdOfA === undefined || linkOfA === undefined) throw new Error('No held or waiting row');
+  const loginOfA = loginBy.get(a);
+  if (held === undefined || waiting === undefined || holdOfA === undefined || linkOfA === undefined || loginOfA === undefined) {
+    throw new Error('No held or waiting row');
+  }
+  loginOfB = loginBy.get(b) ?? null;
   dues.push(waiting, held.due);
   // Rows another firm could change if a query lost its firm: one waiting,
   // one held by a claim, and a text still being handed over.
@@ -187,10 +213,14 @@ beforeAll(async () => {
     textsIn,
     hold: { id: holdOfA, providerCallId: 'wall-hold' },
     link: linkOfA,
+    login: loginOfA.login,
+    cookie: loginOfA.cookie,
     ids: [
       a,
       holdOfA,
       linkOfA,
+      loginOfA.login,
+      loginOfA.cookie,
       ...owners,
       ...customers.map((c) => c.id),
       ...jobs.map((j) => j.id),
@@ -256,6 +286,69 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(found?.firm).toBe(a);
     expect(Object.keys(found ?? {}).sort()).toEqual(['customer', 'expiresAt', 'firm', 'job']);
     expect(await record.findLink(db, newId())).toBeNull();
+  },
+
+  // The four that find the firm when an owner logs in. Each gives only ids,
+  // and is tried here only in ways that leave the first firm as it was.
+  async findOwnersByMobile() {
+    // Both firms' owners are on Tom's mobile: each found is the firm's own owner.
+    const found = await record.findOwnersByMobile(db, ukMobile('07700 900101'));
+    expect(found.map((one) => one.firm)).toEqual(expect.arrayContaining([a, b]));
+    for (const { firm, owner } of found) {
+      expect(await record.getOwner(db, firm, owner)).not.toBeNull();
+    }
+    expect(Object.keys(found[0] ?? {}).sort()).toEqual(['firm', 'owner']);
+    expect(await record.findOwnersByMobile(db, ukMobile('07700 900999'))).toEqual([]);
+  },
+  async findLoginLink() {
+    const found = await record.findLoginLink(db, ofA.login);
+    expect(found?.firm).toBe(a);
+    expect(Object.keys(found ?? {}).sort()).toEqual(['firm', 'job', 'owner']);
+    expect(await record.findLoginLink(db, newId())).toBeNull();
+  },
+  async logInWithLink() {
+    // The second firm's link logs in to the second firm only.
+    if (loginOfB === null) throw new Error('No login link');
+    const login = await record.logInWithLink(db, loginOfB.login);
+    expect(login?.firm).toBe(b);
+    nothingOfA(login);
+    expect(await record.logInWithLink(db, newId())).toBeNull();
+  },
+  async findSession() {
+    if (loginOfB === null) throw new Error('No login');
+    const found = await record.findSession(db, loginOfB.cookie);
+    expect(found?.firm).toBe(b);
+    nothingOfA(found);
+    expect(await record.findSession(db, newId())).toBeNull();
+  },
+  async endSession() {
+    // The first firm's login cannot be ended as the second firm.
+    expect(await record.endSession(db, b, ofA.cookie)).toBe(false);
+  },
+  async createLoginLink() {
+    for (const owner of ofA.owners) {
+      await refused(record.createLoginLink(db, b, { owner, job: null }));
+    }
+    const [ownerOfB] = await record.listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('No owner');
+    for (const job of ofA.jobs) {
+      await refused(record.createLoginLink(db, b, { owner: ownerOfB.id, job: job.id }));
+    }
+  },
+  async countLoginLinks() {
+    for (const owner of ofA.owners) {
+      expect(await record.countLoginLinks(db, b, owner, allTime[0])).toBe(0);
+    }
+  },
+  async loginLinkForDue() {
+    for (const due of ofA.dues) {
+      expect(await record.loginLinkForDue(db, b, due)).toBeNull();
+    }
+  },
+  async recordOwnerMessage() {
+    for (const owner of ofA.owners) {
+      await refused(record.recordOwnerMessage(db, b, owner, 'Hello.'));
+    }
   },
 
   async getFirm() {
@@ -673,6 +766,11 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
       );
     }
   },
+  async listMessagesForJob() {
+    for (const job of ofA.jobs) {
+      expect(await record.listMessagesForJob(db, b, job.id)).toEqual([]);
+    }
+  },
   async findMessageForDue() {
     for (const message of ofA.messages) {
       expect(await record.findMessageForDue(db, b, message.due, message.to)).toBeNull();
@@ -740,13 +838,15 @@ describe('the wall between firms', () => {
     expect(Object.keys(cases).sort()).toEqual(Object.keys(record).sort());
   });
 
-  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s, and the link’s', () => {
+  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s, the link’s, and the four of logging in', () => {
     type NotTakingTheFirm = {
       [Name in keyof typeof record]: Parameters<(typeof record)[Name]> extends [RecordDb, FirmId, ...unknown[]]
         ? never
         : Name;
     }[keyof typeof record];
-    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<'createFirm' | 'exampleFirms' | 'findFirmByNumber' | 'findDue' | 'findLink'>();
+    expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<
+      'createFirm' | 'exampleFirms' | 'findFirmByNumber' | 'findDue' | 'findLink' | 'findOwnersByMobile' | 'findLoginLink' | 'logInWithLink' | 'findSession'
+    >();
   });
 
   it.each(Object.keys(cases) as (keyof typeof record)[])(
