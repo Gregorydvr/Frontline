@@ -67,7 +67,7 @@ export async function loadExample(
   const clock = pretendClock(instantFromIso(EXAMPLE_SET_UP));
   const db = openRecord(d1, clock);
 
-  const firm = await createFirm(db, { name: firmAs.name, isExample: firmAs.isExample });
+  const firm = await createFirm(db, { name: firmAs.name, isExample: firmAs.isExample }, frontline);
   // Release 1's service only. The example's other four come back on with
   // their releases, as their quotes and invoices do.
   for (const service of EXAMPLE_SERVICES) {
@@ -76,12 +76,13 @@ export async function loadExample(
   await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
   await setUrgentList(db, firm, EXAMPLE_URGENT_LIST, frontline);
   await setDiaryRules(db, firm, EXAMPLE_DIARY_RULES, frontline);
-  await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) });
-  // The wording agreed at set-up: the drafts, for each kind that has one.
+  const owner = await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) }, frontline);
+  // The wording agreed at set-up: the drafts, for each kind that has one,
+  // as the invented Tom agreed them in person.
   for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
     const draft = DRAFT_WORDING[kind];
     if (draft !== null) {
-      await setWording(db, firm, `text:${kind}`, draft, frontline);
+      await setWording(db, firm, `text:${kind}`, draft, frontline, { owner, how: 'in_person' });
     }
   }
 

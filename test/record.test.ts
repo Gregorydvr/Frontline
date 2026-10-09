@@ -107,12 +107,12 @@ describe('firms', () => {
     expect((await getFirm(db, firm))?.stopped).toBe(true);
     await setStopButton(db, firm, false, frontline);
     expect((await getFirm(db, firm))?.stopped).toBe(false);
-    expect(await historyKinds(env.DB, firm)).toEqual({ stop_off: 1, stop_on: 1 });
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1, stop_off: 1, stop_on: 1 });
   });
 
   it('refuses a service that is not one of the five, and changes nothing', async () => {
     await expect(setService(db, firm, 'whatsapp' as 'calls', true, frontline)).rejects.toThrow(Refused);
-    expect(await historyKinds(env.DB, firm)).toEqual({});
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1 });
   });
 
   it('refuses a switch for a firm that does not exist, and writes no history', async () => {
@@ -131,17 +131,17 @@ describe('firms', () => {
     expect((await getFirm(db, firm))?.phoneNumber).toBe('+447700900100');
     expect(await findFirmByNumber(db, ukMobile('+44 7700 900100'))).toBe(firm);
     expect(await findFirmByNumber(db, ukMobile('07700 900101'))).toBeNull();
-    expect(await historyKinds(env.DB, firm)).toEqual({ number_set: 1 });
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1, number_set: 1 });
   });
 
   it('refuses a number another firm has, or one that is not a stored mobile, and changes nothing', async () => {
     const other = await createFirm(db, { name: 'Second Example Firm', isExample: false });
     await setFirmNumber(db, other, ukMobile('07700 900200'), frontline);
-    await expect(setFirmNumber(db, firm, ukMobile('07700 900200'), frontline)).rejects.toThrow(Refused);
+    expect(await setFirmNumber(db, firm, ukMobile('07700 900200'), frontline)).toBe('taken');
     await expect(setFirmNumber(db, firm, '07700 900100' as never, frontline)).rejects.toThrow(Refused);
     await expect(findFirmByNumber(db, '07700 900200' as never)).rejects.toThrow(Refused);
     expect((await getFirm(db, firm))?.phoneNumber).toBeNull();
-    expect(await historyKinds(env.DB, firm)).toEqual({});
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1 });
   });
 
   it('sets what counts as urgent, and records who did it', async () => {
@@ -149,7 +149,7 @@ describe('firms', () => {
     expect((await getFirm(db, firm))?.urgentList).toEqual(['a leak', 'no heating for someone elderly']);
     await setUrgentList(db, firm, [], frontline);
     expect((await getFirm(db, firm))?.urgentList).toEqual([]);
-    expect(await historyKinds(env.DB, firm)).toEqual({ urgent_list_set: 2 });
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1, urgent_list_set: 2 });
   });
 
   it.each([
@@ -483,7 +483,8 @@ describe('calls', () => {
     expect(await getCall(db, firm, unclear.call)).toMatchObject({ caller: null, from: null, summary: null });
     expect(await listCustomers(db, firm)).toEqual([]);
     const entries = await historyBetween(db, firm, at, instantFromIso('2026-10-16T00:00:00+01:00'));
-    expect(entries.map((entry) => [entry.kind, entry.call?.id, entry.call?.caller])).toEqual([
+    // The firm's own entry, that it was added, aside.
+    expect(entries.filter((entry) => entry.kind !== 'firm_added').map((entry) => [entry.kind, entry.call?.id, entry.call?.caller])).toEqual([
       ['message_taken', supplier.call, 'a supplier'],
       ['details_missing', unclear.call, null],
     ]);
@@ -497,7 +498,7 @@ describe('calls', () => {
     );
     expect(await listCustomers(db, firm)).toHaveLength(1);
     expect(await listJobs(db, firm)).toHaveLength(1);
-    expect(await historyKinds(env.DB, firm)).toEqual({ call_answered: 1, details_taken: 1 });
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1, call_answered: 1, details_taken: 1 });
   });
 
   it.each([
@@ -510,7 +511,7 @@ describe('calls', () => {
   ])('refuses a call with %s, and writes nothing', async (_, more) => {
     await expect(recordCall(db, firm, call(green, more))).rejects.toThrow(Refused);
     expect(await listCustomers(db, firm)).toEqual([]);
-    expect(await historyKinds(env.DB, firm)).toEqual({});
+    expect(await historyKinds(env.DB, firm)).toEqual({ firm_added: 1 });
   });
 
   it('marks a call booked with a visit for its own job, and nothing else', async () => {

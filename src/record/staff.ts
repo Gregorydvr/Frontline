@@ -6,9 +6,12 @@ import { instant } from '../clock';
 import { isId, newId } from '../ids';
 import { line, Refused, run, type RecordDb } from './db';
 import {
+  MESSAGE_KINDS,
   SERVICES,
   STAFF_ACTIONS,
   type CustomerId,
+  type MessageKind,
+  type OwnerId,
   type FirmId,
   type Service,
   type Staff,
@@ -53,17 +56,24 @@ export async function findOrAddStaff(db: RecordDb, email: string): Promise<Staff
 export interface StaffLogAbout {
   customer?: CustomerId | null;
   service?: Service | null;
+  /** The firm's owner it was about, such as their mobile. */
+  owner?: OwnerId | null;
+  /** The kind of text whose wording it was about. */
+  messageKind?: MessageKind | null;
 }
 
-/** What staff view or do across every firm, with no one firm named: the list of firms, and the page for after a restore. */
-const ACROSS_FIRMS: readonly StaffAction[] = ['viewed_firms', 'viewed_after_restore'];
+/**
+ * What staff view or do across every firm, with no one firm named: the list
+ * of firms, the page for after a restore, and the page for adding a firm.
+ */
+const ACROSS_FIRMS: readonly StaffAction[] = ['viewed_firms', 'viewed_after_restore', 'viewed_add_firm'];
 
 /**
  * Records that a member of staff viewed or did something across every firm,
  * such as opening the page for after a restore. Viewing the list of firms is
  * recorded by listFirms() itself.
  */
-export async function logStaffAcrossFirms(db: RecordDb, staff: StaffId, what: 'viewed_after_restore'): Promise<StaffLogId> {
+export async function logStaffAcrossFirms(db: RecordDb, staff: StaffId, what: 'viewed_after_restore' | 'viewed_add_firm'): Promise<StaffLogId> {
   const [id, statement] = staffLogStatement(db, null, staff, what);
   await run(statement);
   return id;
@@ -77,7 +87,7 @@ export async function logStaff(
   db: RecordDb,
   firm: FirmId,
   staff: StaffId,
-  what: Exclude<StaffAction, 'viewed_firms' | 'viewed_after_restore'>,
+  what: Exclude<StaffAction, 'viewed_firms' | 'viewed_after_restore' | 'viewed_add_firm'>,
   about: StaffLogAbout = {},
 ): Promise<StaffLogId> {
   const [id, statement] = staffLogStatement(db, firm, staff, what, about);
@@ -92,8 +102,9 @@ export async function logStaff(
 /**
  * The statement that adds a row to the staff log, for running in the same
  * step as what it records. For a firm, it writes nothing when there is no
- * such firm, or the customer it names is not the firm's, so whoever runs it
- * checks that it wrote one row. For the list of firms, the firm is null.
+ * such firm, or the customer or owner it names is not the firm's, so whoever
+ * runs it checks that it wrote one row. For the list of firms, the firm is
+ * null.
  */
 export function staffLogStatement(
   db: RecordDb,
@@ -107,7 +118,14 @@ export function staffLogStatement(
   }
   const customer = about.customer ?? null;
   const service = about.service ?? null;
-  if ((customer !== null && !isId(customer)) || (service !== null && !SERVICES.includes(service))) {
+  const owner = about.owner ?? null;
+  const messageKind = about.messageKind ?? null;
+  if (
+    (customer !== null && !isId(customer)) ||
+    (service !== null && !SERVICES.includes(service)) ||
+    (owner !== null && !isId(owner)) ||
+    (messageKind !== null && !Object.hasOwn(MESSAGE_KINDS, messageKind))
+  ) {
     throw new Refused();
   }
   const id = newId() as StaffLogId;
@@ -115,11 +133,12 @@ export function staffLogStatement(
     id,
     db.d1
       .prepare(
-        `INSERT INTO staff_log (id, firm_id, staff_id, at, seq, what, customer_id, service)
-         SELECT ?1, ?2, ?3, ?4, ${NEXT_SEQ}, ?5, ?6, ?7
+        `INSERT INTO staff_log (id, firm_id, staff_id, at, seq, what, customer_id, service, owner_id, message_kind)
+         SELECT ?1, ?2, ?3, ?4, ${NEXT_SEQ}, ?5, ?6, ?7, ?8, ?9
          WHERE (?2 IS NULL OR EXISTS (SELECT 1 FROM firms WHERE id = ?2))
-           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM customers WHERE firm_id = ?2 AND id = ?6))`,
+           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM customers WHERE firm_id = ?2 AND id = ?6))
+           AND (?8 IS NULL OR EXISTS (SELECT 1 FROM owners WHERE firm_id = ?2 AND id = ?8))`,
       )
-      .bind(id, firm, staff, db.clock.now(), what, customer, service),
+      .bind(id, firm, staff, db.clock.now(), what, customer, service, owner, messageKind),
   ];
 }

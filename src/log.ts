@@ -96,7 +96,12 @@ export type LogEvent =
   | 'firm_leaving'
   | 'firm_leaving_cancelled'
   | 'firm_deleted'
-  | 'deletions_replayed';
+  | 'deletions_replayed'
+  // Setting up a firm (slice H2): a firm added, a change to how it is set
+  // up, and wording agreed.
+  | 'firm_added'
+  | 'firm_set_up_changed'
+  | 'wording_agreed';
 
 const ERROR_NAMES = [
   'Error',

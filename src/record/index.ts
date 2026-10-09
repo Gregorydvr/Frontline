@@ -39,7 +39,7 @@ export { findHoldForCall, holdTime, listTakenTimes, releaseHold } from './holds'
 export { findLink, linkForDue } from './links';
 export { findCallByProviderId, getCall, listCallsBetween, markCallBooked, recordCall } from './calls';
 export { addHistory, historyBetween, historyForCustomer, historyForJob } from './history';
-export { firmWording, setWording } from './wording';
+export { firmWording, listWording, setWording } from './wording';
 export { isNumberOptedOut, listOptOuts, optIn, optOut, optOutNumber } from './opt-outs';
 export { addDue, cancelDue, claimDue, findDue, finishDue, getDue, listDueForCall, listDueForVisit, releaseDue } from './due';
 export {

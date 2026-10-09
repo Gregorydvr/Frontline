@@ -229,6 +229,56 @@ async function main() {
       await check(page, `${size.name}-control-after-restore`);
       await page.goto(firmAddress);
       await page.click('button:has-text("Cancel the leaving")');
+      // Setting up a firm (slice H2): adding one, its page with everything
+      // missing, its owner, its number (another firm's first), what counts
+      // as urgent, when visits can be booked, its wording (a character a
+      // text cannot carry first, then the draft, agreed), and changing the
+      // owner's mobile. A firm of its own at each size, on a number of its own.
+      const own = size.name === 'phone' ? { name: 'Second Example Firm', number: '07700 900200', mobile: '07700 900201' } : { name: 'Third Example Firm', number: '07700 900300', mobile: '07700 900301' };
+      await page.goto(`${ADDRESS}/control/add-firm`);
+      await check(page, `${size.name}-control-add-firm`);
+      await page.fill('#cr-firm-name', own.name);
+      await page.click('button:has-text("Add")');
+      await check(page, `${size.name}-control-set-up-firm`);
+      const setUpAddress = page.url();
+      await page.click('a:has-text("Add its owner")');
+      await check(page, `${size.name}-control-set-up-owner`);
+      await page.fill('#cr-owner-name', 'Example Owner');
+      await page.fill('#cr-owner-mobile', own.mobile);
+      await page.click('button:has-text("Add")');
+      await page.goto(`${setUpAddress}/number`);
+      await page.fill('#cr-number', '07700 900100');
+      await page.click('button:has-text("Save")');
+      await check(page, `${size.name}-control-set-up-number-taken`);
+      await page.fill('#cr-number', own.number);
+      await page.click('button:has-text("Save")');
+      await page.goto(`${setUpAddress}/urgent`);
+      await check(page, `${size.name}-control-set-up-urgent`);
+      await page.fill('#cr-urgent', 'a leak');
+      await page.click('button:has-text("Save")');
+      await page.goto(`${setUpAddress}/diary`);
+      await check(page, `${size.name}-control-set-up-diary`);
+      for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']) await page.check(`label:has-text("${day}") input`);
+      await page.fill('#cr-opens', '08:00');
+      await page.fill('#cr-closes', '16:00');
+      await page.fill('#cr-length-quote_visit', '60');
+      await page.click('button:has-text("Save")');
+      await page.goto(`${setUpAddress}/wording`);
+      await check(page, `${size.name}-control-set-up-wording`);
+      await page.click('a.row:has-text("first text to a new customer")');
+      await check(page, `${size.name}-control-set-up-wording-draft`);
+      const draft = await page.inputValue('#cr-words');
+      await page.fill('#cr-words', draft.replace("it's", 'it’s'));
+      await page.click('button:has-text("Check")');
+      await check(page, `${size.name}-control-set-up-wording-problem`);
+      await page.fill('#cr-words', draft);
+      await page.check('input[name=agreed]');
+      await page.click('button:has-text("Save as agreed")');
+      await check(page, `${size.name}-control-set-up-wording-agreed`);
+      await page.goto(setUpAddress);
+      await check(page, `${size.name}-control-set-up-firm-later`);
+      await page.click('a:has-text("Change their mobile")');
+      await check(page, `${size.name}-control-set-up-mobile`);
       await context.close();
 
       // The example app at the same size: Home, and Calls & bookings.

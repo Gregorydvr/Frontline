@@ -5,8 +5,10 @@
 import { instant } from '../clock';
 import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
-import { bit, line, Refused, run, runTogether, words, type RecordDb } from './db';
+import { diaryRulesProblems, NAME_LIMITS, nameProblems, urgentListProblems } from '../set-up';
+import { bit, Refused, runTogether, type RecordDb } from './db';
 import { firmEntry } from './history';
+import { staffLogStatement } from './staff';
 import {
   SERVICES,
   VISIT_KINDS,
@@ -15,12 +17,12 @@ import {
   type Firm,
   type FirmId,
   type Service,
+  type StaffAction,
   type StaffId,
   type VisitKind,
 } from './types';
 
-/** The most items an urgent list holds, and the longest an item may be. */
-export const URGENT_LIST_LIMITS = { items: 20, length: 60 } as const;
+export { DIARY_LIMITS, URGENT_LIST_LIMITS } from '../set-up';
 
 const SERVICE_COLUMNS = {
   calls: 'calls_on',
@@ -30,18 +32,26 @@ const SERVICE_COLUMNS = {
   invoices: 'invoices_on',
 } as const satisfies Record<Service, string>;
 
+const frontline = { kind: 'frontline' } as const;
+
 /**
- * Makes a new firm, with every service off and the stop button off. One of
- * the three record functions that cannot take a firm, since the firm does not
- * exist yet.
+ * Makes a new firm, with every service off and the stop button off, and
+ * records who did it: the history entry firm_added and, for a member of
+ * staff, the staff log, in the same step. Its name fills {firm} in texts, so
+ * a text must be able to carry it. One of the record functions that cannot
+ * take a firm, since the firm does not exist yet.
  */
-export async function createFirm(db: RecordDb, input: { name: string; isExample: boolean }): Promise<FirmId> {
+export async function createFirm(db: RecordDb, input: { name: string; isExample: boolean }, by: Actor = frontline): Promise<FirmId> {
+  if (nameProblems(input.name, NAME_LIMITS.firm).length > 0 || (by.kind !== 'frontline' && by.kind !== 'staff')) {
+    throw new Refused();
+  }
   const id = newId() as FirmId;
-  await run(
+  await changeFirm(db, [
     db.d1
       .prepare('INSERT INTO firms (id, name, is_example, created_at) VALUES (?, ?, ?, ?)')
-      .bind(id, words(input.name), bit(input.isExample), db.clock.now()),
-  );
+      .bind(id, input.name, bit(input.isExample), db.clock.now()),
+    ...recorded(db, id, 'firm_added', by, 'added_firm'),
+  ]);
   return id;
 }
 
@@ -78,15 +88,45 @@ export async function findFirmByNumber(db: RecordDb, number: UkMobile): Promise<
   return row === null ? null : (row.id as FirmId);
 }
 
-/** Gives the firm the number its customers ring and text, and records who did it. Another firm's number is refused. */
-export async function setFirmNumber(db: RecordDb, firm: FirmId, number: UkMobile, by: Actor): Promise<void> {
+/**
+ * What setting a firm's number did: set; not, because another firm has it
+ * (one that is leaving keeps it until it is deleted); not, because it is
+ * the mobile of one of the firm's owners; or not, because Calls & bookings
+ * is on and the firm already has a number, which customers reply to.
+ */
+export type NumberSet = 'set' | 'taken' | 'owners_mobile' | 'calls_on';
+
+/**
+ * Gives the firm the number its customers ring and text, and records who did
+ * it. No two firms have the same number: the database holds to that too
+ * (migration 0002). A number already set can be changed only while Calls &
+ * bookings is off: the build's reading of question 5 of the slice H2 plan,
+ * waiting for Greg.
+ */
+export async function setFirmNumber(db: RecordDb, firm: FirmId, number: UkMobile, by: Actor): Promise<NumberSet> {
   if (!isUkMobile(number)) {
     throw new Refused();
   }
+  const why = await db.d1
+    .prepare(
+      `SELECT
+         EXISTS (SELECT 1 FROM firms WHERE phone_number = ?2 AND id <> ?1) AS taken,
+         EXISTS (SELECT 1 FROM owners WHERE firm_id = ?1 AND mobile = ?2) AS owners_mobile,
+         EXISTS (SELECT 1 FROM firms WHERE id = ?1 AND calls_on = 1 AND phone_number IS NOT NULL AND phone_number <> ?2) AS calls_on`,
+    )
+    .bind(firm, number)
+    .first<{ taken: number; owners_mobile: number; calls_on: number }>();
+  if (why === null) throw new Refused();
+  if (why.taken === 1) return 'taken';
+  if (why.owners_mobile === 1) return 'owners_mobile';
+  if (why.calls_on === 1) return 'calls_on';
+  // Should another firm take the number in between, the database refuses
+  // this step whole (migration 0002's index), history entry and all.
   await changeFirm(db, [
     db.d1.prepare('UPDATE firms SET phone_number = ? WHERE id = ?').bind(number, firm),
-    firmEntry(db, firm, 'number_set', by, null),
+    ...recorded(db, firm, 'number_set', by, 'set_number'),
   ]);
+  return 'set';
 }
 
 /**
@@ -94,21 +134,14 @@ export async function setFirmNumber(db: RecordDb, firm: FirmId, number: UkMobile
  * did it. Each item is one short line, and no item appears twice.
  */
 export async function setUrgentList(db: RecordDb, firm: FirmId, items: readonly string[], by: Actor): Promise<void> {
-  if (items.length > URGENT_LIST_LIMITS.items) {
-    throw new Refused();
-  }
-  const checked = items.map((item) => line(item, URGENT_LIST_LIMITS.length));
-  if (new Set(checked.map((item) => item.toLowerCase())).size !== checked.length) {
+  if (urgentListProblems(items).length > 0) {
     throw new Refused();
   }
   await changeFirm(db, [
-    db.d1.prepare('UPDATE firms SET urgent_list = ? WHERE id = ?').bind(JSON.stringify(checked), firm),
-    firmEntry(db, firm, 'urgent_list_set', by, null),
+    db.d1.prepare('UPDATE firms SET urgent_list = ? WHERE id = ?').bind(JSON.stringify(items), firm),
+    ...recorded(db, firm, 'urgent_list_set', by, 'set_urgent_list'),
   ]);
 }
-
-/** The longest a visit may be, and the most days ahead times may be offered. */
-export const DIARY_LIMITS = { length: 12 * 60, daysAhead: 90 } as const;
 
 /**
  * Sets when the firm's visits can be booked and how long each kind takes,
@@ -123,28 +156,13 @@ export async function setDiaryRules(db: RecordDb, firm: FirmId, rules: DiaryRule
   const stored = rules === null ? null : JSON.stringify(diaryRulesOf(rules));
   await changeFirm(db, [
     db.d1.prepare('UPDATE firms SET diary_rules = ? WHERE id = ?').bind(stored, firm),
-    firmEntry(db, firm, 'diary_rules_set', by, null),
+    ...recorded(db, firm, 'diary_rules_set', by, 'set_diary_rules'),
   ]);
 }
 
 /** Whether something is diary rules that make sense, since types can be got round. */
 function areDiaryRules(rules: unknown): rules is DiaryRules {
-  if (typeof rules !== 'object' || rules === null) return false;
-  const { days, opens, closes, every, lengths, daysAhead } = rules as Record<string, unknown>;
-  const minuteOfDay = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 24 * 60;
-  if (!Array.isArray(days) || days.length === 0 || !days.every((day) => Number.isSafeInteger(day) && day >= 0 && day <= 6)) return false;
-  if (new Set(days).size !== days.length) return false;
-  if (!minuteOfDay(opens) || !minuteOfDay(closes) || opens >= closes) return false;
-  if (!Number.isSafeInteger(every) || (every as number) < 5 || (every as number) > closes - opens) return false;
-  if (!Number.isSafeInteger(daysAhead) || (daysAhead as number) < 1 || (daysAhead as number) > DIARY_LIMITS.daysAhead) return false;
-  if (typeof lengths !== 'object' || lengths === null || Array.isArray(lengths)) return false;
-  return Object.entries(lengths).every(
-    ([kind, length]) =>
-      VISIT_KINDS.includes(kind as VisitKind) &&
-      Number.isSafeInteger(length) &&
-      (length as number) >= 5 &&
-      (length as number) <= Math.min(DIARY_LIMITS.length, closes - opens),
-  );
+  return diaryRulesProblems(rules).length === 0;
 }
 
 /** Just the fields of the rules, in a set order. */
@@ -162,6 +180,20 @@ function diaryRulesOf(rules: DiaryRules): DiaryRules {
     lengths,
     daysAhead: rules.daysAhead,
   };
+}
+
+/**
+ * The statements that record a change to the firm: its history entry, and,
+ * when a member of staff made it, the row in the staff log, for the same step.
+ */
+function recorded(
+  db: RecordDb,
+  firm: FirmId,
+  kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set',
+  by: Actor,
+  action: StaffAction,
+): D1PreparedStatement[] {
+  return [firmEntry(db, firm, kind, by, null), ...(by.kind === 'staff' ? [staffLogStatement(db, firm, by.staff, action)[1]] : [])];
 }
 
 /** Switches one of the firm's services on or off, and records who did it. */
@@ -191,12 +223,13 @@ export async function setStopButton(db: RecordDb, firm: FirmId, on: boolean, by:
   ]);
 }
 
-/** Runs a change to the firm and its history entry as one step. */
+/** Runs a change to the firm and how it is recorded as one step. */
 async function changeFirm(db: RecordDb, statements: D1PreparedStatement[]): Promise<void> {
   // A firm that does not exist changes nothing, and its history entry is
-  // refused by the database, which undoes the whole step.
-  const [changed] = await runTogether(db.d1, statements);
-  if (changed?.meta.changes !== 1) {
+  // refused by the database, which undoes the whole step. A row of the staff
+  // log about a firm that is not there writes nothing.
+  const results = await runTogether(db.d1, statements);
+  if (results.some((result) => result.meta.changes !== 1)) {
     throw new Refused();
   }
 }

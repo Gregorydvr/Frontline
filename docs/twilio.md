@@ -21,7 +21,7 @@ This machine (`npm run dev`) and the tests never use Twilio. `npm run dev` warns
 
 ## Each firm's number
 
-Each firm has an 07 number bought for it in the account, and the same number is set on the firm in the record (its `phone_number`). Texts go from it, and the firm is found by it.
+Each firm has an 07 number bought for it in the account, and the same number is set on the firm in the record (its `phone_number`). Texts go from it, and the firm is found by it. Staff set it in the control room, on the firm's page under Set-up, Number. No two firms can have the same number, and once Calls & bookings is on it cannot be changed.
 
 | Setting on the number | Value |
 |---|---|

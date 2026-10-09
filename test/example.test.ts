@@ -124,13 +124,16 @@ describe('the demo firm', () => {
       confirmation_sent: 3,
       details_taken: 7,
       diary_rules_set: 1,
+      firm_added: 1,
       message_taken: 1,
       number_set: 1,
+      owner_added: 1,
       passed_to_owner: 1,
       reminder_sent: 5,
       service_on: 1,
       urgent_list_set: 1,
       visit_booked: 10,
+      wording_agreed: 6,
     });
   });
 

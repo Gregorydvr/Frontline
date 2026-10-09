@@ -38,6 +38,7 @@ import type {
 } from '../src/record/types';
 import { firmRows } from './helpers/db';
 import { testDeps } from './helpers/deps';
+import { agreedByOwner } from './helpers/owner';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
@@ -401,7 +402,8 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     }
   },
   async setFirmNumber() {
-    await refused(record.setFirmNumber(db, b, tidewellsNumber, frontline));
+    // The first firm's number is the first firm's: the second cannot take it.
+    expect(await record.setFirmNumber(db, b, tidewellsNumber, frontline)).toBe('taken');
     expect((await record.getFirm(db, b))?.phoneNumber).toBe(secondFirmsNumber);
     for (const owner of ofA.owners) {
       await refused(record.setFirmNumber(db, b, secondFirmsNumber, { kind: 'owner', owner }));
@@ -675,10 +677,17 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
   },
 
   async setWording() {
-    await record.setWording(db, b, 'text:visit_reminder', "Reminder: Tom's visit is tomorrow, {weekday}, at {time}.", frontline);
+    await record.setWording(db, b, 'text:visit_reminder', "Reminder: Tom's visit is tomorrow, {weekday}, at {time}.", frontline, await agreedByOwner(db, b));
     for (const owner of ofA.owners) {
-      await refused(record.setWording(db, b, 'text:visit_reminder', 'Reminder: {time}.', { kind: 'owner', owner }));
+      await refused(record.setWording(db, b, 'text:visit_reminder', 'Reminder: {time}.', { kind: 'owner', owner }, await agreedByOwner(db, b)));
+      // Nor can the first firm's owner be named as agreeing the second firm's words.
+      await refused(record.setWording(db, b, 'text:visit_reminder', 'Reminder: {time}.', frontline, { owner, how: 'phone' }));
     }
+  },
+  async listWording() {
+    const versions = await record.listWording(db, b, 'text:visit_reminder');
+    expect(versions.length).toBeGreaterThan(0);
+    nothingOfA(versions);
   },
   async firmWording() {
     const words = await record.firmWording(db, b);

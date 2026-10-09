@@ -71,7 +71,7 @@ async function calls() {
 /** The history the call wrote: everything but the firm's set-up. */
 async function callHistory(): Promise<string[]> {
   const entries = await historyBetween(db, firm, ...allTime);
-  return entries.map((entry) => entry.kind).filter((kind) => !['number_set', 'urgent_list_set', 'diary_rules_set', 'service_on'].includes(kind));
+  return entries.map((entry) => entry.kind).filter((kind) => !['firm_added', 'owner_added', 'wording_agreed', 'number_set', 'urgent_list_set', 'diary_rules_set', 'service_on'].includes(kind));
 }
 
 describe('a call from someone who is not a customer (step 5)', () => {

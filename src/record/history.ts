@@ -101,8 +101,8 @@ export function historyStatement(
 
 /**
  * The statement for an entry about the firm itself, such as a service switched
- * on. Only firms.ts, owners.ts and owner-messages.ts use it, in the same step
- * as the change it records.
+ * on. Only firms.ts, owners.ts, wording.ts and owner-messages.ts use it, in
+ * the same step as the change it records.
  */
 export function firmEntry(
   db: RecordDb,
@@ -116,6 +116,9 @@ export function firmEntry(
     | 'urgent_list_set'
     | 'owner_mobile_set'
     | 'diary_rules_set'
+    | 'firm_added'
+    | 'owner_added'
+    | 'wording_agreed'
     | 'owner_message_sent',
   by: Actor,
   service: Service | null,

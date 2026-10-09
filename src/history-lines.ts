@@ -121,6 +121,10 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   urgent_list_set: null,
   owner_mobile_set: null,
   diary_rules_set: null,
+  // Setting up a firm, in slice H2: for who did what, not lines the owner reads.
+  firm_added: null,
+  owner_added: null,
+  wording_agreed: null,
   // An owner logging in and out, and writing to Front-line in Message us:
   // recorded for who did what (rule 15), and not lines the owner reads.
   logged_in: null,

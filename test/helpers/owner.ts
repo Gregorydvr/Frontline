@@ -6,8 +6,15 @@ import type { Hono } from 'hono';
 import type { AppEnv } from '../../src/app';
 import { createLoginLink, listOwners, logInWithLink } from '../../src/record';
 import type { RecordDb } from '../../src/record/db';
-import type { FirmId } from '../../src/record/types';
+import type { Agreement, FirmId } from '../../src/record/types';
 import { APP_ADDRESS } from './deps';
+
+/** The firm's first owner agreeing some wording in person, as staff record it (rule 2). */
+export async function agreedByOwner(db: RecordDb, firm: FirmId): Promise<Agreement> {
+  const [owner] = await listOwners(db, firm);
+  if (owner === undefined) throw new Error('The firm has no owner');
+  return { owner: owner.id, how: 'in_person' };
+}
 
 /** The cookie of a new login for the firm's first owner, as the browser sends it back. */
 export async function ownerCookie(db: RecordDb, firm: FirmId): Promise<string> {

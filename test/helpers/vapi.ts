@@ -160,10 +160,10 @@ export async function tidewell(db: RecordDb, number = '07700 900100', without: r
   await setUrgentList(db, firm, ['a leak'], staff);
   await setDiaryRules(db, firm, EXAMPLE_DIARY_RULES, staff);
   await setService(db, firm, 'calls', true, staff);
-  await createOwner(db, firm, { name: 'Tom', mobile: ukMobile(TOMS_MOBILE) });
+  const owner = await createOwner(db, firm, { name: 'Tom', mobile: ukMobile(TOMS_MOBILE) });
   for (const [kind, words] of Object.entries(DRAFT_WORDING) as [MessageKind, string | null][]) {
     if (words !== null && !without.includes(kind)) {
-      await setWording(db, firm, `text:${kind}`, words, staff);
+      await setWording(db, firm, `text:${kind}`, words, staff, { owner, how: 'in_person' });
     }
   }
   return firm;
