@@ -15,6 +15,7 @@
 // time is let go, and a log line tells staff.
 
 import { bookingDues } from './diary/times';
+import { isFirmsKey } from './record/files';
 import { log } from './log';
 import type { CallerNumber } from './phone';
 import {
@@ -29,7 +30,7 @@ import {
 } from './record';
 import type { RecordedCall } from './record/calls';
 import { Refused, withFirmClock, type RecordDb } from './record/db';
-import type { CallFor, CallId, Customer, DueId, Firm, FirmId, NewBooking, VisitId } from './record/types';
+import type { CallFor, CallId, Customer, DueId, Firm, FirmId, NewBooking, NewCall, VisitId } from './record/types';
 import type { CallDetails, CallReport } from './vapi-report';
 
 export type Landed =
@@ -89,6 +90,7 @@ export async function landCall(realDb: RecordDb, report: CallReport): Promise<La
       summary: report.details?.summary ?? null,
       transcript: report.transcript,
       booking,
+      recording: recordingOf(firm.id, report),
     });
   } catch (thrown) {
     // The same report arriving twice at once: the second is refused by the
@@ -112,6 +114,11 @@ export async function landCall(realDb: RecordDb, report: CallReport): Promise<La
   if (urgentNotOnList(report.details, urgentItem)) {
     log('urgent_not_on_list', { firm: firm.id, call: made.call });
   }
+  if (made.recording === 'not_kept') {
+    // The report named a recording somewhere other than this firm's path
+    // in the inbox: it is not fetched, and staff are shown it.
+    log('recording_not_in_inbox', { firm: firm.id, call: made.call });
+  }
   if (!firm.services.calls) {
     // The call really happened, so it is kept. Staff should know the
     // firm's calls are being answered while the service is off.
@@ -124,6 +131,22 @@ export async function landCall(realDb: RecordDb, report: CallReport): Promise<La
     alert: made.alert,
     booking: made.visit === null ? null : { visit: made.visit, dues: made.dues },
   };
+}
+
+/**
+ * The call's recording: waiting in the inbox under this firm's own path, or
+ * not kept when the report names anywhere else, including another firm's
+ * path, which would mean the firm's agent is set up wrong (docs/vapi.md).
+ */
+function recordingOf(firm: FirmId, report: CallReport): NonNullable<NewCall['recording']> | null {
+  switch (report.recording.kind) {
+    case 'none':
+      return null;
+    case 'elsewhere':
+      return { kind: 'not_kept' };
+    case 'inbox':
+      return isFirmsKey(firm, report.recording.name) ? { kind: 'waiting', from: report.recording.name } : { kind: 'not_kept' };
+  }
 }
 
 /**

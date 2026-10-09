@@ -27,6 +27,11 @@ export const REQUEUE_AFTER = 5 * 60_000;
 export const CLAIM_HOLDS_FOR = 10 * 60_000;
 /** The most rows the clock puts on the queue in one minute. */
 export const MOST_PER_MINUTE = 500;
+/**
+ * The latest time of a row that deletes something: the largest instant a
+ * date can hold, so a deletion is never skipped as too late (slice H).
+ */
+export const END_OF_TIME = instant(8_640_000_000_000_000);
 
 export interface NewDue {
   action: DueAction;

@@ -26,6 +26,8 @@ describe('readVapiMessage', () => {
           urgentMatch: 'a leak',
         },
         transcript: REPORTS['mr-price-leak'].message.artifact.transcript,
+        // The inbox's name for the recording, under the path of the firm the call is for.
+        recording: { kind: 'inbox', name: 'firms/{firm}/2a7d4b63-9f58-4c2e-8b40-1d8f3e6c9b72-mono.mp3' },
       },
     });
   });

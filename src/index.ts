@@ -37,6 +37,7 @@ function realDeps(env: Env): Deps {
     copy: copyFrom(env.COPY),
     staff: staffGate(env),
     controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
+    files: { kept: env.FILES, inbox: env.CALLS_IN },
   };
 }
 

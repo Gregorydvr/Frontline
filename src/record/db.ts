@@ -1,19 +1,27 @@
-// What every record function is given: the database and the clock. Only the
-// files in src/record/ talk to the database (rule 8 in CLAUDE.md), and lint
-// enforces it.
+// What every record function is given: the database, the file stores and
+// the clock. Only the files in src/record/ talk to the database (rule 8 in
+// CLAUDE.md), and only src/record/files.ts to the file stores; lint enforces
+// both.
 
 import { aheadBy, type Clock } from '../clock';
+import type { FileStores } from './files';
 
 export interface RecordDb {
   readonly d1: D1Database;
+  /**
+   * The file stores: the one that keeps recordings and exports, and the
+   * inbox Vapi writes recordings into. Null where nothing needs them, such
+   * as most tests; a record function that needs them refuses without.
+   */
+  readonly files: FileStores | null;
   /** The time as the firm being worked for reads it: the real time, or an example firm's own (withFirmClock()). */
   readonly clock: Clock;
   /** The system's own clock, under any firm's. */
   readonly realClock: Clock;
 }
 
-export function openRecord(d1: D1Database, clock: Clock): RecordDb {
-  return { d1, clock, realClock: clock };
+export function openRecord(d1: D1Database, clock: Clock, files: FileStores | null = null): RecordDb {
+  return { d1, files, clock, realClock: clock };
 }
 
 /**
@@ -22,7 +30,7 @@ export function openRecord(d1: D1Database, clock: Clock): RecordDb {
  * for every real firm this is the real time.
  */
 export function withFirmClock(db: RecordDb, firm: { clockAhead: number }): RecordDb {
-  return { d1: db.d1, realClock: db.realClock, clock: aheadBy(db.realClock, firm.clockAhead) };
+  return { d1: db.d1, files: db.files, realClock: db.realClock, clock: aheadBy(db.realClock, firm.clockAhead) };
 }
 
 /**

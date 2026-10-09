@@ -79,7 +79,24 @@ export type LogEvent =
   | 'customer_deleted'
   | 'example_loaded'
   | 'example_clock_moved'
-  | 'example_reset';
+  | 'example_reset'
+  // Keeping and deleting (slice H): recordings, the daily sweep, exports, a
+  // firm leaving and being deleted, and deletes done again after a restore.
+  | 'recording_not_in_inbox'
+  | 'recording_moved'
+  | 'recording_waiting'
+  | 'recording_not_kept'
+  | 'recording_deleted'
+  | 'swept'
+  | 'bin_emptied'
+  | 'firm_export_asked'
+  | 'firm_export_made'
+  | 'firm_export_failed'
+  | 'firm_export_downloaded'
+  | 'firm_leaving'
+  | 'firm_leaving_cancelled'
+  | 'firm_deleted'
+  | 'deletions_replayed';
 
 const ERROR_NAMES = [
   'Error',

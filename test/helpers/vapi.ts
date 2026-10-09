@@ -41,13 +41,34 @@ export type Report = Record<string, unknown> & { message: Record<string, unknown
 /**
  * A copy of an example report, to change without touching the file. `to` is
  * the number that was rung, so each test can have a firm of its own.
+ *
+ * The example reports name a recording in the inbox under the path of the
+ * firm the call is for, "firms/{firm}/" (docs/vapi.md). Given the firm, the
+ * copy names it there; without, the copy has no recording, as most tests
+ * need none.
  */
-export function report(name: ReportName, to?: string): Report {
+export function report(name: ReportName, to?: string, recordingOf?: FirmId): Report {
   const copy = structuredClone(REPORTS[name]) as unknown as Report;
   if (to !== undefined) {
     (copy.message.phoneNumber as Record<string, unknown>).number = to;
   }
+  const artifact = copy.message.artifact as Record<string, unknown> | undefined;
+  if (artifact !== undefined && typeof artifact.recordingUrl === 'string') {
+    if (recordingOf === undefined) {
+      delete artifact.recordingUrl;
+    } else {
+      artifact.recordingUrl = artifact.recordingUrl.replace('{firm}', recordingOf);
+    }
+  }
   return copy;
+}
+
+/** The inbox's name for the recording an example report names, for the firm it is for. */
+export function reportedRecording(name: ReportName, firm: FirmId): string {
+  const artifact = REPORTS[name].message.artifact as { recordingUrl?: string };
+  const address = artifact.recordingUrl;
+  if (address === undefined) throw new Error('This example report has no recording');
+  return new URL(address).pathname.slice(1).replace('%7Bfirm%7D', firm).replace('{firm}', firm);
 }
 
 /**

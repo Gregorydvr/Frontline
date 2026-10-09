@@ -9,7 +9,7 @@
 //       "phoneNumber": { "number" },       the number that was rung
 //       "customer": { "number" },          the number the call came from
 //       "startedAt", "endedAt",
-//       "artifact": { "transcript", ... },
+//       "artifact": { "transcript", "recordingUrl", ... },
 //       "analysis": { "summary", "structuredData": { ...the fields below } },
 //       ... } }
 //
@@ -21,6 +21,12 @@
 //
 // Only the fields read here are kept. The rest of the report, which can hold
 // the caller's details and parts of Vapi's set-up, is dropped unread.
+//
+// The recording: Vapi writes it into Front-line's inbox file store, under the
+// firm's own path, and artifact.recordingUrl names it there (docs/vapi.md).
+// Only the name inside the store is kept, never the address. That Vapi's
+// address for a file in the store ends with the store's own name for it is
+// Assumed until a real report is captured on practice.
 
 import { instantFromIso, type Instant } from './clock';
 import { callerNumber, ukMobile, type CallerNumber, type UkMobile } from './phone';
@@ -37,7 +43,19 @@ export interface CallReport {
   /** What the voice agent took down, or null when none of it came through. */
   details: CallDetails | null;
   transcript: string | null;
+  recording: ReportedRecording;
 }
+
+/**
+ * Where the report says the call's recording is:
+ * - none: no recording, such as when recording is off
+ * - inbox: in the inbox file store, under this name, such as
+ *   firms/<firm id>/<Vapi's name>.mp3. Whose firm's path it is, is checked
+ *   when the firm is known.
+ * - elsewhere: somewhere that is not the inbox, such as Vapi's own storage.
+ *   Nothing is fetched from there, and staff are shown it was not kept.
+ */
+export type ReportedRecording = { kind: 'none' } | { kind: 'inbox'; name: string } | { kind: 'elsewhere' };
 
 /** What the voice agent took down. A field that failed its check is null. */
 export type CallDetails =
@@ -93,8 +111,29 @@ export function readVapiMessage(body: unknown): VapiMessage {
       endedAt: when(field(message, 'endedAt')) ?? when(field(call, 'endedAt')),
       details: readDetails(field(field(message, 'analysis'), 'structuredData')),
       transcript: transcript === null || transcript.trim() === '' || transcript.length > CALL_LIMITS.transcript ? null : transcript,
+      recording: reportedRecording(string(field(field(message, 'artifact'), 'recordingUrl'))),
     },
   };
+}
+
+/**
+ * The inbox's name for a recording, from Vapi's address for it: the part of
+ * the path from "firms/" on. Whichever form the address takes (the store's
+ * name first in the path, or in the host), the name inside the store is the
+ * same.
+ */
+export function reportedRecording(address: string | null): ReportedRecording {
+  if (address === null || address.trim() === '') {
+    return { kind: 'none' };
+  }
+  let path: string;
+  try {
+    path = decodeURIComponent(new URL(address).pathname);
+  } catch {
+    return { kind: 'elsewhere' };
+  }
+  const at = path.indexOf('/firms/');
+  return at === -1 ? { kind: 'elsewhere' } : { kind: 'inbox', name: path.slice(at + 1) };
 }
 
 function readDetails(data: unknown): CallDetails | null {

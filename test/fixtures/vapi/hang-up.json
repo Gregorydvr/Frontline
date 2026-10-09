@@ -24,7 +24,7 @@
         }
       ],
       "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
-      "recordingUrl": "https://example.invalid/recordings/5d0a7e96-2c8b-4f51-9e73-4a1b6c9f2ea5-mono.wav"
+      "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/5d0a7e96-2c8b-4f51-9e73-4a1b6c9f2ea5-mono.mp3"
     },
     "analysis": {},
     "phoneNumber": {

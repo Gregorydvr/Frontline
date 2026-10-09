@@ -47,6 +47,9 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   },
   // Part of answering the call. The example never shows it.
   details_taken: null,
+  // A recording deleted at the end of its period (slice H). The example has
+  // no recordings, so the owner is not shown it.
+  recording_deleted: null,
   visit_booked: {
     job: '{Visit} booked for {when}.',
     feed: 'Booked {customer’s} {visit} for {when}.',

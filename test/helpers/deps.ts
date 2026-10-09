@@ -1,6 +1,8 @@
 // Pretend dependencies for tests: the pretend clock, the stand-in for texts,
-// and a queue that keeps what is put on it. Tests never reach a provider.
+// a queue that keeps what is put on it, and the local file stores. Tests
+// never reach a provider.
 
+import { env } from 'cloudflare:workers';
 import type { Clock } from '../../src/clock';
 import type { Deps } from '../../src/deps';
 import type { DueMessage, DueQueue } from '../../src/due';
@@ -43,5 +45,7 @@ export function testDeps(clock: Clock): TestDeps {
     copy: 'practice',
     staff: new StandInStaff(),
     controlAddress: CONTROL_ADDRESS,
+    // The local file stores the tests run against, kept apart between test files.
+    files: { kept: env.FILES, inbox: env.CALLS_IN },
   };
 }

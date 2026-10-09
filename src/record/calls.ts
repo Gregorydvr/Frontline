@@ -8,7 +8,9 @@ import { newId } from '../ids';
 import { isUkLandline, isUkMobile, type UkLandline, type UkMobile } from '../phone';
 import { insertCustomer } from './customers';
 import { bit, line, Refused, run, runTogether, type RecordDb } from './db';
-import { insertDue } from './due';
+import { END_OF_TIME, insertDue } from './due';
+import { isFirmsKey } from './files';
+import { PERIODS } from './periods';
 import { callEntry, historyStatement } from './history';
 import { fileHold } from './holds';
 import { insertJob } from './jobs';
@@ -46,6 +48,8 @@ export interface RecordedCall {
   /** For a call with a visit booked on it, the visit and its rows in the due list. */
   visit: VisitId | null;
   dues: DueId[];
+  /** Where the call's recording is: none, waiting in the inbox, or not kept. */
+  recording: 'none' | 'waiting' | 'not_kept';
 }
 
 /**
@@ -73,6 +77,11 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
   const urgentItem = input.urgentItem === null ? null : line(input.urgentItem, CALL_LIMITS.urgentItem);
   const summary = input.summary === null ? null : line(input.summary, CALL_LIMITS.summary);
   if (input.transcript !== null && input.transcript.length > CALL_LIMITS.transcript) {
+    throw new Refused();
+  }
+  const recording = input.recording ?? null;
+  if (recording?.kind === 'waiting' && !isFirmsKey(firm, recording.from)) {
+    // A recording under another firm's path is never this firm's.
     throw new Refused();
   }
   const booking = input.booking ?? null;
@@ -143,12 +152,26 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
     }
   }
 
+  // A recording waiting in the inbox is moved at once, and deleted at the
+  // end of its period from the end of the call, by rows written in the same
+  // step as the call. Deleting is never too late, so its row's latest time
+  // is the end of time.
+  const recordingUntil =
+    recording?.kind === 'waiting' ? instant((input.endedAt ?? input.startedAt) + PERIODS.recording) : null;
+  if (recording?.kind === 'waiting' && recordingUntil !== null) {
+    const now = db.clock.now();
+    after.push(
+      insertDue(db, firm, newId() as DueId, { action: 'move_recording', call, runAt: now, latestAt: instant(now + PERIODS.recordingMove) }),
+      insertDue(db, firm, newId() as DueId, { action: 'delete_recording', call, runAt: recordingUntil, latestAt: END_OF_TIME }),
+    );
+  }
+
   const insertCall = db.d1
     .prepare(
       `INSERT INTO calls (id, firm_id, provider, provider_call_id, started_at, ended_at, from_number,
                           customer_id, job_id, visit_id, outcome, urgent_item, caller, summary,
-                          transcript, urgent_not_on_list, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          transcript, urgent_not_on_list, recording_state, recording_from, recording_until, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       call,
@@ -167,6 +190,9 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       summary,
       input.transcript,
       bit(urgentItem === null && input.urgentNotOnList === true),
+      recording === null ? 'none' : recording.kind,
+      recording?.kind === 'waiting' ? recording.from : null,
+      recordingUntil,
       db.clock.now(),
     );
 
@@ -183,7 +209,7 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
   // A hold that is not this firm's, or no longer held, makes no visit, so
   // the call's link to it is refused, and nothing is written.
   await runTogether(db.d1, [...before, insertCall, ...after]);
-  return { call, customer, job, alert, visit, dues };
+  return { call, customer, job, alert, visit, dues, recording: recording === null ? 'none' : recording.kind };
 }
 
 function newJob(customer: CustomerId, about: string, place: string, urgentItem: string | null) {

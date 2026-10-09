@@ -21,12 +21,15 @@ import {
 const db = openRecord(env.DB, pretendClock(instantFromIso('2026-10-15T08:10:00+01:00')));
 
 describe('the tables', () => {
-  it('are the six of slice B, the calls of slice C, the sending and due list of slice D, the holds and links of slice E, the logins and messages to staff of slice F, and the staff, their log and the delete’s permission slip of slice G', async () => {
+  it('are the six of slice B, the calls of slice C, the sending and due list of slice D, the holds and links of slice E, the logins and messages to staff of slice F, the staff, their log and the delete’s permission slip of slice G, and the bin, the firm exports, the deleted firms and the staff log’s permission slip of slice H', async () => {
     expect(await recordTables(env.DB)).toEqual([
       'calls',
       'customers',
+      'deleted_firms',
       'due',
       'erasing',
+      'files_to_delete',
+      'firm_exports',
       'firms',
       'history',
       'holds',
@@ -41,15 +44,16 @@ describe('the tables', () => {
       'sessions',
       'staff',
       'staff_log',
+      'staff_log_trimming',
       'texts_in',
       'visits',
       'wording',
     ]);
   });
 
-  it('all have a firm_id that must be filled in, apart from firms itself, staff, who belong to no firm, and the staff log, whose firm is empty for a view across firms', async () => {
+  it('all have a firm_id that must be filled in, apart from firms itself, staff, who belong to no firm, the staff log, whose firm is empty for a view across firms, and the staff log’s permission slip', async () => {
     for (const table of await recordTables(env.DB)) {
-      if (table === 'firms' || table === 'staff') continue;
+      if (table === 'firms' || table === 'staff' || table === 'staff_log_trimming') continue;
       if (table === 'staff_log') {
         expect((await tableColumns(env.DB, table)).find((column) => column.name === 'firm_id')).toEqual({ name: 'firm_id', notnull: 0 });
         continue;

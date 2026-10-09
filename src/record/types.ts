@@ -22,6 +22,7 @@ declare const linkBrand: unique symbol;
 declare const loginBrand: unique symbol;
 declare const ownerMessageBrand: unique symbol;
 declare const staffLogBrand: unique symbol;
+declare const firmExportBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -45,6 +46,8 @@ export type LoginToken = Id & { readonly [loginBrand]: true };
 export type OwnerMessageId = Id & { readonly [ownerMessageBrand]: true };
 /** A row in the staff log: one view or action in the control room. */
 export type StaffLogId = Id & { readonly [staffLogBrand]: true };
+/** A file of one firm's records, made for handing over. */
+export type FirmExportId = Id & { readonly [firmExportBrand]: true };
 
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
@@ -69,6 +72,8 @@ export interface Firm {
    * 0 for every real firm. Only an example firm's clock is ever moved.
    */
   clockAhead: number;
+  /** When staff said the firm is leaving, and who: its records are handed over and deleted within 30 days. */
+  leaving: { at: Instant; by: StaffId } | null;
   createdAt: Instant;
 }
 
@@ -184,6 +189,10 @@ export type Actor =
  * - an owner using the app: logged_in and logged_out, written only by
  *   logins.ts, and owner_message_sent, for Message us, written only by
  *   owner-messages.ts. Each names the owner who did it.
+ * - a call's recording: recording_deleted, when the clock deletes it at the
+ *   end of its period and the call stays. It names the call, and the
+ *   customer and job the call is about. Written only by keeping.ts. The
+ *   owner is not shown it.
  * Later slices add their own.
  */
 export const HISTORY_KINDS = {
@@ -213,6 +222,7 @@ export const HISTORY_KINDS = {
   logged_in: 'firm',
   logged_out: 'firm',
   owner_message_sent: 'firm',
+  recording_deleted: 'recording',
 } as const;
 export type HistoryKind = keyof typeof HISTORY_KINDS;
 
@@ -315,6 +325,13 @@ export interface NewCall {
    * can be booked.
    */
   booking?: NewBooking | null;
+  /**
+   * The call's recording, from slice H: waiting in the inbox under this
+   * firm's path, to be moved into the kept store and deleted at the end of
+   * its period; or not kept, when the report named somewhere else. None
+   * when left out.
+   */
+  recording?: { kind: 'waiting'; from: string } | { kind: 'not_kept' } | null;
 }
 
 /** A hold to file as a visit, as recordCall() takes it. */
@@ -512,8 +529,29 @@ export interface TextIn {
   receivedAt: Instant;
 }
 
-/** What a row in the due list does. Slice H adds the deletions. */
-export const DUE_ACTIONS = ['alert_owner', 'send_reminder', 'send_confirmation', 'send_login_link'] as const;
+/**
+ * What a row in the due list does: send a text, or, from slice H, keep and
+ * delete what is held:
+ * - move_recording: move a call's recording from the inbox into the file
+ *   store that keeps it
+ * - delete_recording: delete a call's recording at the end of its period,
+ *   keeping the call
+ * - sweep: the firm's daily run that deletes whatever else has run past its
+ *   period (src/record/keeping.ts)
+ * - make_firm_export: build the file of a firm's records that staff asked for
+ * - delete_firm: delete a leaving firm at the end of its 30 days
+ */
+export const DUE_ACTIONS = [
+  'alert_owner',
+  'send_reminder',
+  'send_confirmation',
+  'send_login_link',
+  'move_recording',
+  'delete_recording',
+  'sweep',
+  'make_firm_export',
+  'delete_firm',
+] as const;
 export type DueAction = (typeof DUE_ACTIONS)[number];
 
 export const DUE_STATES = ['waiting', 'claimed', 'done', 'skipped', 'cancelled'] as const;
@@ -524,7 +562,22 @@ export type DueState = (typeof DUE_STATES)[number];
  * says why), or there was nothing to do because what it was about changed.
  * Skipped: it was past its latest time.
  */
-export const DUE_OUTCOMES = ['sent', 'not_sent', 'failed', 'nobody_to_tell', 'visit_changed', 'too_late', 'cancelled'] as const;
+export const DUE_OUTCOMES = [
+  'sent',
+  'not_sent',
+  'failed',
+  'nobody_to_tell',
+  'visit_changed',
+  'too_late',
+  'cancelled',
+  // Keeping and deleting (slice H): a recording kept or deleted, a sweep
+  // run, an export made, a firm deleted, or nothing left to do.
+  'kept',
+  'deleted',
+  'swept',
+  'made',
+  'nothing_to_do',
+] as const;
 export type DueOutcome = (typeof DUE_OUTCOMES)[number];
 
 export interface Due {
@@ -557,6 +610,28 @@ export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short v
 /** The firm's words in use: for each key, the newest. */
 export type FirmWording = Partial<Record<WordingKey, { id: WordingId; words: string }>>;
 
+/**
+ * Where a call's recording is: none (a call from before slice H, or one Vapi
+ * gave no recording for), waiting in the inbox to be moved, kept, not kept
+ * (it never reached the inbox, or could not be moved in time: staff are
+ * shown it), or deleted at the end of its period.
+ */
+export const RECORDING_STATES = ['none', 'waiting', 'kept', 'not_kept', 'deleted'] as const;
+export type RecordingState = (typeof RECORDING_STATES)[number];
+
+/** A call's recording, as the record holds it. */
+export interface CallRecording {
+  state: RecordingState;
+  /** The inbox's name for it, while it is on its way. */
+  from: string | null;
+  /** The kept file's name, while it is kept. */
+  key: string | null;
+  /** When it is due to be deleted. */
+  until: Instant | null;
+  /** When it was deleted. */
+  goneAt: Instant | null;
+}
+
 /** A member of Front-line's own staff. Not part of any firm. */
 export interface Staff {
   id: StaffId;
@@ -585,6 +660,17 @@ export const STAFF_ACTIONS = [
   // Actions on a customer.
   'exported_customer',
   'deleted_customer',
+  // Keeping and deleting (slice H): exporting a firm, a firm leaving and
+  // being deleted, and putting deletions right after a restore.
+  'asked_firm_export',
+  'downloaded_firm_export',
+  'viewed_leaving',
+  'marked_leaving',
+  'cancelled_leaving',
+  'viewed_firm_delete',
+  'deleted_firm',
+  'viewed_after_restore',
+  'replayed_deletions',
   // Practice and this machine only: the demo firm.
   'loaded_example',
   'moved_clock',

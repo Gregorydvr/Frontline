@@ -169,3 +169,70 @@ export async function tryToDeleteStaffLog(db: D1Database, id: string): Promise<v
 export async function tryToMoveClock(db: D1Database, firm: string): Promise<void> {
   await db.prepare('UPDATE firms SET clock_ahead = 86400000 WHERE id = ?').bind(firm).run();
 }
+
+/** The firm's rows in the due list that do one thing, such as its daily sweep, oldest first. */
+export async function dueRowsFor(db: D1Database, firm: string, action: string): Promise<Record<string, unknown>[]> {
+  const { results } = await db.prepare('SELECT * FROM due WHERE firm_id = ? AND action = ? ORDER BY created_at, rowid').bind(firm, action).all();
+  return results;
+}
+
+/** Writes a second waiting sweep for a firm straight into the database, which must refuse it. */
+export async function insertSweepPastTheRecord(db: D1Database, firm: string, id: string): Promise<void> {
+  await db
+    .prepare(`INSERT INTO due (id, firm_id, action, run_at, latest_at, state, created_at) VALUES (?, ?, 'sweep', 0, 0, 'waiting', 0)`)
+    .bind(id, firm)
+    .run();
+}
+
+/** Tries to delete a row of the list of deleted firms, which the database must refuse. */
+export async function tryToDeleteDeletedFirm(db: D1Database, firm: string): Promise<void> {
+  await db.prepare('DELETE FROM deleted_firms WHERE firm_id = ?').bind(firm).run();
+}
+
+/**
+ * Writes many calls from people who were not customers straight into the
+ * database, a hundred at a time, as a year of a busy firm's calls: each
+ * with a transcript, from `from` on, an hour apart.
+ */
+export async function insertManyCallsPastTheRecord(db: D1Database, firm: string, count: number, from: number, transcript: string): Promise<void> {
+  for (let start = 0; start < count; start += 100) {
+    const statements: D1PreparedStatement[] = [];
+    for (let at = start; at < Math.min(count, start + 100); at += 1) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO calls (id, firm_id, provider, provider_call_id, started_at, ended_at, from_number, outcome, caller, summary, transcript, created_at)
+             VALUES (?1, ?2, 'vapi', ?1, ?3, ?3, '+447700900300', 'message', 'a supplier', 'Your order is ready to collect.', ?4, ?3)`,
+          )
+          .bind(`year-${firm}-${String(at).padStart(5, '0')}`, firm, from + at * 3_600_000, transcript),
+      );
+    }
+    await db.batch(statements);
+  }
+}
+
+/**
+ * Puts a firm's rows back as they were when `snapshot` was taken by
+ * firmRows(), as a restore of the database to that point does: rows deleted
+ * since are written again, and a call's recording is as it was then. Rows
+ * still there are left. Tables are written in the order their links need.
+ */
+export async function putBackAsARestore(db: D1Database, snapshot: Record<string, unknown[]>): Promise<void> {
+  const order = ['firms', 'owners', 'wording', 'customers', 'jobs', 'visits', 'calls', 'holds', 'opt_outs', 'opted_out_numbers', 'texts_in', 'due', 'links', 'login_links', 'sessions', 'messages', 'owner_messages', 'firm_exports', 'history'];
+  for (const table of order) {
+    for (const row of (snapshot[table] ?? []) as Record<string, unknown>[]) {
+      const columns = Object.keys(row);
+      // Table and column names come from the database itself, not from a caller.
+      await db
+        .prepare(`INSERT OR IGNORE INTO "${table}" (${columns.map((column) => `"${column}"`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`)
+        .bind(...columns.map((column) => row[column] ?? null))
+        .run();
+    }
+  }
+  for (const row of (snapshot.calls ?? []) as Record<string, unknown>[]) {
+    await db
+      .prepare('UPDATE calls SET recording_state = ?, recording_key = ?, recording_from = ?, recording_gone_at = ? WHERE id = ?')
+      .bind(row.recording_state ?? 'none', row.recording_key ?? null, row.recording_from ?? null, row.recording_gone_at ?? null, row.id)
+      .run();
+  }
+}

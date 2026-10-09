@@ -13,6 +13,18 @@
 //   booked, with their link if it is the first text the firm sends them
 // - send_reminder: text the customer the reminder for a visit tomorrow
 // - send_login_link: text an owner the link they asked for to log in
+// - move_recording: move a call's recording from the inbox into the kept
+//   store; it waits while the recording is not there yet, and past its
+//   latest time the call is marked not kept, for staff to see
+// - delete_recording: delete a call's recording at the end of its period,
+//   keeping the call
+// - sweep: the firm's daily run that deletes whatever else has run past its
+//   period; it runs again soon when there is more than one run deletes
+// - make_firm_export: make the file of a firm's records staff asked for
+// - delete_firm: delete a leaving firm at the end of its 30 days. The row
+//   goes with the firm, so it is not marked done
+//
+// A row that deletes is never too late: its latest time is the end of time.
 
 import type { Instant } from './clock';
 import type { Deps } from './deps';
@@ -23,8 +35,14 @@ import { VISIT_PURPOSES } from './messages';
 import { errorName, log } from './log';
 import { nationalNumber } from './phone';
 import {
+  addMissingSweeps,
   claimDue,
+  deleteLeftFirm,
+  deleteRecording,
   findDue,
+  giveUpRecording,
+  moveRecording,
+  sweepFirm,
   finishDue,
   getCall,
   getCustomer,
@@ -41,8 +59,13 @@ import {
 import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import type { ClaimedDue, DueId, DueOutcome, FirmId } from './record/types';
 import { send, type SendResult } from './send';
+import { makeFirmExport } from './firm-export';
 
-/** What running a row needs from outside: the texts provider, and where customers' links and the owner's app are. */
+/**
+ * What running a row needs from outside: the texts provider, and where
+ * customers' links and the owner's app are. The file stores come with the
+ * record it is given.
+ */
 export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress'>>;
 
 /** What goes on the queue for each row: ids only. */
@@ -64,9 +87,14 @@ export type Ran =
   /** Another worker has it, or it is finished, cancelled or not yet due. Nothing was done. */
   | { ran: 'not_ours' };
 
-/** Every minute: puts the rows that are due, for every firm, on the queue. Gives how many. */
+/**
+ * Every minute: gives any firm without one its daily sweep, then puts the
+ * rows that are due, for every firm, on the queue. Gives how many.
+ */
 export async function everyMinute(d1: D1Database, deps: Deps): Promise<number> {
-  const due = await findDue(openRecord(d1, deps.clock));
+  const db = openRecord(d1, deps.clock, deps.files);
+  await addMissingSweeps(db);
+  const due = await findDue(db);
   // A queue takes at most 100 messages at once.
   for (let start = 0; start < due.length; start += 100) {
     await deps.queue.sendBatch(due.slice(start, start + 100).map((body) => ({ body })));
@@ -87,7 +115,7 @@ export async function onQueue(batch: MessageBatch, d1: D1Database, deps: Deps): 
     const body = dueMessage(message.body);
     if (body !== null) {
       try {
-        await runDue(openRecord(d1, deps.clock), deps, body.firm, body.due);
+        await runDue(openRecord(d1, deps.clock, deps.files), deps, body.firm, body.due);
       } catch (thrown) {
         log('due_failed', { firm: body.firm, due: body.due, error: errorName(thrown) });
       }
@@ -111,10 +139,20 @@ export async function runDue(realDb: RecordDb, deps: DueDeps, firm: FirmId, due:
   if (db.clock.now() > row.latestAt) {
     await finishDue(db, firm, due, row.claim, 'too_late');
     log('due_too_late', { firm, due });
+    if (row.action === 'move_recording' && row.call !== null) {
+      // Moving it is no longer worth trying: staff are shown it was not kept.
+      await giveUpRecording(db, firm, row.call);
+      log('recording_not_kept', { firm, call: row.call });
+    }
     return { ran: 'skipped', outcome: 'too_late' };
   }
 
   const outcome = await act(db, deps, firm, row);
+  if (row.action === 'delete_firm' && outcome === 'deleted') {
+    // The row went with the firm: there is nothing left to mark done.
+    log('firm_deleted', { firm, due });
+    return { ran: 'done', outcome };
+  }
   if (typeof outcome === 'object') {
     // Held: back to wait, or, after quiet hours, until 8am. A row whose
     // latest time comes before then is skipped now.
@@ -149,6 +187,55 @@ async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): 
       return sendReminder(db, deps, firm, row);
     case 'send_login_link':
       return sendLoginLink(db, deps, firm, row);
+    case 'move_recording':
+      return moveTheRecording(db, firm, row);
+    case 'delete_recording':
+      return deleteTheRecording(db, firm, row);
+    case 'sweep':
+      return sweep(db, firm);
+    case 'make_firm_export':
+      return exportTheFirm(db, firm);
+    case 'delete_firm':
+      return deleteLeftFirm(db, firm);
+  }
+}
+
+/** Moves a call's recording from the inbox into the kept store, or waits for it to arrive. */
+async function moveTheRecording(db: RecordDb, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
+  if (row.call === null) return 'nothing_to_do';
+  const moved = await moveRecording(db, firm, row.call);
+  if (moved === 'waiting') {
+    log('recording_waiting', { firm, call: row.call });
+    return { until: null };
+  }
+  if (moved === 'kept') log('recording_moved', { firm, call: row.call });
+  return moved;
+}
+
+/** Deletes a call's recording at the end of its period. The call stays. */
+async function deleteTheRecording(db: RecordDb, firm: FirmId, row: ClaimedDue): Promise<DueOutcome> {
+  if (row.call === null) return 'nothing_to_do';
+  const deleted = await deleteRecording(db, firm, row.call);
+  if (deleted === 'deleted') log('recording_deleted', { firm, call: row.call });
+  return deleted;
+}
+
+/** The firm's daily sweep. When there is more than one run deletes, the row waits and runs again soon. */
+async function sweep(db: RecordDb, firm: FirmId): Promise<DueOutcome | Held> {
+  const swept = await sweepFirm(db, firm);
+  log('swept', { firm, ...swept.counts });
+  return swept.more ? { until: null } : 'swept';
+}
+
+/** Makes the firm's export that staff asked for. */
+async function exportTheFirm(db: RecordDb, firm: FirmId): Promise<DueOutcome> {
+  try {
+    const made = await makeFirmExport(db, firm);
+    if (made === 'made') log('firm_export_made', { firm });
+    return made;
+  } catch (thrown) {
+    log('firm_export_failed', { firm, error: errorName(thrown) });
+    throw thrown;
   }
 }
 

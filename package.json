@@ -16,6 +16,7 @@
     "check:screens": "node scripts/screens.js"
   },
   "dependencies": {
+    "fflate": "0.8.2",
     "hono": "4.13.13"
   },
   "devDependencies": {

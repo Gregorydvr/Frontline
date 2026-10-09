@@ -175,6 +175,23 @@ export function callEntry(
 }
 
 /**
+ * The statement for the entry that a call's recording was deleted at the end
+ * of its period, by Front-line, about the call and its customer and job.
+ * Only keeping.ts uses it, in the same step as the call is marked: it writes
+ * nothing unless the call was deleted at exactly `goneAt`, so running the
+ * delete again writes no second entry.
+ */
+export function recordingEntry(db: RecordDb, firm: FirmId, call: CallId, goneAt: number): D1PreparedStatement {
+  return db.d1
+    .prepare(
+      `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, call_id)
+       SELECT ?1, ?2, ?3, ${NEXT_SEQ}, 'frontline', NULL, NULL, 'recording_deleted', k.customer_id, k.job_id, k.id
+       FROM calls k WHERE k.firm_id = ?2 AND k.id = ?4 AND k.recording_state = 'deleted' AND k.recording_gone_at = ?3`,
+    )
+    .bind(newId(), firm, goneAt, call);
+}
+
+/**
  * The statement for an entry about a customer opting out of a kind of text,
  * or back in. Only opt-outs.ts and texts-in.ts use it, in the same step as
  * the change. One made by a customer's STOP or START text also names the job

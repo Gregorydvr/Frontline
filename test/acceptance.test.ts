@@ -24,8 +24,10 @@ import { LINK_ADDRESS, testDeps } from './helpers/deps';
 import { asAnotherCall, report, send, sendTool, tidewell, toolAnswer, toolCall, withDetails, type Report } from './helpers/vapi';
 
 const clock = pretendClock(instantFromIso('2026-09-28T11:14:00+01:00'));
-const db = openRecord(env.DB, clock);
 const deps = testDeps(clock);
+// With the file stores, as the queue's worker has them, since the daily
+// sweep comes due as the story's days go by.
+const db = openRecord(env.DB, clock, deps.files);
 const app = createApp(() => deps);
 const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
 const frontline = { kind: 'frontline' } as const;

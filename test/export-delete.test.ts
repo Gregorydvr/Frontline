@@ -13,6 +13,7 @@
 // The second firm's Miss Quill, with the same name and mobile, is untouched.
 
 import { env } from 'cloudflare:workers';
+import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { instantFromIso, pretendClock } from '../src/clock';
@@ -31,13 +32,16 @@ import {
   listJobsForCustomer,
   listOwners,
   logStaff,
+  moveRecording,
+  placeInInbox,
   recordCall,
   recordOwnerMessage,
   recordTextIn,
   releaseHold,
 } from '../src/record';
 import { openRecord, Refused } from '../src/record/db';
-import type { CustomerId, FirmId, StaffId } from '../src/record/types';
+import type { CallId, CustomerId, FirmId, StaffId } from '../src/record/types';
+import { localFiles, namesIn } from './helpers/files';
 import { controlForm, controlOpener } from './helpers/control';
 import { firmRows, rowsHolding, staffLogRows, tryToDeleteHistory, tryToDeleteStaffLog, tryToEditStaffLog } from './helpers/db';
 import { testDeps } from './helpers/deps';
@@ -55,6 +59,10 @@ const EMAIL = 'quill@example.com';
 const SAID = 'The hall radiator is cold.';
 const TRANSCRIPT = 'Caller: the hall radiator is cold, can someone come and look?';
 const TEXTED = 'Quill here, thank you.';
+const RECORDED = 'Invented bytes standing for her recording.';
+/** Her recorded call, in each firm. */
+const recordings = new Map<FirmId, CallId>();
+const withFiles = openRecord(env.DB, clock, localFiles());
 
 let a: FirmId;
 let b: FirmId;
@@ -88,6 +96,25 @@ async function missQuill(firm: FirmId): Promise<{ customer: CustomerId; ids: str
   if (first.customer === null || first.job === null) throw new Error('No customer');
   const customer = first.customer;
   ids.push(customer, first.job, first.call);
+
+  // A call of hers with its recording, kept in the file store (slice H).
+  const inbox = `firms/${firm}/quill-mono.mp3`;
+  await placeInInbox(withFiles, firm, inbox, new TextEncoder().encode(RECORDED));
+  const recorded = await recordCall(db, firm, {
+    provider: 'vapi',
+    providerCallId: `quill-${firm}-recorded`,
+    startedAt: clock.now(),
+    endedAt: clock.now(),
+    from: ukMobile(MOBILE),
+    for: { kind: 'customer', customer, about: 'Cold radiator again', place: ADDRESS },
+    urgentItem: null,
+    summary: SAID,
+    transcript: TRANSCRIPT,
+    recording: { kind: 'waiting', from: inbox },
+  });
+  expect(await moveRecording(withFiles, firm, recorded.call)).toBe('kept');
+  ids.push(recorded.call);
+  recordings.set(firm, recorded.call);
 
   // A quote visit, its confirmation (her first text, with her link), and her details confirmed from it.
   const visit = await createVisit(db, firm, { job: first.job, startsAt: instantFromIso('2026-10-19T09:00:00+01:00'), kind: 'quote_visit' });
@@ -168,17 +195,23 @@ describe('exporting a customer', () => {
 
     const answer = await open(`/control/firms/${a}/customers/${quill}/export`, controlForm({}));
     expect(answer.status).toBe(200);
-    expect(answer.headers.get('Content-Disposition')).toBe(`attachment; filename="frontline-export-${a}-${quill}.json"`);
+    expect(answer.headers.get('Content-Disposition')).toBe(`attachment; filename="frontline-export-${a}-${quill}.zip"`);
+    expect(answer.headers.get('Content-Type')).toBe('application/zip');
     expect(answer.headers.get('Cache-Control')).toBe('no-store');
-    const file = await answer.json<{
+    const zip = unzipSync(new Uint8Array(await answer.arrayBuffer()));
+    const file = JSON.parse(strFromU8(zip['customer.json'] ?? new Uint8Array(0))) as {
       tables: Record<string, Record<string, unknown>[]>;
       ownerMessagesNamingThem: Record<string, unknown>[];
       historyAsTheOwnerReadsIt: { at: string; line: string | null }[];
-    }>();
+    };
     for (const { table, row } of before) {
       const exported = table === 'owner_messages' ? file.ownerMessagesNamingThem : (file.tables[table] ?? []);
       expect(exported, table).toContainEqual(asExported(row));
     }
+    // And her recording, as it is kept.
+    const recorded = recordings.get(a);
+    expect(strFromU8(zip[`recordings/${recorded ?? ''}.mp3`] ?? new Uint8Array(0))).toBe(RECORDED);
+    expect(Object.keys(zip).sort()).toEqual(['customer.json', `recordings/${recorded ?? ''}.mp3`]);
     // And the rows that hold none of her details but are about her: the due list's rows and her opt-outs.
     expect(file.tables.due?.length).toBeGreaterThanOrEqual(3);
     expect(file.tables.opt_outs).toMatchObject([{ customer_id: quill, kind: 'every' }]);
@@ -230,6 +263,9 @@ describe('deleting a customer', () => {
       { firm_id: a, mobile: MOBILE, at: expect.any(Number) as number },
     ]);
     expect(await getCustomer(db, a, quill)).toBeNull();
+    // Her recording is gone from the file store, and nothing is left in the bin.
+    expect(await namesIn(localFiles().kept, `firms/${a}/calls/`)).toEqual([]);
+    expect(await namesIn(localFiles().inbox, `firms/${a}/`)).toEqual([]);
     // The delete is recorded, with who did it.
     expect((await staffLogRows(env.DB)).at(-1)).toMatchObject({ firm_id: a, what: 'deleted_customer', customer_id: quill, staff_id: staff });
     // A later customer on her mobile still gets no text: her STOP stands.
@@ -238,7 +274,8 @@ describe('deleting a customer', () => {
 
   it('leaves the other firm’s customer of the same name and number untouched', async () => {
     expect(await getCustomer(db, b, twin)).toMatchObject({ name: NAME, mobile: MOBILE });
-    expect(await listJobsForCustomer(db, b, twin)).toHaveLength(2);
+    expect(await namesIn(localFiles().kept, `firms/${b}/calls/`)).toEqual([`firms/${b}/calls/${recordings.get(b) ?? ''}.mp3`]);
+    expect(await listJobsForCustomer(db, b, twin)).toHaveLength(3);
     expect(await rowsHolding(env.DB, b, [twin])).not.toEqual([]);
   });
 

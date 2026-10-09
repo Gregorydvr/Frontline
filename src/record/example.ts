@@ -6,6 +6,8 @@
 
 import { instant, type Instant } from '../clock';
 import { Refused, runTogether, type RecordDb } from './db';
+import { eraseFirmStatements } from './erase';
+import { deleteAllFiles } from './files';
 import { staffLogStatement } from './staff';
 import type { FirmId, StaffId } from './types';
 
@@ -34,49 +36,24 @@ export async function setExampleClock(
   await runTogether(db.d1, [db.d1.prepare('UPDATE firms SET clock_ahead = ?2 WHERE id = ?1').bind(firm, ahead), logged]);
 }
 
-// Every table that holds a firm's rows, in the order the delete removes them,
-// so nothing is removed before what points at it. The firm's own row goes
-// last. A test fails when a table is added that is not here.
-export const FIRM_TABLES = [
-  'history',
-  'messages',
-  'links',
-  'login_links',
-  'sessions',
-  'due',
-  'texts_in',
-  'opt_outs',
-  'opted_out_numbers',
-  'holds',
-  'calls',
-  'visits',
-  'jobs',
-  'customers',
-  'wording',
-  'owner_messages',
-  'owners',
-] as const;
+export { FIRM_TABLES } from './erase';
 
 /**
- * Deletes an example firm and everything in it, in one step, so the example
- * can be loaded fresh. Refused for a firm that is not an example, and nothing
- * is deleted. The staff log keeps who did it.
+ * Deletes an example firm and everything in it, so the example can be loaded
+ * fresh: its rows in one step, and any files it has. Refused for a firm that
+ * is not an example, and nothing is deleted. The staff log keeps who did it.
  */
 export async function deleteExampleFirm(db: RecordDb, firm: FirmId, staff: StaffId): Promise<void> {
   const isExample = await db.d1.prepare('SELECT 1 AS yes FROM firms WHERE id = ? AND is_example = 1').bind(firm).first<{ yes: number }>();
   if (isExample === null) {
     throw new Refused();
   }
+  // The demo firm's files, such as a recording of a call played on this
+  // machine. Without a file store, as in most tests, it has none.
+  if (db.files !== null) {
+    await deleteAllFiles(db, firm, 'kept');
+    await deleteAllFiles(db, firm, 'inbox');
+  }
   const [, logged] = staffLogStatement(db, firm, staff, 'reset_example');
-  // Every statement also checks the firm is an example, so nothing of a real
-  // firm could go even if the check above were wrong.
-  const onlyAnExample = 'EXISTS (SELECT 1 FROM firms WHERE id = ?1 AND is_example = 1)';
-  await runTogether(db.d1, [
-    logged,
-    db.d1.prepare(`INSERT INTO erasing (firm_id) SELECT ?1 WHERE ${onlyAnExample}`).bind(firm),
-    // The table names come from the fixed list above, never from a caller.
-    ...FIRM_TABLES.map((table) => db.d1.prepare(`DELETE FROM ${table} WHERE firm_id = ?1 AND ${onlyAnExample}`).bind(firm)),
-    db.d1.prepare('DELETE FROM erasing WHERE firm_id = ?1').bind(firm),
-    db.d1.prepare('DELETE FROM firms WHERE id = ?1 AND is_example = 1').bind(firm),
-  ]);
+  await runTogether(db.d1, [logged, ...eraseFirmStatements(db, firm, 'example')]);
 }

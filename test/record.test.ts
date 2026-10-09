@@ -67,6 +67,7 @@ describe('firms', () => {
       urgentList: [],
       diaryRules: null,
       clockAhead: 0,
+      leaving: null,
       createdAt: instantFromIso('2026-10-15T08:10:00+01:00'),
     });
   });
