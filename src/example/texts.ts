@@ -1,7 +1,7 @@
 // The demo firm's texts in plain text, for /local/texts on this machine only:
 // what went out through the stand-in, what was not sent and why, and what came
-// in. For checking the record by eye. Staff see texts in the control room,
-// which comes in slice G.
+// in. For checking the record by eye. Staff see texts in the control room
+// (/control).
 
 import { instantFromIso } from '../clock';
 import { clock24, shortDate } from '../london';

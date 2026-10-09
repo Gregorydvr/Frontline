@@ -28,7 +28,7 @@ import {
   releaseHold,
 } from './record';
 import type { RecordedCall } from './record/calls';
-import { Refused, type RecordDb } from './record/db';
+import { Refused, withFirmClock, type RecordDb } from './record/db';
 import type { CallFor, CallId, Customer, DueId, Firm, FirmId, NewBooking, VisitId } from './record/types';
 import type { CallDetails, CallReport } from './vapi-report';
 
@@ -43,13 +43,16 @@ export type Landed =
   /** No firm has the number that was rung. Nothing was kept. */
   | { result: 'unknown_number' };
 
-export async function landCall(db: RecordDb, report: CallReport): Promise<Landed> {
-  const firmId = report.firmNumber === null ? null : await findFirmByNumber(db, report.firmNumber);
-  const firm = firmId === null ? null : await getFirm(db, firmId);
+export async function landCall(realDb: RecordDb, report: CallReport): Promise<Landed> {
+  const firmId = report.firmNumber === null ? null : await findFirmByNumber(realDb, report.firmNumber);
+  const firm = firmId === null ? null : await getFirm(realDb, firmId);
   if (firm === null) {
     log('call_for_unknown_number');
     return { result: 'unknown_number' };
   }
+  // From here on, the time is as the firm reads it (its own clock, if it is
+  // an example firm moved on in the control room).
+  const db = withFirmClock(realDb, firm);
 
   const already = await findCallByProviderId(db, firm.id, 'vapi', report.providerCallId);
   if (already !== null) {
@@ -82,6 +85,7 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
       from: report.from.kind === 'withheld' ? null : report.from.number,
       for: forWhom,
       urgentItem,
+      urgentNotOnList: urgentNotOnList(report.details, urgentItem),
       summary: report.details?.summary ?? null,
       transcript: report.transcript,
       booking,
@@ -105,7 +109,7 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
     // caller may have been told a time.
     log('hold_released', { firm: firm.id, call: made.call, hold: hold.id });
   }
-  if (report.details?.callerType === 'customer' && report.details.urgentMatch !== null && urgentItem === null) {
+  if (urgentNotOnList(report.details, urgentItem)) {
     log('urgent_not_on_list', { firm: firm.id, call: made.call });
   }
   if (!firm.services.calls) {
@@ -189,4 +193,9 @@ async function customersOn(db: RecordDb, firm: FirmId, from: CallerNumber): Prom
 function sameWords(a: string, b: string): boolean {
   const plain = (words: string) => words.replace(/\s+/g, ' ').trim().toLowerCase();
   return plain(a) === plain(b);
+}
+
+/** Whether the voice agent said a customer's call was urgent, for something not on the firm's urgent list. */
+function urgentNotOnList(details: CallDetails | null, urgentItem: string | null): boolean {
+  return details?.callerType === 'customer' && details.urgentMatch !== null && urgentItem === null;
 }

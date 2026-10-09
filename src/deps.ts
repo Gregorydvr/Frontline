@@ -1,6 +1,16 @@
 import type { Clock } from './clock';
 import type { DueQueue } from './due';
+import type { StaffGate } from './providers/access';
 import type { Texts } from './providers/texts';
+
+/**
+ * Which copy of the system this is: this machine, practice or live. Only
+ * src/local.ts says "local". src/index.ts reads the COPY setting, and
+ * anything but "practice", a missing setting included, counts as live, so a
+ * slip in set-up hides the practice-only parts of the control room rather
+ * than showing them.
+ */
+export type Copy = 'local' | 'practice' | 'live';
 
 /**
  * What the system is given from outside, so that tests can give it pretend
@@ -24,6 +34,21 @@ export interface Deps {
    * then no login text goes, and the alert goes without its link.
    */
   appAddress: string | null;
+  /** Which copy this is. The demo firm's clock and its reset are only on this machine and practice. */
+  copy: Copy;
+  /** Who the member of staff looking at the control room is: Cloudflare Access's check, or a stand-in on this machine. */
+  staff: StaffGate;
+  /**
+   * Where the control room is served, such as https://control.example, with
+   * no slash at the end. It answers there and nowhere else. Null until this
+   * copy has one: then the control room is shut.
+   */
+  controlAddress: string | null;
+}
+
+/** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */
+export function copyFrom(setting: string | undefined): Copy {
+  return setting === 'practice' ? 'practice' : 'live';
 }
 
 /** An address from a copy's setting, such as LINK_ADDRESS or PUBLIC_ADDRESS: no slash at the end, and null when empty. */

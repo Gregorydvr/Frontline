@@ -21,6 +21,7 @@ declare const holdBrand: unique symbol;
 declare const linkBrand: unique symbol;
 declare const loginBrand: unique symbol;
 declare const ownerMessageBrand: unique symbol;
+declare const staffLogBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -42,6 +43,8 @@ export type LinkToken = Id & { readonly [linkBrand]: true };
 export type LoginToken = Id & { readonly [loginBrand]: true };
 /** What an owner wrote in Message us. */
 export type OwnerMessageId = Id & { readonly [ownerMessageBrand]: true };
+/** A row in the staff log: one view or action in the control room. */
+export type StaffLogId = Id & { readonly [staffLogBrand]: true };
 
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
@@ -61,6 +64,11 @@ export interface Firm {
   urgentList: readonly string[];
   /** When visits can be booked, and how long each kind takes. Null: no times are offered. */
   diaryRules: DiaryRules | null;
+  /**
+   * How far ahead of the real time the firm's clock runs, in milliseconds:
+   * 0 for every real firm. Only an example firm's clock is ever moved.
+   */
+  clockAhead: number;
   createdAt: Instant;
 }
 
@@ -296,6 +304,8 @@ export interface NewCall {
   for: CallFor;
   /** The item on the firm's urgent list that the call matched, which makes it urgent. */
   urgentItem: string | null;
+  /** The voice agent said it was urgent, for something not on the firm's list, so it is not. Shown to staff. */
+  urgentNotOnList?: boolean;
   summary: string | null;
   transcript: string | null;
   /**
@@ -546,3 +556,49 @@ export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short v
 
 /** The firm's words in use: for each key, the newest. */
 export type FirmWording = Partial<Record<WordingKey, { id: WordingId; words: string }>>;
+
+/** A member of Front-line's own staff. Not part of any firm. */
+export interface Staff {
+  id: StaffId;
+  /** The email Cloudflare Access vouched for. Never logged (rule 11). */
+  email: string;
+  createdAt: Instant;
+}
+
+/**
+ * What a member of staff viewed or did in the control room, as the staff log
+ * keeps it (rule 15). Each names the firm, apart from viewing the list of
+ * firms, and some the customer.
+ */
+export const STAFF_ACTIONS = [
+  // Views.
+  'viewed_firms',
+  'viewed_firm',
+  'searched_customers',
+  'viewed_customer',
+  'viewed_delete',
+  // Actions on a firm.
+  'service_on',
+  'service_off',
+  'stop_on',
+  'stop_off',
+  // Actions on a customer.
+  'exported_customer',
+  'deleted_customer',
+  // Practice and this machine only: the demo firm.
+  'loaded_example',
+  'moved_clock',
+  'reset_example',
+] as const;
+export type StaffAction = (typeof STAFF_ACTIONS)[number];
+
+/** A row of the staff log, as read back. */
+export interface StaffLogEntry {
+  id: StaffLogId;
+  firm: FirmId | null;
+  staff: StaffId;
+  at: Instant;
+  what: StaffAction;
+  customer: CustomerId | null;
+  service: Service | null;
+}

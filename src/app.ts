@@ -21,8 +21,9 @@ import {
   recordDelivery,
   recordTextIn,
 } from './record';
+import { controlRoutes } from './control-room';
 import { ownerRoutes } from './owner-app';
-import { openRecord, type RecordDb } from './record/db';
+import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import { CUSTOMER_LIMITS, TEXT_LIMITS } from './record/types';
 import { DETAILS_HEADERS, detailsPage, detailsSavedPage, formFromRecord, linkExpiredPage, type DetailsForm } from './screens/details';
 import { bearerToken, sameSecret } from './secret';
@@ -216,6 +217,9 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   // The owner's app: logging in, and the owner's screens (src/owner-app.ts).
   ownerRoutes(app);
 
+  // The control room, for Front-line's own staff (src/control-room.ts).
+  controlRoutes(app);
+
   app.onError((thrown, c) => {
     // A refusal on purpose, such as a 401 from an auth check, keeps its own
     // answer and is not an error.
@@ -271,7 +275,7 @@ async function toolRoute(c: Context<AppEnv>, tool: (typeof TOOL_NAMES)[keyof typ
     log('tool_call_for_unknown_number');
     return c.json({}, 404);
   }
-  const diary = ownDiary(db);
+  const diary = ownDiary(withFirmClock(db, firm));
   const call = message.providerCallId === null ? null : { provider: 'vapi', providerCallId: message.providerCallId } as const;
   const results = [];
   for (const toolCall of message.calls) {

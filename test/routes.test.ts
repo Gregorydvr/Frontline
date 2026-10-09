@@ -31,6 +31,7 @@ import { openRecord } from '../src/record/db';
 import type { FirmId } from '../src/record/types';
 import { firmRows } from './helpers/db';
 import { LINK_ADDRESS, testDeps } from './helpers/deps';
+import { controlForm, controlOpener } from './helpers/control';
 import { form, opener, ownerCookie } from './helpers/owner';
 import { postToTwilioRoute, pretendTwilio, twilioFields } from './helpers/twilio';
 import { report, send, sendTool, toolAnswer, toolCall, withDetails } from './helpers/vapi';
@@ -46,6 +47,8 @@ const TAKES_NO_FIRM: Record<string, string> = {
   'GET /local/texts': 'This machine only. Shows the example firm and takes nothing from the request.',
   'GET /local/book': 'This machine only. Shows a button, and takes nothing from the request.',
   'POST /local/book': 'This machine only. Plays a call to the example firm through the real addresses, and takes nothing from the request.',
+  'GET /control': 'The control room’s list of every firm, for staff only: how staff choose a firm. It takes nothing from the request.',
+  'POST /control/example': 'Practice and this machine only: loads the demo firm when there is none. It takes nothing from the request.',
 };
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -62,7 +65,10 @@ let firms: Promise<{ a: FirmId; b: FirmId }> | null = null;
  */
 function twoFirms(): Promise<{ a: FirmId; b: FirmId }> {
   firms ??= (async () => {
-    const a = await loadExample(env.DB);
+    // The first firm is not marked as an example here, so its texts go
+    // through Twilio's version, as a real firm's do: an example firm's texts
+    // only ever go to the stand-in.
+    const a = await loadExample(env.DB, { name: 'Tidewell Heating', isExample: false, number: '07700 900100' });
     const b = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false, number: '07700 900200' });
     // The second firm's owner has a mobile of their own, so a login link asked
     // for on it can only be the second firm's.
@@ -101,8 +107,51 @@ async function screenOfB(path: string): Promise<void> {
   expect(await firmRows(env.DB, a)).toEqual(before);
 }
 
+/**
+ * A control-room address asked under the second firm, naming the first
+ * firm's customers where it takes one: it shows nothing of the first firm's,
+ * and leaves the first firm as it was (its staff log apart, which is
+ * written only by what was done under it).
+ */
+async function controlAsB(path: (b: FirmId, customerOfA: string) => string, init: (customerOfA: { name: string }) => RequestInit = () => ({}), status: number[] = [200, 303, 404]): Promise<void> {
+  const { a, b } = await twoFirms();
+  const before = withoutStaffLog(await firmRows(env.DB, a));
+  const open = controlOpener(createApp(deps));
+  for (const customer of await listCustomers(db, a)) {
+    const answer = await open(path(b, customer.id), init(customer));
+    expect(status).toContain(answer.status);
+    const words = await answer.text();
+    expect(words).not.toContain('Tidewell Heating');
+    expect(words).not.toContain(customer.id);
+    expect(words).not.toContain(a);
+  }
+  expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+}
+
+function withoutStaffLog(rows: Record<string, unknown[]>): Record<string, unknown[]> {
+  return Object.fromEntries(Object.entries(rows).filter(([table]) => table !== 'staff_log'));
+}
+
 /** Routes that take a firm, each with its cross-firm case. */
 const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
+  // The control room: the firm is in the address, and every record function
+  // is given it. The first firm's customers, asked for under the second
+  // firm, are "not found", and nothing of the first firm's changes.
+  'GET /control/firms/:firm': () => controlAsB((b) => `/control/firms/${b}`),
+  'POST /control/firms/:firm/service': () => controlAsB((b) => `/control/firms/${b}/service`, () => controlForm({ service: 'quotes', on: '1' })),
+  'POST /control/firms/:firm/stop': () => controlAsB((b) => `/control/firms/${b}/stop`, () => controlForm({ on: '0' })),
+  'GET /control/firms/:firm/customers': () => controlAsB((b) => `/control/firms/${b}/customers?q=mr`),
+  'GET /control/firms/:firm/customers/:customer': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}`, undefined, [404]),
+  'POST /control/firms/:firm/customers/:customer/export': () =>
+    controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/export`, () => controlForm({}), [404]),
+  'GET /control/firms/:firm/customers/:customer/delete': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, undefined, [404]),
+  'POST /control/firms/:firm/customers/:customer/delete': () =>
+    controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, (customer) => controlForm({ name: customer.name }), [200]),
+  // Neither firm here is an example, so the demo firm's tools are "not found" for both.
+  'POST /control/firms/:firm/clock': () => controlAsB((b) => `/control/firms/${b}/clock`, () => controlForm({ by: 'day' }), [404]),
+  'GET /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, undefined, [404]),
+  'POST /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, () => controlForm({}), [404]),
+
   // The owner's screens take the firm from the login, and nothing else.
   'GET /': () => screenOfB('/'),
   'GET /calls': () => screenOfB('/calls'),
@@ -346,7 +395,7 @@ describe('every route', () => {
     }
   });
 
-  it('in the deployed version is /health, the addresses Vapi and Twilio call, the customer’s page, and the owner’s app', () => {
+  it('in the deployed version is /health, the addresses Vapi and Twilio call, the customer’s page, the owner’s app, and the control room', () => {
     expect(routesOf(createApp(deps))).toEqual([
       'GET /health',
       'POST /vapi/server',
@@ -370,6 +419,19 @@ describe('every route', () => {
       'GET /rules',
       'GET /message',
       'POST /message',
+      'GET /control',
+      'POST /control/example',
+      'GET /control/firms/:firm',
+      'POST /control/firms/:firm/service',
+      'POST /control/firms/:firm/stop',
+      'GET /control/firms/:firm/customers',
+      'GET /control/firms/:firm/customers/:customer',
+      'POST /control/firms/:firm/customers/:customer/export',
+      'GET /control/firms/:firm/customers/:customer/delete',
+      'POST /control/firms/:firm/customers/:customer/delete',
+      'POST /control/firms/:firm/clock',
+      'GET /control/firms/:firm/reset',
+      'POST /control/firms/:firm/reset',
     ]);
   });
 

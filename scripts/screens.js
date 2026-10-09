@@ -111,7 +111,20 @@ async function main() {
   if (migrate.status !== 0) throw new Error(`The migrations did not apply:\n${migrate.stderr}`);
   const worker = spawn(
     WRANGLER,
-    ['dev', 'src/local.ts', '--port', String(PORT), '--persist-to', state, '--var', `PUBLIC_ADDRESS:${ADDRESS}`, '--var', `LINK_ADDRESS:${ADDRESS}`],
+    [
+      'dev',
+      'src/local.ts',
+      '--port',
+      String(PORT),
+      '--persist-to',
+      state,
+      '--var',
+      `PUBLIC_ADDRESS:${ADDRESS}`,
+      '--var',
+      `LINK_ADDRESS:${ADDRESS}`,
+      '--var',
+      `CONTROL_ADDRESS:${ADDRESS}`,
+    ],
     { env: QUIET, cwd: ROOT, stdio: 'ignore' },
   );
   const browser = await chromium.launch();
@@ -171,6 +184,31 @@ async function main() {
       await page.fill('#fl-msg', 'Please put my day rate up to £320 from Monday.');
       await page.click('.sheet button[type=submit]');
       await check(page, `${size.name}-message-sent`);
+
+      // The control room, as the stand-in member of staff on this machine:
+      // the firms, the demo firm (with the message just sent, unread), finding
+      // a customer, one customer, deleting one (a wrong name first), and
+      // resetting the example. A different customer is deleted at each size.
+      const gone = size.name === 'phone' ? 'Mrs Patel' : 'Mr Hughes';
+      await page.goto(`${ADDRESS}/control`);
+      await check(page, `${size.name}-control-firms`);
+      await page.click('a.row:has-text("Tidewell Heating")');
+      await check(page, `${size.name}-control-firm`);
+      const firmAddress = page.url();
+      await page.goto(`${firmAddress}/customers?q=${encodeURIComponent(gone)}`);
+      await check(page, `${size.name}-control-find`);
+      await page.click(`a.row:has-text("${gone}")`);
+      await check(page, `${size.name}-control-customer`);
+      await page.click('a:has-text("Delete this customer")');
+      await check(page, `${size.name}-control-delete`);
+      await page.fill('#cr-name', 'Somebody Else');
+      await page.click('button:has-text("Delete for good")');
+      await check(page, `${size.name}-control-delete-wrong-name`);
+      await page.fill('#cr-name', gone);
+      await page.click('button:has-text("Delete for good")');
+      await check(page, `${size.name}-control-deleted`);
+      await page.goto(`${firmAddress}/reset`);
+      await check(page, `${size.name}-control-reset`);
       await context.close();
 
       // The example app at the same size: Home, and Calls & bookings.

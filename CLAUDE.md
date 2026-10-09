@@ -107,8 +107,11 @@ src/                 the Worker
   index.ts           entry point: builds the real dependencies and hands requests to the app
   app.ts             createApp(): the routes, and the error handler that logs ids only
   owner-app.ts       the owner's app: logging in by a link sent by text, and the owner's screens, each taking the firm from the login
-  deps.ts            Deps: what the system is given from outside: the clock, the texts provider, the due list's queue, and the addresses of customers' links and of the owner's app
-  clock.ts           Instant, Clock, systemClock (the only reader of the system time), pretendClock, and startingAt for this machine
+  control-room.ts    the control room, for Front-line's staff: at its own address, behind the staff gate, every view and action in the staff log
+  deps.ts            Deps: what the system is given from outside: the clock, the texts provider, the due list's queue, the staff gate,
+                     which copy this is, and the addresses of customers' links, the owner's app and the control room
+  clock.ts           Instant, Clock, systemClock (the only reader of the system time), pretendClock, startingAt for this machine,
+                     and aheadBy for an example firm's own clock
   money.ts           Pence, pence(), formatMoney()
   ids.ts             Id, newId(), isId()
   log.ts             log(): the only writer to the console, ids only
@@ -127,13 +130,16 @@ src/                 the Worker
   send.ts            send(): the one way a text leaves (rules 1 to 4)
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done
   diary/             the diary interface, Front-line's own diary behind it, and which times a firm offers (times.ts)
-  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts and /local/book. Never deployed
-  record/            the only code that touches the database. index.ts lists every record function
+  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts and /local/book, and the stand-in for the staff gate. Never deployed
+  record/            the only code that touches the database. index.ts lists every record function. control.ts is the control room's,
+                     with the one list behind exporting and deleting a customer; example.ts moves the demo firm's clock and resets it
   screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
                      home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
-                     app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link
+                     app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link.
+                     control.ts is the control room's screens
   example/           the demo firm, Tidewell Heating, as data, and its loader
-  providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio
+  providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio.
+                     access/: the staff gate, the check of Cloudflare Access's note, and the stand-in
 migrations/          plain SQL, numbered 0001_name.sql, applied in tests, on this machine and when deployed
 test/                the tests, which run in the Workers runtime
   setup.ts           applies migrations/ before each test file
@@ -142,6 +148,7 @@ test/                the tests, which run in the Workers runtime
   helpers/twilio.ts  sends the example Twilio requests to the system, signed as Twilio signs them
   helpers/deps.ts    pretend dependencies: the pretend clock, the stand-in for texts, a queue that keeps what it is given
   helpers/owner.ts   logs an owner in, and opens the app's pages as them
+  helpers/control.ts opens the control room's pages as the stand-in member of staff
   wall.test.ts       the cross-firm tests: every record function, tried as another firm
   routes.test.ts     every route, with its cross-firm case or the reason it needs none
   fixtures/          files the tests read
@@ -149,7 +156,7 @@ test/                the tests, which run in the Workers runtime
   fixtures/twilio/   example requests from Twilio: a text coming in, delivery reports
   fixtures/lint/     deliberate mistakes that show the checks in lint still work
 scripts/screens.js   npm run check:screens
-docs/                the build brief, the decisions, and what to set in Vapi (vapi.md) and Twilio (twilio.md)
+docs/                the build brief, the decisions, and what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md)
 docs/screens/        screenshots beside the example's, kept with the pull request that took them
 reference/           the example app: read-only
 wrangler.jsonc       the Worker's config: this machine at the top level, then practice and live

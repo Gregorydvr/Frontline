@@ -38,7 +38,12 @@
   //   (docs/twilio.md). Greg sets them for practice and live. This machine
   //   sends nothing to Twilio, so it never needs them; the tests make up their
   //   own.
-  "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+  // - ACCESS_TEAM and ACCESS_AUD: the Cloudflare Access team name and the
+  //   audience tag of the Access application in front of the control room
+  //   (docs/access.md). Greg sets them for practice and live. Until both are
+  //   set, the control room is shut. This machine uses a stand-in, so never
+  //   needs them.
+  "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "ACCESS_TEAM", "ACCESS_AUD"] },
 
   // PUBLIC_ADDRESS: where this copy can be reached from outside, and where
   // the owner's app is, such as https://app.example, with no slash at the
@@ -55,7 +60,20 @@
   // it is the address `npm run dev` answers on, so the links in its texts
   // open here. While it is empty, no text that carries a link goes: the
   // record says why. Open question 9 again.
-  "vars": { "PUBLIC_ADDRESS": "http://localhost:8787", "LINK_ADDRESS": "http://localhost:8787" },
+  //
+  // CONTROL_ADDRESS: where the control room is served, behind Cloudflare
+  // Access (docs/access.md). It answers there and nowhere else, and is shut
+  // while this is empty. Open question 9 again.
+  //
+  // COPY: which copy this is. Only "practice" turns on the demo firm's clock
+  // and reset in the control room; anything else, or none, counts as live.
+  // This machine runs src/local.ts, which is always "local".
+  "vars": {
+    "PUBLIC_ADDRESS": "http://localhost:8787",
+    "LINK_ADDRESS": "http://localhost:8787",
+    "CONTROL_ADDRESS": "http://localhost:8787",
+    "COPY": "local"
+  },
 
   // The clock: every minute, the due list's rows whose time has come go on
   // the queue (src/due.ts).
@@ -81,11 +99,11 @@
 
   "env": {
     "practice": {
-      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "ACCESS_TEAM", "ACCESS_AUD"] },
       // A placeholder until open question 9 is answered. Greg puts the
-      // address of the practice copy here, and the address for customers'
-      // links.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "" },
+      // address of the practice copy here, the address for customers'
+      // links, and the control room's.
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "practice" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
@@ -118,11 +136,11 @@
       }
     },
     "live": {
-      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
+      "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "ACCESS_TEAM", "ACCESS_AUD"] },
       // A placeholder until open question 9 is answered. Greg puts the
-      // address of the live copy here, and the address for customers'
-      // links.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "" },
+      // address of the live copy here, the address for customers' links,
+      // and the control room's.
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {

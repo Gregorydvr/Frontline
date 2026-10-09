@@ -44,6 +44,18 @@ export function startingAt(start: Instant): Clock {
   };
 }
 
+/**
+ * A clock that reads `ahead` milliseconds after `clock`: an example firm's
+ * own clock, moved on in the control room (src/record/db.ts). It reads no
+ * time of its own.
+ */
+export function aheadBy(clock: Clock, ahead: number): Clock {
+  if (!Number.isSafeInteger(ahead)) {
+    throw new RangeError('A clock moves by whole milliseconds');
+  }
+  return ahead === 0 ? clock : { now: () => instant(clock.now() + ahead) };
+}
+
 export function pretendClock(start: Instant): PretendClock {
   let at = instant(start);
   return {

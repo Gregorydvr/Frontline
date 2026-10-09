@@ -32,7 +32,7 @@ import {
   logInWithLink,
   recordOwnerMessage,
 } from './record';
-import { openRecord, type RecordDb } from './record/db';
+import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import { LOGIN_LASTS, LOGIN_LINK_LIMITS, type SessionToken } from './record/logins';
 import { OWNER_MESSAGE_LIMIT } from './record/owner-messages';
 import type { Firm, JobId, OwnerId } from './record/types';
@@ -284,7 +284,9 @@ async function loggedIn(c: Context<AppEnv>, job: string | null = null): Promise<
   if (found === null || firm === null || owner === null) {
     return c.redirect(job === null ? '/login' : `/login?job=${job}`, 303);
   }
-  return { db, firm, owner: owner.id, cookie: cookie as SessionToken };
+  // The owner's screens read the time as the firm does: an example firm's
+  // clock may have been moved on in the control room.
+  return { db: withFirmClock(db, firm), firm, owner: owner.id, cookie: cookie as SessionToken };
 }
 
 /** The screen a Message us panel was opened over: one of the app's own, or Home. */

@@ -38,7 +38,7 @@ import {
   loginLinkForDue,
   releaseDue,
 } from './record';
-import { openRecord, type RecordDb } from './record/db';
+import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import type { ClaimedDue, DueId, DueOutcome, FirmId } from './record/types';
 import { send, type SendResult } from './send';
 
@@ -99,7 +99,11 @@ export async function onQueue(batch: MessageBatch, d1: D1Database, deps: Deps): 
 }
 
 /** Runs one of the firm's rows: claims it, acts, and marks it done, skipped or back to wait. */
-export async function runDue(db: RecordDb, deps: DueDeps, firm: FirmId, due: DueId): Promise<Ran> {
+export async function runDue(realDb: RecordDb, deps: DueDeps, firm: FirmId, due: DueId): Promise<Ran> {
+  // The row is run by the firm's own clock: the real time for every real
+  // firm, and an example firm's moved on in the control room.
+  const firmNow = await getFirm(realDb, firm);
+  const db = firmNow === null ? realDb : withFirmClock(realDb, firmNow);
   const row = await claimDue(db, firm, due);
   if (row === null) {
     return { ran: 'not_ours' };

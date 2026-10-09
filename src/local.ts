@@ -18,6 +18,8 @@
 //   books a quote visit, through the real addresses Vapi calls, and sends
 //   the confirmation at once, so its link to the customer's page can be
 //   opened here.
+// - the control room, at /control, opens with no Cloudflare Access: a
+//   stand-in treats whoever opens it as the invented "Example Staff".
 
 import type { Hono } from 'hono';
 import { createApp, type AppEnv } from './app';
@@ -29,6 +31,7 @@ import { showExample } from './example/show';
 import { playBookingCall } from './example/play-call';
 import { showTexts } from './example/texts';
 import { EXAMPLE_NOW, EXAMPLE_OWNER } from './example/tidewell';
+import { StandInStaff } from './providers/access/fake';
 import { FakeTexts } from './providers/texts/fake';
 import { createLoginLink, findMessageForDue, listOwners } from './record';
 import { openRecord } from './record/db';
@@ -139,6 +142,11 @@ const localDeps = (env: Env): Deps => ({
   queue: env.DUE,
   linkAddress: linkAddressFrom(env.LINK_ADDRESS),
   appAddress: linkAddressFrom(env.PUBLIC_ADDRESS),
+  copy: 'local',
+  // No Access on this machine: the stand-in vouches for the invented
+  // "Example Staff".
+  staff: new StandInStaff(),
+  controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
 });
 const app = createLocalApp(localDeps);
 

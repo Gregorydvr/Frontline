@@ -72,16 +72,19 @@ export function insertDue(db: RecordDb, firm: FirmId, id: DueId, input: NewDue):
  * held it too long, so has likely stopped.
  */
 export async function findDue(db: RecordDb): Promise<{ firm: FirmId; due: DueId }[]> {
-  const now = db.clock.now();
+  // Each firm's rows are due by its own clock: the real time, moved on by
+  // how far ahead the firm's clock runs, which is 0 for every real firm. A
+  // row's times were written by that clock too.
+  const now = db.realClock.now();
   const { results } = await db.d1
     .prepare(
-      `UPDATE due SET queued_at = ?1
+      `UPDATE due SET queued_at = ?1 + (SELECT f.clock_ahead FROM firms f WHERE f.id = due.firm_id)
        WHERE id IN (
-         SELECT id FROM due
-         WHERE run_at <= ?1
-           AND ((state = 'waiting' AND (queued_at IS NULL OR queued_at <= ?2))
-             OR (state = 'claimed' AND claimed_at <= ?3 AND (queued_at IS NULL OR queued_at <= ?2)))
-         ORDER BY run_at, id
+         SELECT d.id FROM due d JOIN firms f ON f.id = d.firm_id
+         WHERE d.run_at <= ?1 + f.clock_ahead
+           AND ((d.state = 'waiting' AND (d.queued_at IS NULL OR d.queued_at <= ?2 + f.clock_ahead))
+             OR (d.state = 'claimed' AND d.claimed_at <= ?3 + f.clock_ahead AND (d.queued_at IS NULL OR d.queued_at <= ?2 + f.clock_ahead)))
+         ORDER BY d.run_at - f.clock_ahead, d.id
          LIMIT ?4)
        RETURNING firm_id, id`,
     )

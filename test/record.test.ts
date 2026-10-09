@@ -66,6 +66,7 @@ describe('firms', () => {
       phoneNumber: null,
       urgentList: [],
       diaryRules: null,
+      clockAhead: 0,
       createdAt: instantFromIso('2026-10-15T08:10:00+01:00'),
     });
   });

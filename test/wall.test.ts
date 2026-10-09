@@ -831,6 +831,74 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(texts.length).toBeGreaterThan(0);
     nothingOfA(texts);
   },
+
+  // The control room. Staff belong to no firm, and the list of firms is how
+  // staff choose one: both take no firm. Everything else takes the firm and
+  // finds nothing of the first firm's under the second's.
+  async findOrAddStaff() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    expect(await record.findOrAddStaff(db, 'STAFF@example.com ')).toEqual(staff);
+    nothingOfA(staff);
+  },
+  async listFirms() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    const firms = await record.listFirms(db, staff.id);
+    expect(firms.map((firm) => firm.id)).toEqual(expect.arrayContaining([a, b]));
+  },
+  async logStaff() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    // A row about the first firm's customer, under the second firm, is refused.
+    for (const customer of ofA.customers) {
+      await refused(record.logStaff(db, b, staff.id, 'viewed_customer', { customer: customer.id }));
+    }
+    nothingOfA(await record.logStaff(db, b, staff.id, 'viewed_firm'));
+  },
+  async findCustomers() {
+    for (const typed of ['Mrs Ahmed', '07700 900003', 'mr', '01632 960001']) {
+      const found = await record.findCustomers(db, b, typed);
+      expect(found.length).toBeGreaterThan(0);
+      nothingOfA(found);
+    }
+  },
+  async listOwnerMessages() {
+    const messages = await record.listOwnerMessages(db, b);
+    expect(messages.length).toBeGreaterThan(0);
+    nothingOfA(messages);
+  },
+  async listFailedTexts() {
+    nothingOfA(await record.listFailedTexts(db, b, allTime[0]));
+  },
+  async needsALook() {
+    nothingOfA(await record.needsALook(db, b, allTime[0]));
+  },
+  async customerFile() {
+    for (const customer of ofA.customers) {
+      expect(await record.customerFile(db, b, customer.id)).toBeNull();
+    }
+    nothingOfA(await record.customerFile(db, b, jobOfB.customer));
+  },
+  async customerFileCounts() {
+    for (const customer of ofA.customers) {
+      expect(await record.customerFileCounts(db, b, customer.id)).toBeNull();
+    }
+  },
+  async deleteCustomer() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    for (const customer of ofA.customers) {
+      expect(await record.deleteCustomer(db, b, customer.id, staff.id, customer.name)).toBeNull();
+    }
+  },
+  async setExampleClock() {
+    // The second firm is not an example, and its clock cannot move; the
+    // first firm's is untouched.
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await refused(record.setExampleClock(db, b, far, staff.id, 'move_on'));
+    await refused(record.setExampleClock(db, b, far, staff.id, 'start'));
+  },
+  async deleteExampleFirm() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await refused(record.deleteExampleFirm(db, b, staff.id));
+  },
 };
 
 describe('the wall between firms', () => {
@@ -838,14 +906,24 @@ describe('the wall between firms', () => {
     expect(Object.keys(cases).sort()).toEqual(Object.keys(record).sort());
   });
 
-  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s, the link’s, and the four of logging in', () => {
+  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s, the link’s, the four of logging in, and the control room’s two: staff, and the list of firms', () => {
     type NotTakingTheFirm = {
       [Name in keyof typeof record]: Parameters<(typeof record)[Name]> extends [RecordDb, FirmId, ...unknown[]]
         ? never
         : Name;
     }[keyof typeof record];
     expectTypeOf<NotTakingTheFirm>().toEqualTypeOf<
-      'createFirm' | 'exampleFirms' | 'findFirmByNumber' | 'findDue' | 'findLink' | 'findOwnersByMobile' | 'findLoginLink' | 'logInWithLink' | 'findSession'
+      | 'createFirm'
+      | 'exampleFirms'
+      | 'findFirmByNumber'
+      | 'findDue'
+      | 'findLink'
+      | 'findOwnersByMobile'
+      | 'findLoginLink'
+      | 'logInWithLink'
+      | 'findSession'
+      | 'findOrAddStaff'
+      | 'listFirms'
     >();
   });
 
