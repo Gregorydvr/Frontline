@@ -70,6 +70,30 @@ export async function insertJobPastTheRecord(
     .run();
 }
 
+/**
+ * Writes a version of the words for a reminder straight into the database,
+ * past the record layer, naming an owner as agreeing them, or none, to show
+ * the database's own check of rule 2.
+ */
+export async function insertWordingPastTheRecord(
+  db: D1Database,
+  wording: { id: string; firm: string; agreedBy: string | null },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO wording (id, firm_id, key, words, at, seq, actor, agreed_owner_id, agreed_at, agreed_how)
+       VALUES (?1, ?2, 'text:visit_reminder', 'Reminder: {time}.', 0, (SELECT IFNULL(MAX(seq), 0) + 1 FROM wording), 'frontline', ?3,
+               CASE WHEN ?3 IS NULL THEN NULL ELSE 0 END, CASE WHEN ?3 IS NULL THEN NULL ELSE 'phone' END)`,
+    )
+    .bind(wording.id, wording.firm, wording.agreedBy)
+    .run();
+}
+
+/** How many firms the record holds. */
+export async function countFirms(db: D1Database): Promise<number> {
+  return (await db.prepare('SELECT COUNT(*) AS n FROM firms').first<{ n: number }>())?.n ?? 0;
+}
+
 /** How many history entries of each kind a firm has. */
 export async function historyKinds(db: D1Database, firm: string): Promise<Record<string, number>> {
   const { results } = await db

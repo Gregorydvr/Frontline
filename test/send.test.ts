@@ -36,6 +36,7 @@ import { send, type Outgoing } from '../src/send';
 import { optOutsMadeByStop } from './helpers/db';
 import { testDeps, type TestDeps } from './helpers/deps';
 import { tidewell, TOMS_MOBILE } from './helpers/vapi';
+import { agreedByOwner } from './helpers/owner';
 
 const clock = pretendClock(instantFromIso('2026-09-30T13:00:00+01:00'));
 const db = openRecord(env.DB, clock);
@@ -131,23 +132,23 @@ describe('the words', () => {
   });
 
   it('are refused at set-up if they hold a character a text cannot carry, such as a curly apostrophe', async () => {
-    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: Tom’s visit is tomorrow.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'text:visit_reminder', 'See you then 👍', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {customer} at {time}.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {time.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'text:quote' as never, 'Your quote.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'text:visit_reminder', ' ', frontline)).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: Tom’s visit is tomorrow.', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', 'See you then 👍', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {customer} at {time}.', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {time.', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:quote' as never, 'Your quote.', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', ' ', frontline, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
   });
 
   it('are the newest the firm agreed, and the text names the version it was made from', async () => {
-    const newer = await setWording(db, firm, 'text:visit_reminder', 'Reminder: see you {weekday} at {time}.', frontline);
+    const newer = await setWording(db, firm, 'text:visit_reminder', 'Reminder: see you {weekday} at {time}.', frontline, await agreedByOwner(db, firm));
     await send(deps.texts, db, firm, reminder());
     expect(deps.texts.sent[0]?.body).toBe('Reminder: see you Thursday at 3pm.');
     expect((await texts())[0]?.wording).toBe(newer);
   });
 
   it('count the segments of a long text', async () => {
-    await setWording(db, firm, 'text:visit_reminder', `Reminder: {time}. ${'x'.repeat(160)}`, frontline);
+    await setWording(db, firm, 'text:visit_reminder', `Reminder: {time}. ${'x'.repeat(160)}`, frontline, await agreedByOwner(db, firm));
     await send(deps.texts, db, firm, reminder());
     expect((await texts())[0]?.segments).toBe(2);
   });
@@ -340,14 +341,14 @@ describe('when the provider does not take it', () => {
 describe('the firm', () => {
   it('without its own number sends nothing, and that is recorded', async () => {
     const plain = await bareFirm({ number: false });
-    await setWording(db, plain.firm, 'text:visit_reminder', 'Reminder: {time}.', frontline);
+    await setWording(db, plain.firm, 'text:visit_reminder', 'Reminder: {time}.', frontline, await agreedByOwner(db, plain.firm));
     expect(await send(deps.texts, db, plain.firm, plain.reminder)).toMatchObject({ result: 'not_sent', why: 'no_number' });
     expect(deps.texts.sent).toEqual([]);
   });
 
   it('cannot send to another firm’s customer, or about another firm’s visit', async () => {
     const other = await bareFirm({ number: true });
-    await setWording(db, other.firm, 'text:visit_reminder', 'Reminder: {time}.', frontline);
+    await setWording(db, other.firm, 'text:visit_reminder', 'Reminder: {time}.', frontline, await agreedByOwner(db, other.firm));
     // As the other firm, to this firm's Mrs Ahmed.
     await expect(send(deps.texts, db, other.firm, reminder({ due: other.reminder.due }))).rejects.toThrow(Refused);
     // As the other firm, to its own customer, about this firm's visit.

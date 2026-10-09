@@ -184,8 +184,10 @@ export type Actor =
  * - a text that came in: text_received, written only by recordTextIn(), on
  *   the customer's job when it has one
  * - the firm itself: service_on, service_off, stop_on, stop_off, number_set,
- *   urgent_list_set, owner_mobile_set, diary_rules_set, written only by the
- *   functions in firms.ts and owners.ts
+ *   urgent_list_set, owner_mobile_set, diary_rules_set, and, from slice H2,
+ *   firm_added, owner_added and wording_agreed, written only by the
+ *   functions in firms.ts, owners.ts and wording.ts. The owner is not shown
+ *   them.
  * - an owner using the app: logged_in and logged_out, written only by
  *   logins.ts, and owner_message_sent, for Message us, written only by
  *   owner-messages.ts. Each names the owner who did it.
@@ -219,6 +221,9 @@ export const HISTORY_KINDS = {
   urgent_list_set: 'firm',
   owner_mobile_set: 'firm',
   diary_rules_set: 'firm',
+  firm_added: 'firm',
+  owner_added: 'firm',
+  wording_agreed: 'firm',
   logged_in: 'firm',
   logged_out: 'firm',
   owner_message_sent: 'firm',
@@ -611,6 +616,33 @@ export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short v
 export type FirmWording = Partial<Record<WordingKey, { id: WordingId; words: string }>>;
 
 /**
+ * How an owner agreed the wording for a text (rule 2 in CLAUDE.md): they
+ * said yes to a member of staff on the phone or in person, or in writing.
+ * The build's reading of question 1 of the slice H2 plan, waiting for Greg.
+ */
+export const AGREED_HOW = ['phone', 'in_person', 'in_writing'] as const;
+export type AgreedHow = (typeof AGREED_HOW)[number];
+
+/** Who agreed a version of the words for a text, and how. When is the moment it is recorded. */
+export interface Agreement {
+  owner: OwnerId;
+  how: AgreedHow;
+}
+
+/** One version of the firm's words for a key, as kept: never edited. */
+export interface WordingVersion {
+  id: WordingId;
+  words: string;
+  at: Instant;
+  /** Who recorded it: a member of staff, Front-line (the demo firm), or the owner. */
+  by: Actor;
+  /** For a member of staff: the email Access vouched for, to show to staff. */
+  staffEmail: string | null;
+  /** For a text: the owner who agreed these exact words, how, and when. */
+  agreed: { owner: { id: OwnerId; name: string }; how: AgreedHow; at: Instant } | null;
+}
+
+/**
  * Where a call's recording is: none (a call from before slice H, or one Vapi
  * gave no recording for), waiting in the inbox to be moved, kept, not kept
  * (it never reached the inbox, or could not be moved in time: staff are
@@ -671,6 +703,22 @@ export const STAFF_ACTIONS = [
   'deleted_firm',
   'viewed_after_restore',
   'replayed_deletions',
+  // Setting up a firm (slice H2): the views, then the changes. Each change
+  // is written in the same step as the change itself.
+  'viewed_add_firm',
+  'viewed_set_up_owner',
+  'viewed_set_up_number',
+  'viewed_set_up_urgent',
+  'viewed_set_up_diary',
+  'viewed_wording',
+  'checked_wording',
+  'added_firm',
+  'added_owner',
+  'changed_owner_mobile',
+  'set_number',
+  'set_urgent_list',
+  'set_diary_rules',
+  'agreed_wording',
   // Practice and this machine only: the demo firm.
   'loaded_example',
   'moved_clock',
@@ -687,4 +735,8 @@ export interface StaffLogEntry {
   what: StaffAction;
   customer: CustomerId | null;
   service: Service | null;
+  /** The owner a change was about, such as their mobile (slice H2). */
+  owner: OwnerId | null;
+  /** The kind of text whose wording was viewed or agreed (slice H2). */
+  messageKind: MessageKind | null;
 }

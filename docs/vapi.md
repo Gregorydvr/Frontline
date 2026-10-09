@@ -70,7 +70,7 @@ The voice agent hands over what it took down as structured data: `analysis.struc
 }
 ```
 
-The firm's urgent list in the last description must match the list held on the firm in the record. Each firm's assistant has its own.
+The firm's urgent list in the last description must match the list held on the firm in the record. Each firm's assistant has its own. Staff set the list in the control room, on the firm's page under Set-up, which also shows the line to paste here, under "For its agent in Vapi", with the firm's id and recording path.
 
 Front-line checks every field, as rule 16 in `CLAUDE.md` says. A field that is not text, is empty, or is too long counts as missing. Line breaks become spaces. The longest each may be:
 

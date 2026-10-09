@@ -255,9 +255,9 @@ describe('deleting a customer', () => {
 
     const left = await rowsHolding(env.DB, a, markers);
     expect(left.filter(({ table }) => !['staff_log', 'opted_out_numbers', 'owner_messages'].includes(table))).toEqual([]);
-    // The staff log holds ids only.
+    // The staff log holds ids, and names from fixed lists, only.
     for (const { row } of left.filter(({ table }) => table === 'staff_log')) {
-      expect(Object.keys(row).sort()).toEqual(['at', 'customer_id', 'firm_id', 'id', 'seq', 'service', 'staff_id', 'what']);
+      expect(Object.keys(row).sort()).toEqual(['at', 'customer_id', 'firm_id', 'id', 'message_kind', 'owner_id', 'seq', 'service', 'staff_id', 'what']);
     }
     expect(left.filter(({ table }) => table === 'opted_out_numbers').map(({ row }) => row)).toEqual([
       { firm_id: a, mobile: MOBILE, at: expect.any(Number) as number },

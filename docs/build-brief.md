@@ -147,6 +147,20 @@ Until slice F there is no owner login, so the app's pages are served only on thi
 
 **Done when:** with the pretend clock moved 31 days on, a recording is gone and its call remains.
 
+### [x] H2. Setting up a firm
+
+Added by Greg on 9 October 2026, after slices A to H were merged. Until now only the demo firm's loader made a firm, so practice could not take one real call or send one real text, and live could not take its first firm.
+
+In the control room:
+
+- Add a firm, by name. It starts with all five services off and the stop button off.
+- Add its owner: name and mobile. Change the mobile later.
+- Set and change its number, its urgent list, when visits can be booked and how long each kind takes.
+- Set the wording for each kind of text, starting from the drafts in `src/messages.ts`. Show the gaps that kind may use, the GSM-7 check and the segment count, and refuse wording that fails.
+- On the firm's page: what is still missing before Calls & bookings can be switched on, and the firm's id and recording path for its Vapi agent (`docs/vapi.md`).
+
+**Done when:** a firm added through the control room, and set up there, takes a call to its number as its own and confirms the visit from its number in the words its owner agreed (`test/set-up.test.ts`). Every new view and action is in the staff log, every change is in the firm's history as done by staff, and every new route and record function has its cross-firm case. Nothing is deployed, and nothing is created or changed in Cloudflare, Vapi or Twilio.
+
 ### [ ] I. Before the first real firm
 
 A checklist, not a feature. Greg does most of it.

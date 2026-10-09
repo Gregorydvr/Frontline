@@ -130,6 +130,8 @@ src/                 the Worker
   zip.ts             writing zip files a piece at a time, and CSV rows that never run as a formula
   messages.ts        the draft wording of each kind of text, and making a text from a firm's wording and the facts
   send.ts            send(): the one way a text leaves (rules 1 to 4)
+  set-up.ts          setting up a firm: the checks on its name, wording, urgent list and diary rules, each with its reason, which the
+                     record refuses on and the control room shows; what a firm still needs before Calls & bookings; a wording preview's facts
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done
   diary/             the diary interface, Front-line's own diary behind it, and which times a firm offers (times.ts)
   local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts, /local/book and /local/files, and the stand-in for the staff gate. Never deployed
@@ -156,6 +158,7 @@ test/                the tests, which run in the Workers runtime
   helpers/control.ts opens the control room's pages as the stand-in member of staff
   helpers/files.ts   the local file stores, and a wrapper that makes one step fail on purpose
   wall.test.ts       the cross-firm tests: every record function, tried as another firm
+  set-up.test.ts     a firm added and set up in the control room, then taking a call to its number as its own
   routes.test.ts     every route, with its cross-firm case or the reason it needs none
   fixtures/          files the tests read
   fixtures/vapi/     example reports from Vapi as a call ends, and tool calls during one, with invented people

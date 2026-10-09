@@ -59,6 +59,9 @@ const TAKES_NO_FIRM: Record<string, string> = {
   'POST /control/after-restore':
     'The control room’s “Delete again”, for staff only. It takes only a time: each delete it does again names its own firm in the restore ledger, as staff asked for it before (tested in test/keeping.test.ts).',
   'GET /local/files': 'This machine only. Lists the example firm’s files, and takes nothing from the request.',
+  'GET /control/add-firm': 'The control room’s form to add a firm, for staff only. It shows no firm’s data and takes nothing from the request.',
+  'POST /control/add-firm':
+    'The control room’s “Add”, for staff only. It makes a new firm from the name typed, and reads or changes no other firm (tested in test/set-up.test.ts).',
 };
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -210,6 +213,58 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     expect((await open(`/control/firms/${leaving}/delete`, controlForm({ name: 'Fourth Example Firm' }))).status).toBe(200);
     expect(await getFirm(db, leaving)).toBeNull();
     expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+  },
+
+  // Setting up a firm (slice H2): the firm is in the address, and every
+  // record function is given it. The second firm already has its owner, so
+  // adding one goes back to its page. The first firm's owner, under the
+  // second firm's address, is "not found". The first firm's number cannot
+  // be taken. What the second firm's own forms change is the second firm's.
+  'GET /control/firms/:firm/owner': () => controlAsB((b) => `/control/firms/${b}/owner`, undefined, [303]),
+  'POST /control/firms/:firm/owner': () =>
+    controlAsB((b) => `/control/firms/${b}/owner`, () => controlForm({ name: 'Tom', mobile: '07700 900101' }), [303]),
+  'GET /control/firms/:firm/owners/:owner/mobile': async () => {
+    const { a } = await twoFirms();
+    const [ownerOfA] = await listOwners(db, a);
+    await controlAsB((b) => `/control/firms/${b}/owners/${ownerOfA?.id ?? ''}/mobile`, undefined, [404]);
+  },
+  'POST /control/firms/:firm/owners/:owner/mobile': async () => {
+    const { a } = await twoFirms();
+    const [ownerOfA] = await listOwners(db, a);
+    const cookieOfA = await ownerCookie(db, a);
+    await controlAsB((b) => `/control/firms/${b}/owners/${ownerOfA?.id ?? ''}/mobile`, () => controlForm({ mobile: '07700 900209' }), [404]);
+    // The first firm's owner is still logged in, on the mobile they had.
+    expect((await opener(createApp(deps), cookieOfA)('/')).status).toBe(200);
+    expect((await listOwners(db, a))[0]?.mobile).toBe(ownerOfA?.mobile);
+  },
+  'GET /control/firms/:firm/number': () => controlAsB((b) => `/control/firms/${b}/number`),
+  'POST /control/firms/:firm/number': async () => {
+    const { a } = await twoFirms();
+    // The first firm's number, asked for by the second firm, is another firm's.
+    await controlAsB((b) => `/control/firms/${b}/number`, () => controlForm({ number: '07700 900100' }), [400]);
+    expect((await getFirm(db, a))?.phoneNumber).toBe('+447700900100');
+  },
+  'GET /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`),
+  'POST /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`, () => controlForm({ items: 'a leak' }), [303]),
+  'GET /control/firms/:firm/diary': () => controlAsB((b) => `/control/firms/${b}/diary`),
+  'POST /control/firms/:firm/diary': () =>
+    controlAsB(
+      (b) => `/control/firms/${b}/diary`,
+      // The second firm's own rules again, as the other cases use them.
+      () => controlForm({ day: ['1', '2', '3', '4', '5'], opens: '08:00', closes: '16:00', every: '60', daysAhead: '14', length_quote_visit: '60' }),
+      [303],
+    ),
+  'GET /control/firms/:firm/wording': () => controlAsB((b) => `/control/firms/${b}/wording`),
+  'GET /control/firms/:firm/wording/:kind': () => controlAsB((b) => `/control/firms/${b}/wording/visit_reminder`),
+  'POST /control/firms/:firm/wording/:kind': async () => {
+    const { a } = await twoFirms();
+    const [ownerOfA] = await listOwners(db, a);
+    // The first firm's owner cannot be named as agreeing the second firm's words.
+    await controlAsB(
+      (b) => `/control/firms/${b}/wording/visit_reminder`,
+      () => controlForm({ intent: 'save', words: 'Reminder: {time}.', owner: ownerOfA?.id ?? '', how: 'phone', agreed: '1' }),
+      [400],
+    );
   },
 
   // The owner's screens take the firm from the login, and nothing else.
@@ -516,6 +571,21 @@ describe('every route', () => {
       'POST /control/firms/:firm/delete',
       'GET /control/after-restore',
       'POST /control/after-restore',
+      'GET /control/add-firm',
+      'POST /control/add-firm',
+      'GET /control/firms/:firm/owner',
+      'POST /control/firms/:firm/owner',
+      'GET /control/firms/:firm/owners/:owner/mobile',
+      'POST /control/firms/:firm/owners/:owner/mobile',
+      'GET /control/firms/:firm/number',
+      'POST /control/firms/:firm/number',
+      'GET /control/firms/:firm/urgent',
+      'POST /control/firms/:firm/urgent',
+      'GET /control/firms/:firm/diary',
+      'POST /control/firms/:firm/diary',
+      'GET /control/firms/:firm/wording',
+      'GET /control/firms/:firm/wording/:kind',
+      'POST /control/firms/:firm/wording/:kind',
       'POST /control/firms/:firm/clock',
       'GET /control/firms/:firm/reset',
       'POST /control/firms/:firm/reset',

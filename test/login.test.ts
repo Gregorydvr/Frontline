@@ -17,7 +17,7 @@ import { LOGIN_LASTS, LOGIN_LINK_LASTS } from '../src/record/logins';
 import type { FirmId } from '../src/record/types';
 import { historyKinds } from './helpers/db';
 import { APP_ADDRESS, testDeps } from './helpers/deps';
-import { form, opener } from './helpers/owner';
+import { agreedByOwner, form, opener } from './helpers/owner';
 import { tidewell } from './helpers/vapi';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -174,7 +174,7 @@ describe('asking for a link', () => {
   });
 
   it('keeps each firm’s words for the text as the firm agreed them', async () => {
-    await setWording(db, firm, 'text:login_link', 'Front-line: log in here: {link}', { kind: 'frontline' });
+    await setWording(db, firm, 'text:login_link', 'Front-line: log in here: {link}', { kind: 'frontline' }, await agreedByOwner(db, firm));
     await askForLink(mobile);
     expect(deps.texts.sent[deps.texts.sent.length - 1]?.body).toMatch(/^Front-line: log in here: https:\/\/app\.example\/in\/[0-9a-z]{26}$/);
   });

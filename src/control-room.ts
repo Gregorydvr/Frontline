@@ -26,6 +26,18 @@ import { historyLine } from './history-lines';
 import { isId } from './ids';
 import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
+import { DRAFT_WORDING, makeWords } from './messages';
+import { segments } from './gsm';
+import { callerNumber, nationalNumber } from './phone';
+import {
+  callsSetUpGaps,
+  diaryRulesProblems,
+  NAME_LIMITS,
+  nameProblems,
+  previewFacts,
+  urgentListProblems,
+  wordingProblems,
+} from './set-up';
 import {
   askFirmExport,
   cancelLeaving,
@@ -61,12 +73,56 @@ import {
   setExampleClock,
   setService,
   setStopButton,
+  createFirm,
+  createOwner,
+  getOwner,
+  listOwners,
+  listWording,
+  setDiaryRules,
+  setFirmNumber,
+  setOwnerMobile,
+  setUrgentList,
+  setWording,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
-import { SERVICES, type CallId, type CustomerId, type Firm, type FirmExportId, type FirmId, type Service, type StaffId } from './record/types';
 import {
+  AGREED_HOW,
+  MESSAGE_KINDS,
+  SERVICES,
+  VISIT_KINDS,
+  type AgreedHow,
+  type CallId,
+  type CustomerId,
+  type DiaryRules,
+  type Firm,
+  type FirmExportId,
+  type FirmId,
+  type MessageKind,
+  type Owner,
+  type OwnerId,
+  type Service,
+  type StaffId,
+  type VisitKind,
+  type WordingVersion,
+} from './record/types';
+import {
+  addFirmScreen,
   afterRestoreScreen,
   CONTROL_HEADERS,
+  diaryProblemWords,
+  diaryScreen,
+  minutesToTime,
+  nameProblemWords,
+  numberScreen,
+  ownerMobileScreen,
+  ownerScreen,
+  urgentProblemWords,
+  urgentScreen,
+  wordingListScreen,
+  wordingProblemWords,
+  wordingScreen,
+  type DiaryForm,
+  type WordingView,
   CONTROL_WORDS,
   controlPage,
   customerScreen,
@@ -89,6 +145,12 @@ import type { Html } from './screens/html';
 const WEEK = 7 * 24 * 60 * 60_000;
 /** The longest form the control room takes. */
 const FORM_LIMIT = 1_024;
+/**
+ * The longest form for an urgent list, and for wording: 1,000 characters of
+ * words, each up to 9 bytes once a browser has encoded it, such as a curly
+ * apostrophe the check must still see to refuse.
+ */
+const LONG_FORM_LIMIT = 12 * 1_024;
 
 /** The member of staff looking, with the record as the system reads the time. */
 interface Looking {
@@ -154,6 +216,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         look: await needsALook(at.firmDb, at.firm.id, since),
         exampleTools: at.firm.isExample && practiceTools(c),
         exports: await listFirmExports(at.firmDb, at.firm.id),
+        setUp: await setUpOf(at),
       };
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_firm');
       return drawn(c, at.firm.name, firmScreen(view));
@@ -383,6 +446,203 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
+  // Setting up a firm (slice H2). Each change is recorded in the firm's
+  // history, done by staff, and in the staff log, in the same step as the
+  // change itself. Each view is in the staff log.
+  app.get('/control/add-firm', (c) =>
+    asStaff(c, 'view', async (who) => {
+      await logStaffAcrossFirms(who.db, who.staff, 'viewed_add_firm');
+      return drawn(c, CONTROL_WORDS.addFirm, addFirmScreen('', []));
+    }),
+  );
+
+  app.post('/control/add-firm', (c) =>
+    asStaff(c, 'form', async (who) => {
+      const name = ((await readForm(c.req.raw)).get('name') ?? '').trim().slice(0, 200);
+      const problems = nameProblems(name, NAME_LIMITS.firm);
+      if (problems.length > 0) {
+        await logStaffAcrossFirms(who.db, who.staff, 'viewed_add_firm');
+        return drawn(c, CONTROL_WORDS.addFirm, addFirmScreen(name, nameProblemWords(problems)), 400);
+      }
+      const firm = await createFirm(who.db, { name, isExample: false }, { kind: 'staff', staff: who.staff });
+      log('firm_added', { firm, staff: who.staff });
+      return c.redirect(`/control/firms/${firm}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/owner', (c) =>
+    atFirm(c, 'view', async (at) => {
+      if ((await listOwners(at.firmDb, at.firm.id)).length > 0) return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner');
+      return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, { name: '', mobile: '' }, []));
+    }),
+  );
+
+  // One owner from the control room: a firm that has one is sent back to its page.
+  app.post('/control/firms/:firm/owner', (c) =>
+    atFirm(c, 'form', async (at) => {
+      if ((await listOwners(at.firmDb, at.firm.id)).length > 0) return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      const form = await readForm(c.req.raw);
+      const typed = { name: (form.get('name') ?? '').trim().slice(0, 100), mobile: (form.get('mobile') ?? '').slice(0, 30) };
+      const mobile = callerNumber(typed.mobile);
+      const problems = nameProblemWords(nameProblems(typed.name, NAME_LIMITS.owner));
+      if (mobile.kind !== 'mobile') problems.push(CONTROL_WORDS.notAMobile);
+      else if (mobile.number === at.firm.phoneNumber) problems.push(CONTROL_WORDS.mobileIsFirmsNumber);
+      if (problems.length > 0 || mobile.kind !== 'mobile') {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner');
+        return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, typed, problems), 400);
+      }
+      await createOwner(at.firmDb, at.firm.id, { name: typed.name, mobile: mobile.number }, { kind: 'staff', staff: at.staff });
+      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/owners/:owner/mobile', (c) =>
+    atOwner(c, 'view', async (at, owner) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner', { owner: owner.id });
+      return drawn(c, CONTROL_WORDS.changeMobile, ownerMobileScreen(at.firm, owner, '', []));
+    }),
+  );
+
+  app.post('/control/firms/:firm/owners/:owner/mobile', (c) =>
+    atOwner(c, 'form', async (at, owner) => {
+      const typed = ((await readForm(c.req.raw)).get('mobile') ?? '').slice(0, 30);
+      const mobile = callerNumber(typed);
+      const problem =
+        mobile.kind !== 'mobile' ? CONTROL_WORDS.notAMobile : mobile.number === at.firm.phoneNumber ? CONTROL_WORDS.mobileIsFirmsNumber : null;
+      if (problem !== null || mobile.kind !== 'mobile') {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner', { owner: owner.id });
+        return drawn(c, CONTROL_WORDS.changeMobile, ownerMobileScreen(at.firm, owner, typed, problem === null ? [] : [problem]), 400);
+      }
+      await setOwnerMobile(at.firmDb, at.firm.id, owner.id, mobile.number, { kind: 'staff', staff: at.staff });
+      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/number', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_number');
+      const typed = at.firm.phoneNumber === null ? '' : nationalNumber(at.firm.phoneNumber);
+      return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, []));
+    }),
+  );
+
+  app.post('/control/firms/:firm/number', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = ((await readForm(c.req.raw)).get('number') ?? '').slice(0, 30);
+      const number = callerNumber(typed);
+      const done = number.kind === 'mobile' ? await setFirmNumber(at.firmDb, at.firm.id, number.number, { kind: 'staff', staff: at.staff }) : 'not_mobile';
+      if (done !== 'set') {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_number');
+        return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, [CONTROL_WORDS.numberProblems[done]]), 400);
+      }
+      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/urgent', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_urgent');
+      return drawn(c, CONTROL_WORDS.urgent, urgentScreen(at.firm, at.firm.urgentList.join('\n'), []));
+    }),
+  );
+
+  app.post('/control/firms/:firm/urgent', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = ((await readForm(c.req.raw, LONG_FORM_LIMIT)).get('items') ?? '').replace(/\r\n?/g, '\n');
+      const items = typed
+        .split('\n')
+        .map((item) => item.trim())
+        .filter((item) => item !== '');
+      const problems = urgentListProblems(items);
+      if (problems.length > 0) {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_urgent');
+        return drawn(c, CONTROL_WORDS.urgent, urgentScreen(at.firm, typed, urgentProblemWords(problems)), 400);
+      }
+      await setUrgentList(at.firmDb, at.firm.id, items, { kind: 'staff', staff: at.staff });
+      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/diary', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
+      return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, diaryFormOf(at.firm.diaryRules), []));
+    }),
+  );
+
+  app.post('/control/firms/:firm/diary', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const form = await readForm(c.req.raw);
+      const typed = diaryFormFrom(form);
+      const rules = diaryRulesFrom(typed);
+      const problems = diaryRulesProblems(rules);
+      if (problems.length > 0) {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
+        return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, typed, diaryProblemWords(problems)), 400);
+      }
+      await setDiaryRules(at.firmDb, at.firm.id, rules, { kind: 'staff', staff: at.staff });
+      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/wording', (c) =>
+    atFirm(c, 'view', async (at) => {
+      const current: Partial<Record<MessageKind, WordingVersion>> = {};
+      for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
+        const [newest] = await listWording(at.firmDb, at.firm.id, `text:${kind}`);
+        if (newest !== undefined) current[kind] = newest;
+      }
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_wording');
+      return drawn(c, CONTROL_WORDS.wording, wordingListScreen(at.firm, current));
+    }),
+  );
+
+  app.get('/control/firms/:firm/wording/:kind', (c) =>
+    atKind(c, 'view', async (at, kind) => {
+      const versions = await listWording(at.firmDb, at.firm.id, `text:${kind}`);
+      const words = versions[0]?.words ?? DRAFT_WORDING[kind] ?? '';
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_wording', { messageKind: kind });
+      return drawn(c, CONTROL_WORDS.textKinds[kind], wordingScreen(await wordingView(c, at, kind, words, versions, null, { owner: '', how: '' })));
+    }),
+  );
+
+  // Check shows what is wrong, or the text as a customer or the owner would
+  // get it, and saves nothing. Save as agreed saves the words, as the owner
+  // agreed them, only once they pass the check and staff tick that the owner
+  // agreed these exact words.
+  app.post('/control/firms/:firm/wording/:kind', (c) =>
+    atKind(c, 'form', async (at, kind) => {
+      const form = await readForm(c.req.raw, LONG_FORM_LIMIT);
+      const words = (form.get('words') ?? '').replace(/\r\n?/g, '\n');
+      const chosen = { owner: form.get('owner') ?? '', how: form.get('how') ?? '' };
+      const problems = wordingProblemWords(wordingProblems(`text:${kind}`, words));
+      const versions = await listWording(at.firmDb, at.firm.id, `text:${kind}`);
+      if (form.get('intent') !== 'save') {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'checked_wording', { messageKind: kind });
+        return drawn(c, CONTROL_WORDS.textKinds[kind], wordingScreen(await wordingView(c, at, kind, words, versions, problems, chosen)));
+      }
+      const owner = isId(chosen.owner) ? await getOwner(at.firmDb, at.firm.id, chosen.owner as OwnerId) : null;
+      const how = AGREED_HOW.find((one) => one === chosen.how);
+      if (problems.length === 0 && (owner === null || how === undefined || form.get('agreed') !== '1')) {
+        problems.push(owner === null ? CONTROL_WORDS.needOwner : CONTROL_WORDS.needTick);
+      }
+      if (problems.length > 0 || owner === null || how === undefined) {
+        if (!problems.includes(CONTROL_WORDS.needTick)) problems.push(CONTROL_WORDS.nothingSaved);
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'checked_wording', { messageKind: kind });
+        return drawn(c, CONTROL_WORDS.textKinds[kind], wordingScreen(await wordingView(c, at, kind, words, versions, problems, chosen)), 400);
+      }
+      await setWording(at.firmDb, at.firm.id, `text:${kind}`, words, { kind: 'staff', staff: at.staff }, { owner: owner.id, how });
+      log('wording_agreed', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}/wording/${kind}`, 303);
+    }),
+  );
+
   // Practice and this machine only, for an example firm: move its clock on,
   // then put whatever has come due on the queue at once.
   app.post('/control/firms/:firm/clock', (c) =>
@@ -471,6 +731,114 @@ function atCustomer(c: Context<AppEnv>, kind: 'view' | 'form', draw: (at: AtFirm
   });
 }
 
+/** One of the firm's owners, named in the address. Another firm's owner is "not found", as one that never was. */
+function atOwner(c: Context<AppEnv>, kind: 'view' | 'form', draw: (at: AtFirm, owner: Owner) => Promise<Response>): Promise<Response> {
+  return atFirm(c, kind, async (at) => {
+    const id = c.req.param('owner') ?? '';
+    const owner = isId(id) ? await getOwner(at.firmDb, at.firm.id, id as OwnerId) : null;
+    if (owner === null) return notFound(c);
+    return draw(at, owner);
+  });
+}
+
+/** One kind of text, named in the address. Anything else is "not found". */
+function atKind(c: Context<AppEnv>, kind: 'view' | 'form', draw: (at: AtFirm, kind: MessageKind) => Promise<Response>): Promise<Response> {
+  return atFirm(c, kind, async (at) => {
+    const named = c.req.param('kind') ?? '';
+    if (!Object.hasOwn(MESSAGE_KINDS, named)) return notFound(c);
+    return draw(at, named as MessageKind);
+  });
+}
+
+/** How far the firm is set up, for its page. */
+async function setUpOf(at: AtFirm): Promise<{ gaps: ReturnType<typeof callsSetUpGaps>; owners: Owner[] }> {
+  const owners = await listOwners(at.firmDb, at.firm.id);
+  return { gaps: callsSetUpGaps(at.firm, owners, await firmWording(at.firmDb, at.firm.id)), owners };
+}
+
+/** A kind of text's wording page: the words, what a check found, and the text with example details when it can go. */
+async function wordingView(
+  c: Context<AppEnv>,
+  at: AtFirm,
+  kind: MessageKind,
+  words: string,
+  versions: readonly WordingVersion[],
+  problems: string[] | null,
+  chosen: { owner: string; how: string },
+): Promise<WordingView> {
+  const owners = await listOwners(at.firmDb, at.firm.id);
+  const deps = c.get('deps');
+  const addresses = { links: deps.linkAddress, app: deps.appAddress };
+  let preview: WordingView['preview'] = null;
+  if (wordingProblems(`text:${kind}`, words).length === 0) {
+    const text = makeWords(words, previewFacts(kind, at.firm, owners[0] ?? null, addresses, false));
+    const longest = makeWords(words, previewFacts(kind, at.firm, owners[0] ?? null, addresses, true));
+    // Every character a text carries is one of these, so its length is its count.
+    preview = { text, segments: segments(text), characters: text.length, longest: segments(longest) };
+  }
+  return {
+    firm: at.firm,
+    kind,
+    owners,
+    words,
+    fromDraft: versions.length === 0,
+    problems,
+    preview,
+    versions,
+    chosen: { owner: chosen.owner === '' ? (owners[0]?.id ?? '') : chosen.owner, how: AGREED_HOW.includes(chosen.how as AgreedHow) ? chosen.how : 'phone' },
+  };
+}
+
+/** The diary form filled from the firm's rules, or empty but for likely times between starts and days ahead. */
+function diaryFormOf(rules: DiaryRules | null): DiaryForm {
+  const lengths = Object.fromEntries(VISIT_KINDS.map((kind) => [kind, rules?.lengths[kind] === undefined ? '' : String(rules.lengths[kind])])) as Record<VisitKind, string>;
+  return rules === null
+    ? { days: [], opens: '', closes: '', every: '60', daysAhead: '14', lengths }
+    : {
+        days: rules.days,
+        opens: minutesToTime(rules.opens),
+        closes: minutesToTime(rules.closes),
+        every: String(rules.every),
+        daysAhead: String(rules.daysAhead),
+        lengths,
+      };
+}
+
+/** The diary form as it was posted. */
+function diaryFormFrom(form: URLSearchParams): DiaryForm {
+  const field = (name: string) => (form.get(name) ?? '').slice(0, 10);
+  return {
+    days: form.getAll('day').map(Number),
+    opens: field('opens'),
+    closes: field('closes'),
+    every: field('every'),
+    daysAhead: field('daysAhead'),
+    lengths: Object.fromEntries(VISIT_KINDS.map((kind) => [kind, field(`length_${kind}`)])) as Record<VisitKind, string>,
+  };
+}
+
+/** Diary rules from the form. Whatever does not read as a number is left to diaryRulesProblems() to refuse. */
+function diaryRulesFrom(form: DiaryForm): DiaryRules {
+  const lengths: Partial<Record<VisitKind, number>> = {};
+  for (const kind of VISIT_KINDS) {
+    if (form.lengths[kind].trim() !== '') lengths[kind] = whole(form.lengths[kind]);
+  }
+  return { days: form.days, opens: timeToMinutes(form.opens), closes: timeToMinutes(form.closes), every: whole(form.every), daysAhead: whole(form.daysAhead), lengths };
+}
+
+/** A whole number as typed, or NaN. */
+function whole(typed: string): number {
+  return /^\d{1,5}$/.test(typed.trim()) ? Number(typed.trim()) : NaN;
+}
+
+/** A time as a time field sends it, such as 08:00, in minutes after midnight, or NaN. */
+function timeToMinutes(typed: string): number {
+  const parts = /^(\d{2}):(\d{2})$/.exec(typed);
+  if (parts === null) return NaN;
+  const [hours, minutes] = [Number(parts[1]), Number(parts[2])];
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : NaN;
+}
+
 async function deletePage(at: AtFirm, customer: CustomerId, wrongName: boolean): Promise<Html | null> {
   const found = await getCustomer(at.firmDb, at.firm.id, customer);
   const counts = await customerFileCounts(at.firmDb, at.firm.id, customer);
@@ -491,10 +859,10 @@ function refused(c: Context<AppEnv>): Response {
 }
 
 /** A form, read up to a size no control-room page sends past. */
-async function readForm(request: Request): Promise<URLSearchParams> {
+async function readForm(request: Request, limit = FORM_LIMIT): Promise<URLSearchParams> {
   const length = Number(request.headers.get('Content-Length') ?? '0');
-  const body = Number.isFinite(length) && length <= FORM_LIMIT ? await request.text() : '';
-  return new URLSearchParams(body.length > FORM_LIMIT ? '' : body);
+  const body = Number.isFinite(length) && length <= limit ? await request.text() : '';
+  return new URLSearchParams(body.length > limit ? '' : body);
 }
 
 /** A UK date and time as a browser's date-and-time field sends it, such as 2026-10-16T13:00, or null. */

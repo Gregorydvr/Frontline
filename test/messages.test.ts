@@ -22,9 +22,10 @@ import {
 } from '../src/record';
 import { openRecord, Refused } from '../src/record/db';
 import { MESSAGE_KINDS, type MessageKind } from '../src/record/types';
-import { gapsIn } from '../src/record/wording';
+import { gapsIn, wordingProblems } from '../src/set-up';
 import { historyKinds } from './helpers/db';
 import { tidewell } from './helpers/vapi';
+import { agreedByOwner } from './helpers/owner';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
@@ -37,6 +38,12 @@ describe('the drafts', () => {
       for (const gap of gapsIn(draft ?? '')) {
         expect(MESSAGE_KINDS[kind as MessageKind].gaps).toContain(gap);
       }
+    }
+  });
+
+  it('each pass the check staff save a firm’s wording through, for their own kind (slice H2)', () => {
+    for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
+      expect(wordingProblems(`text:${kind}`, DRAFT_WORDING[kind] ?? ''), kind).toEqual([]);
     }
   });
 
@@ -112,26 +119,26 @@ describe('makeWords', () => {
 describe('setWording', () => {
   it('keeps every version, and the newest is in use', async () => {
     const firm = await tidewell(db, '+447700903001');
-    const first = await setWording(db, firm, 'text:visit_reminder', 'Reminder: {time}.', frontline);
+    const first = await setWording(db, firm, 'text:visit_reminder', 'Reminder: {time}.', frontline, await agreedByOwner(db, firm));
     clock.advance(60_000);
-    const second = await setWording(db, firm, 'text:visit_reminder', 'Reminder: see you at {time}.', frontline);
+    const second = await setWording(db, firm, 'text:visit_reminder', 'Reminder: see you at {time}.', frontline, await agreedByOwner(db, firm));
     expect(first).not.toBe(second);
     expect((await firmWording(db, firm))['text:visit_reminder']).toEqual({ id: second, words: 'Reminder: see you at {time}.' });
   });
 
   it('takes the firm’s own words for an owner’s line, which keep the app’s curly apostrophe', async () => {
     const firm = await tidewell(db, '+447700903002');
-    await setWording(db, firm, 'line:confirmation_sent:feed', 'Confirmed {customer’s} visit.', frontline);
+    await setWording(db, firm, 'line:confirmation_sent:feed', 'Confirmed {customer’s} visit.', frontline, null);
     expect((await firmWording(db, firm))['line:confirmation_sent:feed']?.words).toBe('Confirmed {customer’s} visit.');
-    await expect(setWording(db, firm, 'line:confirmation_sent:feed', 'Confirmed {time}.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'line:nothing:feed' as never, 'Confirmed.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'line:confirmation_sent:page' as never, 'Confirmed.', frontline)).rejects.toThrow(Refused);
-    await expect(setWording(db, firm, 'line:confirmation_sent:job', 'Two\nlines.', frontline)).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'line:confirmation_sent:feed', 'Confirmed {time}.', frontline, null)).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'line:nothing:feed' as never, 'Confirmed.', frontline, null)).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'line:confirmation_sent:page' as never, 'Confirmed.', frontline, null)).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'line:confirmation_sent:job', 'Two\nlines.', frontline, null)).rejects.toThrow(Refused);
   });
 
   it('cannot be done by a customer', async () => {
     const firm = await tidewell(db, '+447700903003');
-    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {time}.', { kind: 'customer' })).rejects.toThrow(Refused);
+    await expect(setWording(db, firm, 'text:visit_reminder', 'Reminder: {time}.', { kind: 'customer' }, await agreedByOwner(db, firm))).rejects.toThrow(Refused);
   });
 });
 

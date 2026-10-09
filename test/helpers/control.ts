@@ -11,9 +11,11 @@ export function controlOpener(app: Hono<AppEnv>) {
   return (path: string, init: RequestInit = {}): Promise<Response> => Promise.resolve(app.request(`${CONTROL_ADDRESS}${path}`, init, env));
 }
 
-/** A form posted from one of the control room's own pages, as a browser posts it. */
-export function controlForm(fields: Record<string, string>, origin = CONTROL_ADDRESS): RequestInit {
-  const body = new URLSearchParams(fields).toString();
+/** A form posted from one of the control room's own pages, as a browser posts it. A field given a list is sent once for each, as ticked boxes are. */
+export function controlForm(fields: Record<string, string | readonly string[]>, origin = CONTROL_ADDRESS): RequestInit {
+  const body = new URLSearchParams(
+    Object.entries(fields).flatMap(([name, value]) => (typeof value === 'string' ? [[name, value]] : value.map((one) => [name, one]))),
+  ).toString();
   return {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(body.length), Origin: origin },
