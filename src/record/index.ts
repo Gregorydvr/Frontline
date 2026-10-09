@@ -6,7 +6,9 @@
 // which the clock finds what is due for every firm at once; findLink(),
 // which finds the firm from the token in a link a customer opens; and the
 // four that find the firm when an owner logs in: findOwnersByMobile(),
-// findLoginLink(), logInWithLink() and findSession().
+// findLoginLink(), logInWithLink() and findSession(); and, for the control
+// room, findOrAddStaff(), since staff belong to no firm, and listFirms(), the
+// list staff choose a firm from.
 
 export {
   createFirm,
@@ -60,3 +62,15 @@ export {
   loginLinkForDue,
 } from './logins';
 export { recordOwnerMessage } from './owner-messages';
+export { findOrAddStaff, logStaff } from './staff';
+export {
+  customerFile,
+  customerFileCounts,
+  deleteCustomer,
+  findCustomers,
+  listFailedTexts,
+  listFirms,
+  listOwnerMessages,
+  needsALook,
+} from './control';
+export { deleteExampleFirm, setExampleClock } from './example';

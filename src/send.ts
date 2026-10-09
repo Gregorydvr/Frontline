@@ -20,7 +20,8 @@
 // - The text is claimed: its row in the due list and who it is to can be
 //   written once, so the same text cannot go twice (rule 3).
 // Then it is handed to the provider, and what happened is recorded, with a
-// history entry when it went (rule 15).
+// history entry when it went (rule 15). An example firm's texts go to the
+// stand-in for texts, never to a real provider.
 
 import { isGsm7 } from './gsm';
 import { log } from './log';
@@ -28,6 +29,7 @@ import type { Instant } from './clock';
 import { makeWords, quietUntil, type Facts } from './messages';
 import type { UkMobile } from './phone';
 import type { Texts } from './providers/texts';
+import { FakeTexts } from './providers/texts/fake';
 import {
   claimMessage,
   findMessageForDue,
@@ -59,6 +61,9 @@ import {
   type Recipient,
   type VisitId,
 } from './record/types';
+
+/** Where an example firm's texts go when the copy's provider is a real one. */
+const EXAMPLE_TEXTS: Texts = new FakeTexts();
 
 export interface Outgoing {
   /** The row in the due list this text comes from. With who it is to, it is the claim. */
@@ -158,9 +163,14 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   }
   const message = claimed.message;
 
+  // An example firm's texts never reach a real provider, on any copy: its
+  // customers are invented, and moving its clock on in the control room
+  // brings its reminders due. They go to the stand-in, and are recorded as
+  // sent through it.
+  const carrier = firm.isExample && texts.provider !== 'fake' ? EXAMPLE_TEXTS : texts;
   let answer;
   try {
-    answer = await texts.sendText({ from: firm.phoneNumber, to: toNumber, body: words });
+    answer = await carrier.sendText({ from: firm.phoneNumber, to: toNumber, body: words });
   } catch {
     // It is not clear whether the provider took it, so it is never sent
     // again. Staff check it.
@@ -180,7 +190,7 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
     }
     return { result: 'failed', message, why: answer.reason };
   }
-  await markMessageSent(db, firmId, message, texts.provider, answer.providerId);
+  await markMessageSent(db, firmId, message, carrier.provider, answer.providerId);
   log('text_sent', { firm: firmId, message });
   return { result: 'sent', message };
 }

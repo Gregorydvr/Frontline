@@ -7,7 +7,7 @@ import { instant, type Instant } from '../clock';
 import { newId } from '../ids';
 import { isUkLandline, isUkMobile, type UkLandline, type UkMobile } from '../phone';
 import { insertCustomer } from './customers';
-import { line, Refused, run, runTogether, type RecordDb } from './db';
+import { bit, line, Refused, run, runTogether, type RecordDb } from './db';
 import { insertDue } from './due';
 import { callEntry, historyStatement } from './history';
 import { fileHold } from './holds';
@@ -147,8 +147,8 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
     .prepare(
       `INSERT INTO calls (id, firm_id, provider, provider_call_id, started_at, ended_at, from_number,
                           customer_id, job_id, visit_id, outcome, urgent_item, caller, summary,
-                          transcript, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          transcript, urgent_not_on_list, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       call,
@@ -166,6 +166,7 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       caller,
       summary,
       input.transcript,
+      bit(urgentItem === null && input.urgentNotOnList === true),
       db.clock.now(),
     );
 

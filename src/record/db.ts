@@ -2,15 +2,27 @@
 // files in src/record/ talk to the database (rule 8 in CLAUDE.md), and lint
 // enforces it.
 
-import type { Clock } from '../clock';
+import { aheadBy, type Clock } from '../clock';
 
 export interface RecordDb {
   readonly d1: D1Database;
+  /** The time as the firm being worked for reads it: the real time, or an example firm's own (withFirmClock()). */
   readonly clock: Clock;
+  /** The system's own clock, under any firm's. */
+  readonly realClock: Clock;
 }
 
 export function openRecord(d1: D1Database, clock: Clock): RecordDb {
-  return { d1, clock };
+  return { d1, clock, realClock: clock };
+}
+
+/**
+ * The record as one firm reads the time: the real time, moved on by the
+ * firm's own clock. Only an example firm's clock is ever moved (slice G), so
+ * for every real firm this is the real time.
+ */
+export function withFirmClock(db: RecordDb, firm: { clockAhead: number }): RecordDb {
+  return { d1: db.d1, realClock: db.realClock, clock: aheadBy(db.realClock, firm.clockAhead) };
 }
 
 /**

@@ -37,14 +37,10 @@ export async function createFirm(db: RecordDb, input: { name: string; isExample:
 
 export async function getFirm(db: RecordDb, firm: FirmId): Promise<Firm | null> {
   const row = await db.d1
-    .prepare(
-      `SELECT id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-              stopped, phone_number, urgent_list, diary_rules, created_at
-       FROM firms WHERE id = ?`,
-    )
+    .prepare(`SELECT ${FIRM_COLUMNS} FROM firms WHERE id = ?`)
     .bind(firm)
     .first<FirmRow>();
-  return row === null ? null : fromRow(row);
+  return row === null ? null : firmFromRow(row);
 }
 
 /**
@@ -194,7 +190,11 @@ async function changeFirm(db: RecordDb, statements: D1PreparedStatement[]): Prom
   }
 }
 
-interface FirmRow {
+/** The columns a firm is read from, for firmFromRow(). */
+export const FIRM_COLUMNS = `id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
+  stopped, phone_number, urgent_list, diary_rules, clock_ahead, created_at`;
+
+export interface FirmRow {
   id: string;
   name: string;
   is_example: number;
@@ -207,10 +207,11 @@ interface FirmRow {
   phone_number: string | null;
   urgent_list: string;
   diary_rules: string | null;
+  clock_ahead: number;
   created_at: number;
 }
 
-function fromRow(row: FirmRow): Firm {
+export function firmFromRow(row: FirmRow): Firm {
   return {
     id: row.id as FirmId,
     name: row.name,
@@ -226,6 +227,7 @@ function fromRow(row: FirmRow): Firm {
     phoneNumber: row.phone_number as UkMobile | null,
     urgentList: urgentListFrom(row.urgent_list),
     diaryRules: diaryRulesFrom(row.diary_rules),
+    clockAhead: row.clock_ahead,
     createdAt: instant(row.created_at),
   };
 }
