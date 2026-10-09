@@ -31,11 +31,30 @@ This brings the local database up to date with `migrations/`, then starts the sy
 
 The first time the system is used, it loads the demo firm: Tidewell Heating, owner Tom, and the example app's sixteen customers and jobs, as records. Open http://localhost:8787/local/example to see it in plain text: each job with its state and its history as the owner would read it, and Done for you on the example's "today", Thursday 15 October 2026. This page and the loading exist only in the version `npm run dev` runs (`src/local.ts`). The deployed copies are built from `src/index.ts` and have neither.
 
-Open http://localhost:8787/local/calls to see the demo firm's Calls & bookings screen on the same day, drawn from the record in the example app's look. Until the owner can log in (slice F), the owner's screens are served only here.
+### Open the owner's app
+
+On this machine the clock starts at the example's "today", Thursday 15 October 2026 at 4pm, when `npm run dev` starts, and runs on from there, so the demo firm looks as it does in the example. Practice and live use the real clock.
+
+Open http://localhost:8787/local/login and press **Send Tom a login link**. It sends Tom, the demo firm's owner, a link by text, the same way the login page does, to the stand-in for texts, then shows you the text and its link. Open the link and press **Log in**. You are on Home.
+
+Or log in the way an owner does: open http://localhost:8787/login, type Tom's mobile, `07700 900101`, and press **Text me a link**. The link is in the text listed at http://localhost:8787/local/texts.
+
+From Home:
+
+| Address | Screen |
+|---|---|
+| http://localhost:8787/ | Home |
+| http://localhost:8787/calls | Calls & bookings |
+| http://localhost:8787/jobs | All jobs, with the find box. Any row opens the job's page |
+| http://localhost:8787/done | Done for you |
+| http://localhost:8787/rules | Your rules |
+| http://localhost:8787/message | Message us |
+
+To see the phone size, use your browser's phone view at 390 by 844. From 960px wide the side menu shows, as in the example. A login lasts 30 days unused, and 90 days at most; **Log out** is at the bottom of Home.
 
 Open http://localhost:8787/local/texts to see the demo firm's texts from the record: what went out, what was not sent and why, and what came in. On this machine no text leaves: a stand-in takes the place of Twilio and sends nothing. `npm run dev` warns that the Twilio secrets are missing; that is expected, since this machine never needs them.
 
-To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again. Do this once after an update that changes the demo firm, such as slice C's calls: the demo firm is loaded only into an empty database.
+To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again. Do this once after an update that changes the demo firm, such as slice C's calls or slice F's (only Calls & bookings is switched on, and the alert and login wording): the demo firm is loaded only into an empty database.
 
 ### Watch a call land
 
@@ -48,11 +67,11 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/vapi/serv
   --data @test/fixtures/vapi/landline-caller.json
 ```
 
-It prints 200. Refresh http://localhost:8787/local/calls and Mrs Hall's call is at the top. Send it again, and nothing changes: the same report makes one call. Put anything else after `Bearer`, and it prints 401: refused. The other example reports are in `test/fixtures/vapi/`. What to set on a firm's voice agent in Vapi is in `docs/vapi.md`.
+It prints 200. Refresh http://localhost:8787/calls and Mrs Hall's call is at the top. Send it again, and nothing changes: the same report makes one call. Put anything else after `Bearer`, and it prints 401: refused. The other example reports are in `test/fixtures/vapi/`. What to set on a firm's voice agent in Vapi is in `docs/vapi.md`.
 
 ### Send an urgent call
 
-Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so Tom is alerted at once. Open http://localhost:8787/local/texts: the alert is listed as sent, with its words: "Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016." It went to the stand-in, not to a phone.
+Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so Tom is alerted at once. Open http://localhost:8787/local/texts: the alert is listed as sent, with its words: "Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016." and then a link to his job, which opens his job's page once Tom is logged in. It went to the stand-in, not to a phone.
 
 ### Book a visit, and open the customer's page
 
@@ -62,7 +81,7 @@ The page shows the visit booked, the confirmation's words, and a link to her con
 
 Each press is Mrs Ahmed on a new mobile, so she is a new customer every time and her confirmation is always her first text, with its link. Between 8pm and 8am her text waits until 8am (quiet hours), and the page says so.
 
-Links on this machine start `http://localhost:8787`, from `LINK_ADDRESS` in `wrangler.jsonc`. On practice and live it is empty until the address for customers' links is chosen (open question 9). Until then no text with a link goes out from them.
+Links on this machine start `http://localhost:8787`, from `LINK_ADDRESS` (customers' links) and `PUBLIC_ADDRESS` (the owner's app) in `wrangler.jsonc`. On practice and live both are empty until the addresses are chosen (open question 9). Until then no customer's first text and no login text goes out from them, and the urgent alert goes without its link.
 
 What to set on a firm's voice agent so it can book is in `docs/vapi.md`, under "Booking during a call".
 
@@ -86,11 +105,14 @@ Wrangler does contact Cloudflare in two small ways unless told not to:
 ## Check it
 
 ```sh
-npm run check   # types, lint and every test: this must pass before a push
-npm test        # the tests only
+npm run check          # types, lint and every test: this must pass before a push
+npm test               # the tests only
+npm run check:screens  # the owner's screens in a real browser
 ```
 
-The tests run inside the Workers runtime against a local database. GitHub runs `npm run check` on every pull request and after every merge to `main`.
+The tests run inside the Workers runtime against a local database. GitHub runs `npm run check` and `npm run check:screens` on every pull request and after every merge to `main`.
+
+`npm run check:screens` starts the system as `npm run dev` does, on port 8799 with a database of its own, logs in as Tom, and opens every owner's screen at 390 by 844 and at 1280 by 800. On each it runs the example app's own checks: no sideways scroll, no button under 44px, no text cut off, and no accessibility failures (axe-core, WCAG 2.2 AA). It saves a screenshot of each in `screens/`, which git ignores, beside the example's Home and Calls & bookings at the same sizes. It needs Playwright's Chromium: `npx playwright install chromium` the first time.
 
 ## Changing the database
 

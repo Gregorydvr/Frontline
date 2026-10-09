@@ -25,14 +25,23 @@ export const systemClock: Clock = {
 };
 
 /**
- * A clock that reads `start` at the moment it is made, and runs on from there
- * at the system's pace. Only `npm run dev` uses it (src/local.ts), so the
- * demo firm shows as it stands on the example's "today". Practice and live
- * use systemClock.
+ * A clock that reads `start` the first time it is read, and runs on from
+ * there at the system's pace. Only `npm run dev` uses it (src/local.ts), so
+ * the demo firm shows as it stands on the example's "today". Practice and
+ * live use systemClock.
+ *
+ * It starts at its first reading, not when it is made: a Worker made at the
+ * start reads no real time until a request comes.
  */
 export function startingAt(start: Instant): Clock {
-  const offset = instant(start) - Date.now();
-  return { now: () => instant(Date.now() + offset) };
+  let offset: number | null = null;
+  return {
+    now: () => {
+      const real = Date.now();
+      offset ??= instant(start) - real;
+      return instant(real + offset);
+    },
+  };
 }
 
 export function pretendClock(start: Instant): PretendClock {

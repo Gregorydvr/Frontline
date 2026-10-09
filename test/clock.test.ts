@@ -10,12 +10,14 @@ describe('systemClock', () => {
 });
 
 describe('startingAt', () => {
-  it('starts at the moment it was given, and runs on from there', () => {
+  it('starts at the moment it was given, when it is first read, and runs on from there', async () => {
     const start = instantFromIso('2026-10-15T16:00:00+01:00');
     const clock = startingAt(start);
+    // Made well before it is first read, as the Worker on this machine makes it.
+    await new Promise((done) => setTimeout(done, 300));
     const first = clock.now();
     expect(first).toBeGreaterThanOrEqual(start);
-    expect(first - start).toBeLessThan(1_000);
+    expect(first - start).toBeLessThan(150);
     expect(clock.now()).toBeGreaterThanOrEqual(first);
   });
 });

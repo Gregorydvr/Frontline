@@ -94,6 +94,7 @@ Slice A creates these. Keep the names.
 - `npm test`: the tests only. They run in the Workers runtime against a local database, with `migrations/` applied before each test file.
 - `npm run dev`: the system on this machine, with the invented data. It applies `migrations/` to the local database first, and loads the demo firm the first time it is used. http://localhost:8787/local/example shows the demo firm in plain text.
 - `npm run types`: rewrites `worker-configuration.d.ts` after a change to `wrangler.jsonc`.
+- `npm run check:screens`: the owner's screens in a real browser at 390 by 844 and 1280 by 800: no sideways scroll, nothing under 44px, nothing cut off, no accessibility failures (axe-core). Saves screenshots in `screens/`, beside the example's. GitHub runs it after `npm run check`.
 
 To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of Vite's optional add-ons. `npm ci` works with either. `.npmrc` makes npm record exact versions.
 
@@ -105,8 +106,9 @@ To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of V
 src/                 the Worker
   index.ts           entry point: builds the real dependencies and hands requests to the app
   app.ts             createApp(): the routes, and the error handler that logs ids only
-  deps.ts            Deps: what the system is given from outside: the clock, the texts provider, the due list's queue
-  clock.ts           Instant, Clock, systemClock (the only reader of the system time), pretendClock
+  owner-app.ts       the owner's app: logging in by a link sent by text, and the owner's screens, each taking the firm from the login
+  deps.ts            Deps: what the system is given from outside: the clock, the texts provider, the due list's queue, and the addresses of customers' links and of the owner's app
+  clock.ts           Instant, Clock, systemClock (the only reader of the system time), pretendClock, and startingAt for this machine
   money.ts           Pence, pence(), formatMoney()
   ids.ts             Id, newId(), isId()
   log.ts             log(): the only writer to the console, ids only
@@ -125,10 +127,11 @@ src/                 the Worker
   send.ts            send(): the one way a text leaves (rules 1 to 4)
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done
   diary/             the diary interface, Front-line's own diary behind it, and which times a firm offers (times.ts)
-  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts: loads the demo firm, adds /local/example, /local/calls, /local/texts and /local/book. Never deployed
+  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts and /local/book. Never deployed
   record/            the only code that touches the database. index.ts lists every record function
-  screens/           the owner's screens in the example's look, drawn from the record. Served only by local.ts until slice F.
-                     details.ts is the customer's confirm-your-details page, opened from their link
+  screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
+                     home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
+                     app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link
   example/           the demo firm, Tidewell Heating, as data, and its loader
   providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio
 migrations/          plain SQL, numbered 0001_name.sql, applied in tests, on this machine and when deployed
@@ -138,13 +141,16 @@ test/                the tests, which run in the Workers runtime
   helpers/vapi.ts    sends the example Vapi reports to the system, as Vapi does
   helpers/twilio.ts  sends the example Twilio requests to the system, signed as Twilio signs them
   helpers/deps.ts    pretend dependencies: the pretend clock, the stand-in for texts, a queue that keeps what it is given
+  helpers/owner.ts   logs an owner in, and opens the app's pages as them
   wall.test.ts       the cross-firm tests: every record function, tried as another firm
   routes.test.ts     every route, with its cross-firm case or the reason it needs none
   fixtures/          files the tests read
   fixtures/vapi/     example reports from Vapi as a call ends, and tool calls during one, with invented people
   fixtures/twilio/   example requests from Twilio: a text coming in, delivery reports
   fixtures/lint/     deliberate mistakes that show the checks in lint still work
+scripts/screens.js   npm run check:screens
 docs/                the build brief, the decisions, and what to set in Vapi (vapi.md) and Twilio (twilio.md)
+docs/screens/        screenshots beside the example's, kept with the pull request that took them
 reference/           the example app: read-only
 wrangler.jsonc       the Worker's config: this machine at the top level, then practice and live
 worker-configuration.d.ts   generated by `npm run types`; do not edit
@@ -152,4 +158,4 @@ worker-configuration.d.ts   generated by `npm run types`; do not edit
 .claude/settings.json   settings for every Claude Code session: the two Wrangler variables above
 ```
 
-Lint enforces five of the rules: nothing outside `src/send.ts` and `src/providers/texts/` hands a text to a provider (1), nothing outside `src/clock.ts` reads the system time (19), nothing outside `src/log.ts` writes to the console (11), nothing outside `src/record/` (and `test/helpers/db.ts`) uses the database or holds SQL (8), and nothing uses `Math.random`.
+Lint enforces five of the rules: nothing outside `src/send.ts` and `src/providers/texts/` hands a text to a provider (1), nothing outside `src/clock.ts` reads the system time (19), nothing outside `src/log.ts` (and the `scripts/` run on this machine) writes to the console (11), nothing outside `src/record/` (and `test/helpers/db.ts`) uses the database or holds SQL (8), and nothing uses `Math.random`.
