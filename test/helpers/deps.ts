@@ -18,11 +18,14 @@ export class PretendQueue implements DueQueue {
   }
 }
 
+/** Where customers' links go in tests. */
+export const LINK_ADDRESS = 'https://links.example';
+
 export interface TestDeps extends Deps {
   texts: FakeTexts;
   queue: PretendQueue;
 }
 
 export function testDeps(clock: Clock): TestDeps {
-  return { clock, texts: new FakeTexts(), queue: new PretendQueue() };
+  return { clock, texts: new FakeTexts(), queue: new PretendQueue(), linkAddress: LINK_ADDRESS };
 }

@@ -54,6 +54,18 @@ It prints 200. Refresh http://localhost:8787/local/calls and Mrs Hall's call is 
 
 Send `test/fixtures/vapi/mr-price-leak.json` the same way. Mr Price rings about a leak, which is on the demo firm's urgent list, so Tom is alerted at once. Open http://localhost:8787/local/texts: the alert is listed as sent, with its words: "Front-line: urgent call from Mr Price, 6 Bridge Street. A leak under the kitchen sink. Their number: 07700 900016." It went to the stand-in, not to a phone.
 
+### Book a visit, and open the customer's page
+
+Open http://localhost:8787/local/book and press **Play Mrs Ahmed's call**. It plays a call to the demo firm the way Vapi sends it during and after a call: the voice agent asks for free times, books the first quote visit offered, and the report comes as the call ends. Her confirmation is then sent at once, to the stand-in. (This needs `VAPI_SECRET` in `.dev.vars`, as above.)
+
+The page shows the visit booked, the confirmation's words, and a link to her confirm-your-details page, which is the link the text carries. Open it, correct her name, address or email, and press **Save my details**. http://localhost:8787/local/example then shows the change in her history, and http://localhost:8787/local/texts lists the text.
+
+Each press is Mrs Ahmed on a new mobile, so she is a new customer every time and her confirmation is always her first text, with its link. Between 8pm and 8am her text waits until 8am (quiet hours), and the page says so.
+
+Links on this machine start `http://localhost:8787`, from `LINK_ADDRESS` in `wrangler.jsonc`. On practice and live it is empty until the address for customers' links is chosen (open question 9). Until then no text with a link goes out from them.
+
+What to set on a firm's voice agent so it can book is in `docs/vapi.md`, under "Booking during a call".
+
 ### Run the clock by hand
 
 On a deployed copy the clock runs every minute. On this machine it runs only when asked:
@@ -62,7 +74,7 @@ On a deployed copy the clock runs every minute. On this machine it runs only whe
 curl http://localhost:8787/cdn-cgi/local/scheduled
 ```
 
-It puts the rows of the due list whose time has come on the queue, and the queue's worker runs them. The demo firm has nothing due yet: reminders are written when a visit is booked, which comes with slice E.
+It puts the rows of the due list whose time has come on the queue, and the queue's worker runs them: confirmations of visits just booked, and reminders at 1pm the day before a visit. The demo firm's own visits are from the example and have no rows; a visit booked through `/local/book` does.
 
 Wrangler does contact Cloudflare in two small ways unless told not to:
 

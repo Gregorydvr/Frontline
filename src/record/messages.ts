@@ -245,11 +245,28 @@ export async function listMessagesBetween(db: RecordDb, firm: FirmId, from: Inst
   return results.map(fromRow);
 }
 
+/**
+ * Whether the firm has ever sent this customer a text, or claimed one that
+ * may have gone. The first text a customer gets carries their link and the
+ * line on opting out.
+ */
+export async function hasTextedCustomer(db: RecordDb, firm: FirmId, customer: CustomerId): Promise<boolean> {
+  const row = await db.d1
+    .prepare(
+      `SELECT 1 AS yes FROM messages
+       WHERE firm_id = ? AND customer_id = ? AND state IN ('sending', 'sent', 'delivered') LIMIT 1`,
+    )
+    .bind(firm, customer)
+    .first<{ yes: number }>();
+  return row !== null;
+}
+
 /** The history entry that says a text went, for the kinds that write one. */
 function sentEntry(message: Message): NewHistory | null {
   const history = MESSAGE_KINDS[message.kind].history;
   switch (history) {
     case 'reminder_sent':
+    case 'confirmation_sent':
       return message.visit === null ? null : { kind: history, by: frontline, visit: message.visit };
     case 'passed_to_owner':
       return message.job === null ? null : { kind: history, by: frontline, job: message.job };

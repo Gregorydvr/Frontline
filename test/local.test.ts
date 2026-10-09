@@ -162,10 +162,35 @@ describe('texts on this machine', () => {
   });
 });
 
+describe('playing a booking call on this machine', () => {
+  const app = createLocalApp(() => deps);
+
+  it('shows a button at /local/book that posts back to it', async () => {
+    const answer = await app.request('/local/book', {}, env);
+    expect(answer.status).toBe(200);
+    expect(await answer.text()).toContain('<form method="post">');
+    expect(answer.headers.get('Content-Security-Policy')).toContain("form-action 'self'");
+  });
+
+  it('books Mrs Ahmed a quote visit through the real addresses, sends her confirmation, and gives her link, which opens her page', async () => {
+    // A weekday morning, so the text is not held for quiet hours.
+    clock.set(instantFromIso('2026-10-15T10:00:00+01:00'));
+    const answer = await app.request('/local/book', { method: 'POST' }, env);
+    expect(answer.status).toBe(200);
+    const words = await answer.text();
+    expect(words).toContain('Quote visit booked for Friday 16 October at 8am. Her confirmation: sent.');
+    const link = /href="(https:\/\/links\.example\/d\/[0-9a-z]{26})"/.exec(words)?.[1];
+    if (link === undefined) throw new Error('No link');
+    const page = await app.request(new URL(link).pathname, {}, env);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('value="Mrs Ahmed"');
+  });
+});
+
 describe('the deployed version', () => {
-  it('has no /local/example, /local/calls or /local/texts page and does not load the demo firm', async () => {
+  it('has no /local/example, /local/calls, /local/texts or /local/book page and does not load the demo firm', async () => {
     const before = await exampleFirms(db);
-    for (const path of ['/local/example', '/local/calls', '/local/texts']) {
+    for (const path of ['/local/example', '/local/calls', '/local/texts', '/local/book']) {
       const answer = await exports.default.fetch(`http://localhost${path}`);
       expect(answer.status).toBe(404);
     }

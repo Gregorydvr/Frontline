@@ -7,12 +7,16 @@ import type { Hono } from 'hono';
 import type { AppEnv } from '../../src/app';
 import { ukMobile } from '../../src/phone';
 import { DRAFT_WORDING } from '../../src/messages';
-import { createFirm, createOwner, setFirmNumber, setService, setUrgentList, setWording } from '../../src/record';
+import { EXAMPLE_DIARY_RULES } from '../../src/example/tidewell';
+import { createFirm, createOwner, setDiaryRules, setFirmNumber, setService, setUrgentList, setWording } from '../../src/record';
 import type { RecordDb } from '../../src/record/db';
 import type { FirmId, MessageKind } from '../../src/record/types';
+import book from '../fixtures/vapi/book.json';
+import freeTimes from '../fixtures/vapi/free-times.json';
 import hangUp from '../fixtures/vapi/hang-up.json';
 import landlineCaller from '../fixtures/vapi/landline-caller.json';
 import mrPriceLeak from '../fixtures/vapi/mr-price-leak.json';
+import mrsAhmedBooked from '../fixtures/vapi/mrs-ahmed-booked.json';
 import supplier from '../fixtures/vapi/supplier.json';
 import withheldCaller from '../fixtures/vapi/withheld-caller.json';
 
@@ -22,7 +26,13 @@ export const REPORTS = {
   'landline-caller': landlineCaller,
   'withheld-caller': withheldCaller,
   'hang-up': hangUp,
+  'mrs-ahmed-booked': mrsAhmedBooked,
 } as const;
+
+/** The example messages Vapi sends when the voice agent uses one of Front-line's tools during Mrs Ahmed's call. */
+export const TOOL_CALLS = { 'free-times': freeTimes, book } as const;
+
+export type ToolCallName = keyof typeof TOOL_CALLS;
 
 export type ReportName = keyof typeof REPORTS;
 
@@ -38,6 +48,51 @@ export function report(name: ReportName, to?: string): Report {
     (copy.message.phoneNumber as Record<string, unknown>).number = to;
   }
   return copy;
+}
+
+/**
+ * A copy of an example tool call, to change without touching the file: the
+ * arguments the agent gave, and optionally the number that was rung and
+ * Vapi's id for the call, so it can belong to another call or firm.
+ */
+export function toolCall(
+  name: ToolCallName,
+  args: Record<string, unknown> | string,
+  options: { to?: string; callId?: string } = {},
+): Report {
+  const copy = structuredClone(TOOL_CALLS[name]) as unknown as Report;
+  const [call] = copy.message.toolCallList as { function: { arguments: unknown } }[];
+  if (call === undefined) throw new Error('No tool call');
+  call.function.arguments = typeof args === 'string' ? args : JSON.stringify(args);
+  if (options.to !== undefined) {
+    (copy.message.phoneNumber as Record<string, unknown>).number = options.to;
+  }
+  if (options.callId !== undefined) {
+    (copy.message.call as Record<string, unknown>).id = options.callId;
+  }
+  return copy;
+}
+
+/** Sends a tool call to one of the two addresses the voice agent uses during a call. */
+export async function sendTool(
+  app: Hono<AppEnv>,
+  address: '/vapi/free-times' | '/vapi/book',
+  body: unknown,
+  headers: Record<string, string> = { Authorization: `Bearer ${env.VAPI_SECRET}` },
+): Promise<Response> {
+  return app.request(
+    address,
+    { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) },
+    env,
+  );
+}
+
+/** What Front-line answered the agent for its one tool call: the result, read as JSON. */
+export async function toolAnswer(response: Response): Promise<Record<string, unknown>> {
+  const body: { results: { result?: string; error?: string }[] } = await response.json();
+  const [first] = body.results;
+  if (first?.result === undefined) throw new Error('No result');
+  return JSON.parse(first.result) as Record<string, unknown>;
 }
 
 /** The same report with Vapi's id for the call changed, so it is another call. */
@@ -73,18 +128,20 @@ export const TOMS_MOBILE = '+447700900101';
 
 /**
  * Tidewell Heating as it is set up for a real firm, with nothing in it yet:
- * its number, its urgent list, calls switched on, owner Tom with his mobile,
- * and its agreed wording: the drafts, for every kind of text that has one.
+ * its number, its urgent list, when quote visits can be booked, calls
+ * switched on, owner Tom with his mobile, and its agreed wording: the drafts,
+ * for every kind of text that has one, apart from any left out.
  */
-export async function tidewell(db: RecordDb, number = '07700 900100'): Promise<FirmId> {
+export async function tidewell(db: RecordDb, number = '07700 900100', without: readonly MessageKind[] = []): Promise<FirmId> {
   const staff = { kind: 'frontline' } as const;
   const firm = await createFirm(db, { name: 'Tidewell Heating', isExample: false });
   await setFirmNumber(db, firm, ukMobile(number), staff);
   await setUrgentList(db, firm, ['a leak'], staff);
+  await setDiaryRules(db, firm, EXAMPLE_DIARY_RULES, staff);
   await setService(db, firm, 'calls', true, staff);
   await createOwner(db, firm, { name: 'Tom', mobile: ukMobile(TOMS_MOBILE) });
   for (const [kind, words] of Object.entries(DRAFT_WORDING) as [MessageKind, string | null][]) {
-    if (words !== null) {
+    if (words !== null && !without.includes(kind)) {
       await setWording(db, firm, `text:${kind}`, words, staff);
     }
   }

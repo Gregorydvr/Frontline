@@ -17,6 +17,7 @@ import {
   exampleFirms,
   markCallBooked,
   recordCall,
+  setDiaryRules,
   setFirmNumber,
   setService,
   setUrgentList,
@@ -35,6 +36,7 @@ import {
 } from '../record/types';
 import {
   CUSTOMERS,
+  EXAMPLE_DIARY_RULES,
   EXAMPLE_FIRM,
   EXAMPLE_NUMBER,
   EXAMPLE_OWNER,
@@ -71,6 +73,7 @@ export async function loadExample(
   }
   await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
   await setUrgentList(db, firm, EXAMPLE_URGENT_LIST, frontline);
+  await setDiaryRules(db, firm, EXAMPLE_DIARY_RULES, frontline);
   await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) });
   // The wording agreed at set-up: the drafts, for each kind that has one.
   for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
@@ -95,7 +98,7 @@ export async function loadExample(
     switch (step.add) {
       case 'customer': {
         const { name, mobile, about, place } = CUSTOMERS[step.customer];
-        const customer = await createCustomer(db, firm, { name, mobile: ukMobile(mobile) });
+        const customer = await createCustomer(db, firm, { name, mobile: ukMobile(mobile), address: place });
         const job = await createJob(db, firm, { customer, about, place, urgent: false });
         people.set(step.customer, { customer, job });
         break;

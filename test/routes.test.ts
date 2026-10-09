@@ -14,6 +14,8 @@ import { ukMobile } from '../src/phone';
 import {
   addDue,
   findCustomersByMobile,
+  linkForDue,
+  listTakenTimes,
   listCallsBetween,
   listCustomers,
   listJobsForCustomer,
@@ -26,7 +28,7 @@ import type { FirmId } from '../src/record/types';
 import { firmRows } from './helpers/db';
 import { testDeps } from './helpers/deps';
 import { postToTwilioRoute, pretendTwilio, twilioFields } from './helpers/twilio';
-import { report, send, withDetails } from './helpers/vapi';
+import { report, send, sendTool, toolAnswer, toolCall, withDetails } from './helpers/vapi';
 
 /** Routes that take no firm from the request, and why. */
 const TAKES_NO_FIRM: Record<string, string> = {
@@ -34,6 +36,8 @@ const TAKES_NO_FIRM: Record<string, string> = {
   'GET /local/example': 'This machine only. Shows the example firm and takes nothing from the request.',
   'GET /local/calls': 'This machine only. Shows the example firm and takes nothing from the request.',
   'GET /local/texts': 'This machine only. Shows the example firm and takes nothing from the request.',
+  'GET /local/book': 'This machine only. Shows a button, and takes nothing from the request.',
+  'POST /local/book': 'This machine only. Plays a call to the example firm through the real addresses, and takes nothing from the request.',
 };
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -91,6 +95,66 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     expect(await listCustomers(db, b)).toHaveLength(16);
   },
 
+  // The firm comes from the number that was rung. The second firm's agent,
+  // on the same call id, sees only the second firm's diary, and holds a
+  // time there, leaving the first firm exactly as it was.
+  'POST /vapi/free-times': async () => {
+    const { a } = await twoFirms();
+    const app = createApp(deps);
+    const ask = async (to: string, callId: string) =>
+      (await toolAnswer(await sendTool(app, '/vapi/free-times', toolCall('free-times', { day: '2026-10-22' }, { to, callId })))).times as { start: string }[];
+    // A time the first firm holds counts in the first firm's diary only.
+    await sendTool(app, '/vapi/book', toolCall('book', { start: '2026-10-22T08:00' }, { to: '+447700900100', callId: 'routes-a' }));
+    expect((await ask('+447700900100', 'routes-a2'))[0]?.start).toBe('2026-10-22T09:00');
+    const before = await firmRows(env.DB, a);
+    expect((await ask('+447700900200', 'routes-b'))[0]?.start).toBe('2026-10-22T08:00');
+    expect(await firmRows(env.DB, a)).toEqual(before);
+  },
+  'POST /vapi/book': async () => {
+    const { a, b } = await twoFirms();
+    const before = await firmRows(env.DB, a);
+    const answer = await toolAnswer(
+      await sendTool(createApp(deps), '/vapi/book', toolCall('book', { start: '2026-10-19T11:00' }, { to: '+447700900200', callId: 'routes-call' })),
+    );
+    expect(answer).toMatchObject({ booked: true });
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    expect(await listTakenTimes(db, b, ...allTime)).toContainEqual({
+      startsAt: instantFromIso('2026-10-19T11:00:00+01:00'),
+      endsAt: instantFromIso('2026-10-19T12:00:00+01:00'),
+    });
+  },
+
+  // The firm comes from the link's token. The first firm's link shows only
+  // the first firm's customer; nothing in the address names a firm, so there
+  // is no other firm's id to try. The second firm's link cannot change the
+  // first firm.
+  'GET /d/:token': async () => {
+    const { a, b } = await twoFirms();
+    const linkOfB = await clarkesLink(b);
+    const page = await createApp(deps).request(`/d/${linkOfB}`, {}, env);
+    expect(page.status).toBe(200);
+    const words = await page.text();
+    expect(words).toContain('Second Example Firm');
+    expect(words).not.toContain('Tidewell Heating');
+    const [clarkeOfA] = await findCustomersByMobile(db, a, ukMobile('07700 900005'));
+    expect(words).not.toContain(clarkeOfA?.id ?? 'none');
+  },
+  'POST /d/:token': async () => {
+    const { a, b } = await twoFirms();
+    const linkOfB = await clarkesLink(b);
+    const before = await firmRows(env.DB, a);
+    const body = new URLSearchParams({ name: 'Mr J Clarke', address: '41 Park Road', email: '' }).toString();
+    const answer = await createApp(deps).request(
+      `/d/${linkOfB}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(body.length) }, body },
+      env,
+    );
+    expect(answer.status).toBe(200);
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    const [clarkeOfB] = await findCustomersByMobile(db, b, ukMobile('07700 900005'));
+    expect(clarkeOfB?.name).toBe('Mr J Clarke');
+  },
+
   // The firm comes from the number the text was sent to. A text to the
   // second firm's number from Mrs Ahmed's mobile lands on the second firm's
   // own Mrs Ahmed, and the first firm is left exactly as it was.
@@ -128,6 +192,16 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   },
 };
 
+/** A link for the firm's Mr Clarke, for his job. */
+async function clarkesLink(firm: FirmId): Promise<string> {
+  const [clarke] = await findCustomersByMobile(db, firm, ukMobile('07700 900005'));
+  const [job] = clarke === undefined ? [] : await listJobsForCustomer(db, firm, clarke.id);
+  const [visit] = job === undefined ? [] : await listVisitsForJob(db, firm, job.id);
+  if (clarke === undefined || job === undefined || visit === undefined) throw new Error('Mr Clarke has no visit');
+  const due = await addDue(db, firm, { action: 'send_confirmation', visit: visit.id, runAt: clock.now(), latestAt: clock.now() });
+  return linkForDue(db, firm, { due, customer: clarke.id, job: job.id });
+}
+
 function routesOf(app: ReturnType<typeof createApp>): string[] {
   return (
     app.routes
@@ -148,8 +222,17 @@ describe('every route', () => {
     }
   });
 
-  it('in the deployed version is /health and the addresses Vapi and Twilio report to', () => {
-    expect(routesOf(createApp(deps))).toEqual(['GET /health', 'POST /vapi/server', 'POST /twilio/texts', 'POST /twilio/status']);
+  it('in the deployed version is /health, the addresses Vapi and Twilio call, and the customer’s page', () => {
+    expect(routesOf(createApp(deps))).toEqual([
+      'GET /health',
+      'POST /vapi/server',
+      'POST /vapi/free-times',
+      'POST /vapi/book',
+      'GET /d/:token',
+      'POST /d/:token',
+      'POST /twilio/texts',
+      'POST /twilio/status',
+    ]);
   });
 
   it.each(Object.entries(CROSS_FIRM_CASES))('%s refuses the other firm', async (_, attempt) => {

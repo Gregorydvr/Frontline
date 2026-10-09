@@ -9,8 +9,10 @@ import { isUkLandline, isUkMobile, type UkLandline, type UkMobile } from '../pho
 import { insertCustomer } from './customers';
 import { line, Refused, run, runTogether, type RecordDb } from './db';
 import { insertDue } from './due';
-import { callEntry } from './history';
+import { callEntry, historyStatement } from './history';
+import { fileHold } from './holds';
 import { insertJob } from './jobs';
+import { insertVisit } from './visits';
 import {
   CALL_LIMITS,
   CALL_PROVIDERS,
@@ -41,6 +43,9 @@ export interface RecordedCall {
   job: JobId | null;
   /** For an urgent call, the row in the due list that alerts the owner. */
   alert: DueId | null;
+  /** For a call with a visit booked on it, the visit and its rows in the due list. */
+  visit: VisitId | null;
+  dues: DueId[];
 }
 
 /**
@@ -51,8 +56,11 @@ export interface RecordedCall {
  * - for someone who is not a customer, a message taken
  * - for a call whose details are missing, just that
  * A call with an urgent item is urgent, and so is its job, and a row in the
- * due list to alert the owner at once is written with it. A call the record
- * already holds is refused, and nothing is written.
+ * due list to alert the owner at once is written with it. A customer's call
+ * that is not urgent can come with a booking: the time held during the call
+ * becomes a visit on its job, the call is booked, and the visit's
+ * confirmation and reminder go in the due list. A call the record already
+ * holds is refused, and nothing is written.
  */
 export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Promise<RecordedCall> {
   if (!CALL_PROVIDERS.includes(input.provider)) {
@@ -67,7 +75,11 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
   if (input.transcript !== null && input.transcript.length > CALL_LIMITS.transcript) {
     throw new Refused();
   }
-  const outcome: CallOutcome = urgentItem === null ? 'message' : 'urgent';
+  const booking = input.booking ?? null;
+  if (booking !== null && (urgentItem !== null || (input.for.kind !== 'new_customer' && input.for.kind !== 'customer'))) {
+    throw new Refused();
+  }
+  const outcome: CallOutcome = urgentItem !== null ? 'urgent' : booking !== null ? 'booked' : 'message';
 
   const call = newId() as CallId;
   let customer: CustomerId | null = null;
@@ -82,7 +94,7 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       customer = newId() as CustomerId;
       job = newId() as JobId;
       before.push(
-        insertCustomer(db, firm, customer, { name: line(name, CALL_LIMITS.name), mobile, landline, noText }),
+        insertCustomer(db, firm, customer, { name: line(name, CALL_LIMITS.name), mobile, landline, noText, address: line(place, CALL_LIMITS.place) }),
         insertJob(db, firm, job, newJob(customer, about, place, urgentItem)),
       );
       after.push(
@@ -110,12 +122,33 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       throw new Refused();
   }
 
+  // The booking: the held time becomes a visit on the call's job, with its
+  // rows in the due list, all in the same step as the call.
+  let visit: VisitId | null = null;
+  const dues: DueId[] = [];
+  if (booking !== null && job !== null) {
+    visit = newId() as VisitId;
+    before.push(
+      insertVisit(db, firm, visit, { job, startsAt: booking.startsAt, endsAt: booking.endsAt, kind: booking.kind }, booking.hold),
+    );
+    after.push(historyStatement(db, firm, { kind: 'visit_booked', by: frontline, visit })[1], fileHold(db, firm, booking.hold, visit));
+    for (const due of booking.dues) {
+      // Only a visit's own rows, since types can be got round.
+      if (!(['send_confirmation', 'send_reminder'] as readonly string[]).includes(due.action)) {
+        throw new Refused();
+      }
+      const id = newId() as DueId;
+      dues.push(id);
+      after.push(insertDue(db, firm, id, { action: due.action, visit, runAt: due.runAt, latestAt: due.latestAt }));
+    }
+  }
+
   const insertCall = db.d1
     .prepare(
       `INSERT INTO calls (id, firm_id, provider, provider_call_id, started_at, ended_at, from_number,
                           customer_id, job_id, visit_id, outcome, urgent_item, caller, summary,
                           transcript, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       call,
@@ -127,6 +160,7 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
       input.from,
       customer,
       job,
+      visit,
       outcome,
       urgentItem,
       caller,
@@ -145,8 +179,10 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
     after.push(insertDue(db, firm, alert, { action: 'alert_owner', call, runAt: now, latestAt: instant(now + ALERT_LATEST_AFTER) }));
   }
 
+  // A hold that is not this firm's, or no longer held, makes no visit, so
+  // the call's link to it is refused, and nothing is written.
   await runTogether(db.d1, [...before, insertCall, ...after]);
-  return { call, customer, job, alert };
+  return { call, customer, job, alert, visit, dues };
 }
 
 function newJob(customer: CustomerId, about: string, place: string, urgentItem: string | null) {

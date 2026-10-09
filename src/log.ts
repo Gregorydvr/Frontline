@@ -41,7 +41,25 @@ export type LogEvent =
   | 'due_too_late'
   | 'due_claim_lost'
   | 'alert_nobody_to_tell'
-  | 'reminder_visit_changed';
+  | 'reminder_visit_changed'
+  | 'confirmation_visit_changed'
+  // The voice agent asking for free times and booking one during a call
+  // (src/app.ts and src/booking.ts).
+  | 'tool_call_refused'
+  | 'tool_call_unreadable'
+  | 'tool_call_for_unknown_number'
+  | 'free_times_given'
+  | 'time_held'
+  | 'time_taken'
+  | 'time_not_offered'
+  | 'booking_while_calls_off'
+  // A call's held time, when the call ends (src/land-call.ts).
+  | 'hold_filed'
+  | 'hold_released'
+  // A customer's link to confirm their details (src/app.ts).
+  | 'link_not_found'
+  | 'details_saved'
+  | 'details_refused';
 
 const ERROR_NAMES = [
   'Error',

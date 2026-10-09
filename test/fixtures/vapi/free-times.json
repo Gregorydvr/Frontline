@@ -1,0 +1,74 @@
+{
+  "message": {
+    "timestamp": 1790590440540,
+    "type": "tool-calls",
+    "toolCallList": [
+      {
+        "id": "call_Qx7fK2mB9tR4vW1yZ6nL3pD8",
+        "type": "function",
+        "function": {
+          "name": "free_times",
+          "arguments": "{\"day\": \"2026-10-01\"}"
+        }
+      }
+    ],
+    "toolWithToolCallList": [
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "free_times",
+          "description": "The firm's free times for a quote visit, from the day the caller asks about, or from tomorrow.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "day": {
+                "type": "string",
+                "description": "The day the caller asks about, as YYYY-MM-DD. Leave out for the next free times."
+              }
+            }
+          }
+        },
+        "server": {
+          "url": "https://practice.example/vapi/free-times"
+        },
+        "toolCall": {
+          "id": "call_Qx7fK2mB9tR4vW1yZ6nL3pD8",
+          "type": "function",
+          "function": {
+            "name": "free_times",
+            "arguments": "{\"day\": \"2026-10-01\"}"
+          }
+        }
+      }
+    ],
+    "artifact": {
+      "messages": [],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: My boiler keeps cutting out. I think I need a new one."
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+447700900003"
+    },
+    "call": {
+      "id": "8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "in-progress",
+      "createdAt": "2026-09-28T10:13:02.120Z",
+      "updatedAt": "2026-09-28T10:14:00.540Z",
+      "startedAt": "2026-09-28T10:13:02.120Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+447700900003"
+      }
+    }
+  }
+}

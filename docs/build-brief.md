@@ -105,7 +105,7 @@ Until slice F there is no owner login, so the app's pages are served only on thi
 
 **Done when:** step 6 of the acceptance story passes in full. Tests show a message cannot go twice, even with two workers running at once. The stop button, the service switch and an opt-out each block a send. A curly apostrophe fails the build. A row set for 1pm UK time on Sunday 18 October 2026 runs at 12:00 UTC, and one set for 1pm on Sunday 25 October, after the clocks go back, runs at 13:00 UTC.
 
-### [ ] E. The diary and booking
+### [x] E. The diary and booking
 
 - On the firm: when visits can be booked, and how long one takes.
 - A diary interface, with Front-line's own diary behind it.

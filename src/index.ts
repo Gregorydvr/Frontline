@@ -4,7 +4,7 @@
 
 import { createApp } from './app';
 import { systemClock } from './clock';
-import type { Deps } from './deps';
+import { linkAddressFrom, type Deps } from './deps';
 import { everyMinute, onQueue } from './due';
 import { TwilioTexts } from './providers/texts/twilio';
 
@@ -18,6 +18,7 @@ function realDeps(env: Env): Deps {
       statusCallback: address === '' ? null : `${address}/twilio/status`,
     }),
     queue: env.DUE,
+    linkAddress: linkAddressFrom(env.LINK_ADDRESS),
   };
 }
 

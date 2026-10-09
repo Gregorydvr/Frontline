@@ -1,0 +1,116 @@
+{
+  "message": {
+    "timestamp": 1790590512310,
+    "type": "end-of-call-report",
+    "endedReason": "customer-ended-call",
+    "startedAt": "2026-09-28T10:13:02.120Z",
+    "endedAt": "2026-09-28T10:15:12.310Z",
+    "cost": 0.11,
+    "artifact": {
+      "messages": [
+        {
+          "role": "system",
+          "message": "You answer the phone for Tidewell Heating.",
+          "time": 1790590382120,
+          "secondsFromStart": 0
+        },
+        {
+          "role": "bot",
+          "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?",
+          "time": 1790590382920,
+          "endTime": 1790590389400,
+          "secondsFromStart": 0.8,
+          "duration": 6480
+        },
+        {
+          "role": "user",
+          "message": "My boiler keeps cutting out. I think I need a new one.",
+          "time": 1790590390000,
+          "endTime": 1790590394100,
+          "secondsFromStart": 7.88,
+          "duration": 4100
+        },
+        {
+          "role": "bot",
+          "message": "Tom can come and look at it and price a new one. Can I take your name and address?",
+          "time": 1790590394700,
+          "endTime": 1790590400300,
+          "secondsFromStart": 12.58,
+          "duration": 5600
+        },
+        {
+          "role": "user",
+          "message": "Mrs Ahmed, 27 Station Road. Could he come on Thursday?",
+          "time": 1790590401000,
+          "endTime": 1790590405200,
+          "secondsFromStart": 18.88,
+          "duration": 4200
+        },
+        {
+          "role": "bot",
+          "message": "Thursday 1 October at 3pm is free. Shall I book that?",
+          "time": 1790590441000,
+          "endTime": 1790590445000,
+          "secondsFromStart": 58.88,
+          "duration": 4000
+        },
+        {
+          "role": "user",
+          "message": "Yes please.",
+          "time": 1790590446000,
+          "endTime": 1790590447000,
+          "secondsFromStart": 63.88,
+          "duration": 1000
+        },
+        {
+          "role": "bot",
+          "message": "That's booked. You'll get a text to confirm it. Goodbye.",
+          "time": 1790590461000,
+          "endTime": 1790590465000,
+          "secondsFromStart": 78.88,
+          "duration": 4000
+        }
+      ],
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: My boiler keeps cutting out. I think I need a new one.\nAI: Tom can come and look at it and price a new one. Can I take your name and address?\nUser: Mrs Ahmed, 27 Station Road. Could he come on Thursday?\nAI: Thursday 1 October at 3pm is free. Shall I book that?\nUser: Yes please.\nAI: That's booked. You'll get a text to confirm it. Goodbye.",
+      "recordingUrl": "https://example.invalid/recordings/8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68-mono.wav"
+    },
+    "analysis": {
+      "summary": "Mrs Ahmed's boiler keeps cutting out. A quote visit was booked for Thursday at 3pm.",
+      "structuredData": {
+        "callerType": "customer",
+        "name": "Mrs Ahmed",
+        "about": "Boiler replacement",
+        "address": "27 Station Road",
+        "summary": "The boiler keeps cutting out.",
+        "urgentMatch": null
+      },
+      "successEvaluation": "true"
+    },
+    "phoneNumber": {
+      "provider": "twilio",
+      "number": "+447700900100",
+      "twilioAccountSid": "AC00000000000000000000000000000000",
+      "name": "Tidewell Heating"
+    },
+    "customer": {
+      "number": "+447700900003"
+    },
+    "call": {
+      "id": "8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68",
+      "orgId": "0b7e4c1a-2d39-4f58-8a16-3c9e5f7d2b40",
+      "type": "inboundPhoneCall",
+      "status": "ended",
+      "createdAt": "2026-09-28T10:13:02.120Z",
+      "updatedAt": "2026-09-28T10:15:12.310Z",
+      "startedAt": "2026-09-28T10:13:02.120Z",
+      "phoneCallProvider": "twilio",
+      "phoneCallTransport": "pstn",
+      "phoneNumberId": "6a2f9e14-7c3b-4d85-b1e0-5f8a2c6d9e73",
+      "customer": {
+        "number": "+447700900003"
+      },
+      "endedReason": "customer-ended-call",
+      "endedAt": "2026-09-28T10:15:12.310Z"
+    }
+  }
+}

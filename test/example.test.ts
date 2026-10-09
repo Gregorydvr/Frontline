@@ -123,6 +123,7 @@ describe('the demo firm', () => {
       call_answered: 7,
       confirmation_sent: 3,
       details_taken: 7,
+      diary_rules_set: 1,
       message_taken: 1,
       number_set: 1,
       passed_to_owner: 1,

@@ -117,13 +117,13 @@ function readDetails(data: unknown): CallDetails | null {
 }
 
 /** One field of an object, or undefined for anything that is not an object. */
-function field(value: unknown, name: string): unknown {
+export function field(value: unknown, name: string): unknown {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.hasOwn(value, name)
     ? (value as Record<string, unknown>)[name]
     : undefined;
 }
 
-function string(value: unknown): string | null {
+export function string(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
@@ -151,7 +151,7 @@ function when(value: unknown): Instant | null {
   }
 }
 
-function mobileOrNull(number: string): UkMobile | null {
+export function mobileOrNull(number: string): UkMobile | null {
   try {
     return ukMobile(number);
   } catch {
