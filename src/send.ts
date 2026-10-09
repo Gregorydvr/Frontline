@@ -8,7 +8,8 @@
 // - For a customer: the firm's stop button, then its switch for the kind's
 //   service, then the customer's opt-out (rule 3). The stop button and the
 //   switch hold the text: it is not claimed, and whoever asked can try again.
-//   An opt-out, or no mobile, means it is not sent, and that is recorded.
+//   An opt-out, or no mobile, means it is not sent, and that is recorded, as
+//   does a text that should carry a link when no link could be made.
 //   An alert to the owner is not held by any of these: they are about texts
 //   to customers. A text that would go to a customer in quiet hours, 8pm to
 //   8am UK time, is held too, until 8am.
@@ -127,6 +128,11 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   }
   if (firm.phoneNumber === null) {
     return notSent(db, firmId, out, 'no_number');
+  }
+  // A text that carries the customer's link, when no link could be made
+  // because this copy has no address for links yet.
+  if ((kind.gaps as readonly string[]).includes('link') && (out.facts.link ?? null) === null) {
+    return notSent(db, firmId, out, 'no_link_address');
   }
   const wording = (await firmWording(db, firmId))[`text:${out.kind}`];
   if (wording === undefined) {

@@ -9,13 +9,16 @@
 //
 // What a row can do:
 // - alert_owner: text the firm's owner about an urgent call, at once
+// - send_confirmation: text the customer the confirmation of a visit just
+//   booked, with their link if it is the first text the firm sends them
 // - send_reminder: text the customer the reminder for a visit tomorrow
 
 import type { Instant } from './clock';
 import type { Deps } from './deps';
 import { isId } from './ids';
 import { clockWords } from './history-lines';
-import { inLondon, londonDay, WEEKDAYS } from './london';
+import { inLondon, londonDay, MONTHS, WEEKDAYS } from './london';
+import { VISIT_PURPOSES } from './messages';
 import { errorName, log } from './log';
 import { nationalNumber } from './phone';
 import {
@@ -27,12 +30,17 @@ import {
   getFirm,
   getJob,
   getVisit,
+  hasTextedCustomer,
+  linkForDue,
   listOwners,
   releaseDue,
 } from './record';
 import { openRecord, type RecordDb } from './record/db';
 import type { ClaimedDue, DueId, DueOutcome, FirmId } from './record/types';
 import { send, type SendResult } from './send';
+
+/** What running a row needs from outside: the texts provider, and where customers' links go. */
+export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress'>>;
 
 /** What goes on the queue for each row: ids only. */
 export interface DueMessage {
@@ -88,7 +96,7 @@ export async function onQueue(batch: MessageBatch, d1: D1Database, deps: Deps): 
 }
 
 /** Runs one of the firm's rows: claims it, acts, and marks it done, skipped or back to wait. */
-export async function runDue(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, due: DueId): Promise<Ran> {
+export async function runDue(db: RecordDb, deps: DueDeps, firm: FirmId, due: DueId): Promise<Ran> {
   const row = await claimDue(db, firm, due);
   if (row === null) {
     return { ran: 'not_ours' };
@@ -124,10 +132,12 @@ interface Held {
   until: Instant | null;
 }
 
-async function act(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
+async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
   switch (row.action) {
     case 'alert_owner':
       return alertOwner(db, deps, firm, row);
+    case 'send_confirmation':
+      return sendConfirmation(db, deps, firm, row);
     case 'send_reminder':
       return sendReminder(db, deps, firm, row);
   }
@@ -140,7 +150,7 @@ async function act(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: C
  * all come through has no customer or job to name, so it gets the other
  * wording, with what there is.
  */
-async function alertOwner(db: RecordDb, deps: Pick<Deps, 'texts'>, firm: FirmId, row: ClaimedDue): Promise<DueOutcome> {
+async function alertOwner(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome> {
   const call = row.call === null ? null : await getCall(db, firm, row.call);
   const job = call === null || call.job === null ? null : await getJob(db, firm, call.job);
   const owners = await listOwners(db, firm);
@@ -191,7 +201,7 @@ function asSentence(summary: string | null): string | null {
  */
 async function sendReminder(
   db: RecordDb,
-  deps: Pick<Deps, 'texts'>,
+  deps: DueDeps,
   firm: FirmId,
   row: ClaimedDue,
 ): Promise<DueOutcome | Held> {
@@ -218,6 +228,55 @@ async function sendReminder(
       weekday: WEEKDAYS[at.weekday] ?? null,
       time: clockWords(at.hour, at.minute),
     },
+  });
+  if (result.result === 'held') {
+    return { until: result.why === 'quiet_hours' ? result.until : null };
+  }
+  return outcomeOf([result]);
+}
+
+/**
+ * Texts the customer the confirmation of a visit just booked. The visit is
+ * looked at again first: if it was cancelled, nothing goes; if it moved, the
+ * confirmation gives its new time. If the firm has never texted this
+ * customer, it is the first text, with their link to confirm their details
+ * and the line on opting out. The same row run again gives the same link.
+ */
+async function sendConfirmation(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
+  const visit = row.visit === null ? null : await getVisit(db, firm, row.visit);
+  if (visit?.state !== 'booked') {
+    log('confirmation_visit_changed', { firm, due: row.id });
+    return 'visit_changed';
+  }
+  const job = await getJob(db, firm, visit.job);
+  const customer = job === null ? null : await getCustomer(db, firm, job.customer);
+  const firmNow = await getFirm(db, firm);
+  if (job === null || customer === null || firmNow === null) {
+    return 'visit_changed';
+  }
+  const [owner] = await listOwners(db, firm);
+  const first = !(await hasTextedCustomer(db, firm, customer.id));
+  let link: string | null = null;
+  const address = deps.linkAddress ?? null;
+  if (first && customer.mobile !== null && address !== null) {
+    const token = await linkForDue(db, firm, { due: row.id, customer: customer.id, job: job.id });
+    link = `${address}/d/${token}`;
+  }
+  const at = inLondon(visit.startsAt);
+  const facts = {
+    customer: customer.name,
+    firm: firmNow.name,
+    owner: owner?.name ?? firmNow.name,
+    day: `${WEEKDAYS[at.weekday] ?? ''} ${String(at.day)} ${MONTHS[at.month - 1] ?? ''}`,
+    time: clockWords(at.hour, at.minute),
+    purpose: VISIT_PURPOSES[visit.kind],
+  };
+  const result = await send(deps.texts, db, firm, {
+    due: row.id,
+    kind: first ? 'visit_confirmation_first' : 'visit_confirmation',
+    to: { kind: 'customer', customer: customer.id },
+    about: { job: job.id, visit: visit.id, call: null },
+    facts: first ? { ...facts, link } : facts,
   });
   if (result.result === 'held') {
     return { until: result.why === 'quiet_hours' ? result.until : null };

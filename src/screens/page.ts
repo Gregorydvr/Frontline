@@ -6,7 +6,7 @@ import { ARCHIVO_FONT_FACE } from './archivo';
 import { html, trusted, type Html } from './html';
 import { ICONS, LOOK } from './look';
 
-export function page(title: string, screen: Html): string {
+export function page(title: string, screen: Html, moreLook = ''): string {
   return html`<!doctype html>
 <html lang="en-GB">
 <head>
@@ -14,7 +14,7 @@ export function page(title: string, screen: Html): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${title}</title>
-<style>${trusted(ARCHIVO_FONT_FACE)}${trusted(LOOK)}</style>
+<style>${trusted(ARCHIVO_FONT_FACE)}${trusted(LOOK)}${trusted(moreLook)}</style>
 </head>
 <body>
 ${trusted(ICONS)}

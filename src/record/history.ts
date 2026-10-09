@@ -46,7 +46,13 @@ export async function addHistory(db: RecordDb, firm: FirmId, entry: NewHistory):
  * the entry is about is not this firm's, so whoever runs it checks that it
  * wrote one row.
  */
-export function historyStatement(db: RecordDb, firm: FirmId, entry: NewHistory): [HistoryId, D1PreparedStatement] {
+export function historyStatement(
+  db: RecordDb,
+  firm: FirmId,
+  entry: NewHistory,
+  /** For an entry about a visit: write it only if the visit starts then, such as after it was moved in the same step. */
+  onlyIfVisitStartsAt: Instant | null = null,
+): [HistoryId, D1PreparedStatement] {
   const about = aboutOf(entry.kind);
   const id = newId() as HistoryId;
   const [actor, owner, staff] = actorColumns(entry.by);
@@ -60,9 +66,9 @@ export function historyStatement(db: RecordDb, firm: FirmId, entry: NewHistory):
           `INSERT INTO history (${ENTRY_COLUMNS}, customer_id, job_id, visit_id)
            SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, jobs.customer_id, visits.job_id, visits.id
            FROM visits JOIN jobs ON jobs.firm_id = visits.firm_id AND jobs.id = visits.job_id
-           WHERE visits.firm_id = ?2 AND visits.id = ?8`,
+           WHERE visits.firm_id = ?2 AND visits.id = ?8 AND (?9 IS NULL OR visits.starts_at = ?9)`,
         )
-        .bind(...start, entry.visit),
+        .bind(...start, entry.visit, onlyIfVisitStartsAt === null ? null : instant(onlyIfVisitStartsAt)),
     ];
   }
   if (about === 'job' && 'job' in entry) {
@@ -100,7 +106,15 @@ export function historyStatement(db: RecordDb, firm: FirmId, entry: NewHistory):
 export function firmEntry(
   db: RecordDb,
   firm: FirmId,
-  kind: 'service_on' | 'service_off' | 'stop_on' | 'stop_off' | 'number_set' | 'urgent_list_set' | 'owner_mobile_set',
+  kind:
+    | 'service_on'
+    | 'service_off'
+    | 'stop_on'
+    | 'stop_off'
+    | 'number_set'
+    | 'urgent_list_set'
+    | 'owner_mobile_set'
+    | 'diary_rules_set',
   by: Actor,
   service: Service | null,
 ): D1PreparedStatement {

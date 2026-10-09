@@ -9,11 +9,17 @@
 import type { Instant } from './clock';
 import { plainForText } from './gsm';
 import { inLondon, londonInstant } from './london';
-import type { MessageKind } from './record/types';
+import type { MessageKind, VisitKind } from './record/types';
 
 /**
  * The drafts. The gaps each kind may use are in MESSAGE_KINDS in
  * src/record/types.ts:
+ * - visit_confirmation: {customer}, the name as given, such as "Mrs Ahmed";
+ *   {firm}, the firm's name; {owner}, the owner's name; {day}, such as
+ *   "Thursday 1 October"; {time}, such as "3pm"; {purpose}, what the visit
+ *   is for, from VISIT_PURPOSES below
+ * - visit_confirmation_first: the same, and {link}, the customer's link to
+ *   confirm their details
  * - visit_reminder: {owner}, the owner's name; {weekday}, the visit's day,
  *   such as "Thursday"; {time}, such as "3pm"
  * - urgent_alert: {customer}, {place}, {summary}, the one line about the
@@ -24,6 +30,17 @@ import type { MessageKind } from './record/types';
  * refuses it.
  */
 export const DRAFT_WORDING: Readonly<Record<MessageKind, string | null>> = {
+  // From section 6 of docs/build-brief.md, with a straight apostrophe. What
+  // the visit is for is {purpose}, since the record does not hold the
+  // example's "to look at your boiler and price a new one".
+  visit_confirmation:
+    "Hi {customer}, it's {firm}. {owner} will be with you on {day} at {time} {purpose}. Need to change it? Just reply here.",
+  // The first text to a new customer: the same, with the link to confirm
+  // their details and the line on opting out. The two added lines are open
+  // question 1; these are the build's own words, chosen at Greg's request
+  // on 9 Oct 2026, for a solicitor to see.
+  visit_confirmation_first:
+    "Hi {customer}, it's {firm}. {owner} will be with you on {day} at {time} {purpose}. Need to change it? Just reply here. Check your details: {link} Reply STOP to stop these texts.",
   // From section 6 of docs/build-brief.md, with a straight apostrophe.
   visit_reminder: "Reminder: {owner}'s visit is tomorrow, {weekday}, at {time}. See you then.",
   // Greg's answer to open question 7, 8 Oct 2026. "Front-line:" tells the
@@ -33,6 +50,17 @@ export const DRAFT_WORDING: Readonly<Record<MessageKind, string | null>> = {
   // For an urgent call whose caller's details did not all come through.
   // Greg, 8 Oct 2026.
   urgent_alert_details_missing: 'Front-line: urgent call. Not all their details came through. {summary} Their number: {number}.',
+};
+
+/**
+ * What each kind of visit is for, as the confirmation says it: "Tom will be
+ * with you on Thursday 1 October at 3pm to look at the job and price it."
+ * New words, chosen by the slice E build; flagged in its pull request.
+ */
+export const VISIT_PURPOSES: Readonly<Record<VisitKind, string>> = {
+  quote_visit: 'to look at the job and price it',
+  install: 'to fit the new work',
+  service: 'for the service',
 };
 
 /** The facts that fill a text's gaps. A fact that is null, such as a missing summary, leaves its gap empty. */

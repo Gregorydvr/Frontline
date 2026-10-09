@@ -65,6 +65,7 @@ describe('firms', () => {
       stopped: false,
       phoneNumber: null,
       urgentList: [],
+      diaryRules: null,
       createdAt: instantFromIso('2026-10-15T08:10:00+01:00'),
     });
   });
@@ -186,6 +187,9 @@ describe('customers', () => {
       mobile: '+447700900015',
       landline: null,
       noText: null,
+      address: null,
+      email: null,
+      detailsConfirmedAt: null,
       createdAt: instantFromIso('2026-10-15T08:10:00+01:00'),
     });
     expect((await listCustomers(db, firm)).map((customer) => customer.id)).toEqual([green, price]);
@@ -284,6 +288,7 @@ describe('visits', () => {
       id: sooner,
       job,
       startsAt: instantFromIso('2026-10-19T08:00:00Z'),
+      endsAt: null,
       kind: 'quote_visit',
       state: 'booked',
       createdAt: clock.now(),

@@ -17,6 +17,8 @@ declare const dueBrand: unique symbol;
 declare const messageBrand: unique symbol;
 declare const textInBrand: unique symbol;
 declare const wordingBrand: unique symbol;
+declare const holdBrand: unique symbol;
+declare const linkBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -31,6 +33,9 @@ export type DueId = Id & { readonly [dueBrand]: true };
 export type MessageId = Id & { readonly [messageBrand]: true };
 export type TextInId = Id & { readonly [textInBrand]: true };
 export type WordingId = Id & { readonly [wordingBrand]: true };
+export type HoldId = Id & { readonly [holdBrand]: true };
+/** The token in a link a customer opens. It cannot be guessed (rule 13). */
+export type LinkToken = Id & { readonly [linkBrand]: true };
 
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
@@ -48,7 +53,31 @@ export interface Firm {
   phoneNumber: UkMobile | null;
   /** What counts as urgent, set at set-up: short words such as "a leak". */
   urgentList: readonly string[];
+  /** When visits can be booked, and how long each kind takes. Null: no times are offered. */
+  diaryRules: DiaryRules | null;
   createdAt: Instant;
+}
+
+/**
+ * When a firm's visits can be booked, set at set-up. Times are UK time, in
+ * minutes after midnight. Visits start every `every` minutes from `opens`,
+ * and end by `closes`. Nothing is offered on the day itself; times are
+ * offered from the next day the firm books, up to `daysAhead` days ahead.
+ * A kind of visit with no length is not booked by the diary.
+ */
+export interface DiaryRules {
+  /** The days visits can be booked, 0 for Sunday to 6 for Saturday. */
+  days: readonly number[];
+  /** The first start, such as 480 for 8am. */
+  opens: number;
+  /** When the last visit must have ended, such as 960 for 4pm. */
+  closes: number;
+  /** Minutes between one start and the next, such as 60 for on the hour. */
+  every: number;
+  /** How long each kind of visit takes, in minutes. */
+  lengths: Readonly<Partial<Record<VisitKind, number>>>;
+  /** How many days ahead times are offered. */
+  daysAhead: number;
 }
 
 export interface Owner {
@@ -72,8 +101,17 @@ export interface Customer {
   landline: UkLandline | null;
   /** Set when they have no mobile, because then no text can reach them. */
   noText: NoTextReason | null;
+  /** The address taken on the call, or as they corrected it. */
+  address: string | null;
+  /** An email they added from their link. */
+  email: string | null;
+  /** When they last confirmed their details from their link. */
+  detailsConfirmedAt: Instant | null;
   createdAt: Instant;
 }
+
+/** The longest each of a customer's own details may be. */
+export const CUSTOMER_LIMITS = { name: 60, address: 120, email: 254 } as const;
 
 export interface Job {
   id: JobId;
@@ -96,6 +134,8 @@ export interface Visit {
   id: VisitId;
   job: JobId;
   startsAt: Instant;
+  /** When it ends. Visits from before slice E have none. */
+  endsAt: Instant | null;
   kind: VisitKind;
   state: VisitState;
   createdAt: Instant;
@@ -115,15 +155,18 @@ export type Actor =
  *   owner's urgent alert has gone (markMessageSent()), or by the demo firm.
  * - a customer: details_taken, and opted_out and opted_in, which also name
  *   the kind of text
- * - a visit: visit_booked, confirmation_sent, reminder_sent
+ * - a visit: visit_booked, confirmation_sent, reminder_sent, visit_moved,
+ *   visit_cancelled
+ * - a job, done by the customer from the link about it: details_confirmed,
+ *   when nothing changed, and details_corrected. The old details are not kept.
  * - a call with no customer or job: message_taken, for a caller who is not
  *   a customer, and details_missing, for a call whose details did not come
  *   through. Written only by recordCall().
  * - a text that came in: text_received, written only by recordTextIn(), on
  *   the customer's job when it has one
  * - the firm itself: service_on, service_off, stop_on, stop_off, number_set,
- *   urgent_list_set, owner_mobile_set, written only by the functions in
- *   firms.ts and owners.ts
+ *   urgent_list_set, owner_mobile_set, diary_rules_set, written only by the
+ *   functions in firms.ts and owners.ts
  * Later slices add their own.
  */
 export const HISTORY_KINDS = {
@@ -133,6 +176,10 @@ export const HISTORY_KINDS = {
   visit_booked: 'visit',
   confirmation_sent: 'visit',
   reminder_sent: 'visit',
+  visit_moved: 'visit',
+  visit_cancelled: 'visit',
+  details_confirmed: 'job',
+  details_corrected: 'job',
   message_taken: 'call',
   details_missing: 'call',
   opted_out: 'opt_out',
@@ -145,6 +192,7 @@ export const HISTORY_KINDS = {
   number_set: 'firm',
   urgent_list_set: 'firm',
   owner_mobile_set: 'firm',
+  diary_rules_set: 'firm',
 } as const;
 export type HistoryKind = keyof typeof HISTORY_KINDS;
 
@@ -238,6 +286,40 @@ export interface NewCall {
   urgentItem: string | null;
   summary: string | null;
   transcript: string | null;
+  /**
+   * The time held in the diary during the call, to file as a visit on the
+   * call's job, with the rows in the due list that come with it: the
+   * confirmation and the reminder. Only a customer's call that is not urgent
+   * can be booked.
+   */
+  booking?: NewBooking | null;
+}
+
+/** A hold to file as a visit, as recordCall() takes it. */
+export interface NewBooking {
+  hold: HoldId;
+  kind: VisitKind;
+  startsAt: Instant;
+  endsAt: Instant;
+  /** The rows in the due list for the visit, worked out from its time (src/booking.ts). */
+  dues: readonly { action: 'send_confirmation' | 'send_reminder'; runAt: Instant; latestAt: Instant }[];
+}
+
+export const HOLD_STATES = ['held', 'filed', 'released'] as const;
+export type HoldState = (typeof HOLD_STATES)[number];
+
+/** A time held in the diary during a call, under the provider's id for the call. */
+export interface Hold {
+  id: HoldId;
+  provider: CallProvider;
+  providerCallId: string;
+  kind: VisitKind;
+  startsAt: Instant;
+  endsAt: Instant;
+  state: HoldState;
+  visit: VisitId | null;
+  createdAt: Instant;
+  updatedAt: Instant;
 }
 
 export interface Call {
@@ -271,10 +353,26 @@ export interface DiaryVisit extends Visit {
  *
  * Every kind here uses wording the firm agreed at set-up (rule 2 in
  * CLAUDE.md). Kinds that need the owner's approval of the exact version, such
- * as a quote or an invoice, come with their releases. Slice E adds the visit
- * confirmation.
+ * as a quote or an invoice, come with their releases.
  */
 export const MESSAGE_KINDS = {
+  /** The confirmation when a visit is booked. */
+  visit_confirmation: {
+    to: 'customer',
+    service: 'calls',
+    history: 'confirmation_sent',
+    gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose'],
+  },
+  /**
+   * The confirmation as the first text the firm sends a customer: the same,
+   * with a link to confirm their details and a line on opting out.
+   */
+  visit_confirmation_first: {
+    to: 'customer',
+    service: 'calls',
+    history: 'confirmation_sent',
+    gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose', 'link'],
+  },
   /** The reminder the day before a visit. */
   visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'] },
   /** The owner's alert about an urgent call. */
@@ -308,6 +406,8 @@ export const MESSAGE_REASONS = [
   'no_number',
   'no_wording',
   'not_gsm7',
+  // A text that carries a link, when this copy has no address for links yet.
+  'no_link_address',
   // Failed: the provider refused it, it could not be delivered, the
   // customer had unsubscribed with the provider, or it is not clear whether
   // the provider took it. Staff check that last one: it is never sent again.
@@ -364,8 +464,8 @@ export interface TextIn {
   receivedAt: Instant;
 }
 
-/** What a row in the due list does. Slice E adds the visit confirmation; slice H the deletions. */
-export const DUE_ACTIONS = ['alert_owner', 'send_reminder'] as const;
+/** What a row in the due list does. Slice H adds the deletions. */
+export const DUE_ACTIONS = ['alert_owner', 'send_reminder', 'send_confirmation'] as const;
 export type DueAction = (typeof DUE_ACTIONS)[number];
 
 export const DUE_STATES = ['waiting', 'claimed', 'done', 'skipped', 'cancelled'] as const;

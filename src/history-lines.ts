@@ -56,6 +56,25 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
     job: 'Sent a reminder about the {short visit}.',
     feed: 'Reminded {customer} about the {short visit}.',
   },
+  // New in slice E: a visit moved or cancelled, and a customer checking
+  // their details from their link. Flagged in the pull request. {when} is
+  // the visit's time now, so a visit moved twice shows its latest time.
+  visit_moved: {
+    job: '{Visit} moved to {when}.',
+    feed: 'Moved {customer’s} {visit} to {when}.',
+  },
+  visit_cancelled: {
+    job: '{Visit} cancelled.',
+    feed: 'Cancelled {customer’s} {visit}.',
+  },
+  details_confirmed: {
+    job: 'They checked their details.',
+    feed: '{customer} checked their details.',
+  },
+  details_corrected: {
+    job: 'They corrected their details.',
+    feed: '{customer} corrected their details.',
+  },
   // A caller who is not a customer has no job page, so both forms are the
   // example's line in Done for you.
   message_taken: {
@@ -91,6 +110,7 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   number_set: null,
   urgent_list_set: null,
   owner_mobile_set: null,
+  diary_rules_set: null,
 };
 
 /** The words for each kind of visit. */

@@ -197,6 +197,15 @@ export async function listDueForCall(db: RecordDb, firm: FirmId, call: CallId): 
   return results.map(fromRow);
 }
 
+/** The firm's rows about one visit, in the order they were written. */
+export async function listDueForVisit(db: RecordDb, firm: FirmId, visit: VisitId): Promise<Due[]> {
+  const { results } = await db.d1
+    .prepare(`SELECT ${DUE_COLUMNS} FROM due WHERE firm_id = ? AND visit_id = ? ORDER BY created_at, rowid`)
+    .bind(firm, visit)
+    .all<DueRow>();
+  return results.map(fromRow);
+}
+
 const DUE_COLUMNS = 'id, action, call_id, visit_id, run_at, latest_at, state, outcome, created_at, finished_at';
 
 interface DueRow {

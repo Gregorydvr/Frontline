@@ -7,7 +7,7 @@ import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { bit, line, Refused, run, runTogether, words, type RecordDb } from './db';
 import { firmEntry } from './history';
-import { SERVICES, type Actor, type Firm, type FirmId, type Service } from './types';
+import { SERVICES, VISIT_KINDS, type Actor, type DiaryRules, type Firm, type FirmId, type Service, type VisitKind } from './types';
 
 /** The most items an urgent list holds, and the longest an item may be. */
 export const URGENT_LIST_LIMITS = { items: 20, length: 60 } as const;
@@ -39,7 +39,7 @@ export async function getFirm(db: RecordDb, firm: FirmId): Promise<Firm | null> 
   const row = await db.d1
     .prepare(
       `SELECT id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-              stopped, phone_number, urgent_list, created_at
+              stopped, phone_number, urgent_list, diary_rules, created_at
        FROM firms WHERE id = ?`,
     )
     .bind(firm)
@@ -100,6 +100,63 @@ export async function setUrgentList(db: RecordDb, firm: FirmId, items: readonly 
   ]);
 }
 
+/** The longest a visit may be, and the most days ahead times may be offered. */
+export const DIARY_LIMITS = { length: 12 * 60, daysAhead: 90 } as const;
+
+/**
+ * Sets when the firm's visits can be booked and how long each kind takes,
+ * and records who did it. The rules must make sense: hours within a day,
+ * the last start before the close, lengths that fit. Null takes them away,
+ * and the firm is offered no times.
+ */
+export async function setDiaryRules(db: RecordDb, firm: FirmId, rules: DiaryRules | null, by: Actor): Promise<void> {
+  if (rules !== null && !areDiaryRules(rules)) {
+    throw new Refused();
+  }
+  const stored = rules === null ? null : JSON.stringify(diaryRulesOf(rules));
+  await changeFirm(db, [
+    db.d1.prepare('UPDATE firms SET diary_rules = ? WHERE id = ?').bind(stored, firm),
+    firmEntry(db, firm, 'diary_rules_set', by, null),
+  ]);
+}
+
+/** Whether something is diary rules that make sense, since types can be got round. */
+function areDiaryRules(rules: unknown): rules is DiaryRules {
+  if (typeof rules !== 'object' || rules === null) return false;
+  const { days, opens, closes, every, lengths, daysAhead } = rules as Record<string, unknown>;
+  const minuteOfDay = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 24 * 60;
+  if (!Array.isArray(days) || days.length === 0 || !days.every((day) => Number.isSafeInteger(day) && day >= 0 && day <= 6)) return false;
+  if (new Set(days).size !== days.length) return false;
+  if (!minuteOfDay(opens) || !minuteOfDay(closes) || opens >= closes) return false;
+  if (!Number.isSafeInteger(every) || (every as number) < 5 || (every as number) > closes - opens) return false;
+  if (!Number.isSafeInteger(daysAhead) || (daysAhead as number) < 1 || (daysAhead as number) > DIARY_LIMITS.daysAhead) return false;
+  if (typeof lengths !== 'object' || lengths === null || Array.isArray(lengths)) return false;
+  return Object.entries(lengths).every(
+    ([kind, length]) =>
+      VISIT_KINDS.includes(kind as VisitKind) &&
+      Number.isSafeInteger(length) &&
+      (length as number) >= 5 &&
+      (length as number) <= Math.min(DIARY_LIMITS.length, closes - opens),
+  );
+}
+
+/** Just the fields of the rules, in a set order. */
+function diaryRulesOf(rules: DiaryRules): DiaryRules {
+  const lengths: Partial<Record<VisitKind, number>> = {};
+  for (const kind of VISIT_KINDS) {
+    const length = rules.lengths[kind];
+    if (length !== undefined) lengths[kind] = length;
+  }
+  return {
+    days: [...rules.days].sort((x, y) => x - y),
+    opens: rules.opens,
+    closes: rules.closes,
+    every: rules.every,
+    lengths,
+    daysAhead: rules.daysAhead,
+  };
+}
+
 /** Switches one of the firm's services on or off, and records who did it. */
 export async function setService(
   db: RecordDb,
@@ -149,6 +206,7 @@ interface FirmRow {
   stopped: number;
   phone_number: string | null;
   urgent_list: string;
+  diary_rules: string | null;
   created_at: number;
 }
 
@@ -167,6 +225,7 @@ function fromRow(row: FirmRow): Firm {
     stopped: row.stopped === 1,
     phoneNumber: row.phone_number as UkMobile | null,
     urgentList: urgentListFrom(row.urgent_list),
+    diaryRules: diaryRulesFrom(row.diary_rules),
     createdAt: instant(row.created_at),
   };
 }
@@ -175,4 +234,11 @@ function fromRow(row: FirmRow): Firm {
 function urgentListFrom(stored: string): string[] {
   const list: unknown = JSON.parse(stored);
   return Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** Reads the stored rules back, keeping them only if setDiaryRules() could have written them. */
+function diaryRulesFrom(stored: string | null): DiaryRules | null {
+  if (stored === null) return null;
+  const rules: unknown = JSON.parse(stored);
+  return areDiaryRules(rules) ? diaryRulesOf(rules) : null;
 }

@@ -114,6 +114,8 @@ src/                 the Worker
   phone.ts           UK mobiles and landlines, kept as +447700900001 and +441632960001
   secret.ts          shared secrets, such as the token Vapi sends, compared safely
   vapi-report.ts     reads Vapi's report as a call ends, checking every field
+  vapi-tools.ts      reads Vapi's tool calls during a call (free times, book), checking every field
+  booking.ts         answers the voice agent's two tools: free times, and holding one for the call
   land-call.ts       a call lands in the record: the firm, the customer, a job, the call and its history
   job-state.ts       a job's state, worked out from its records
   history-lines.ts   the words for each kind of history entry, and the line the owner reads
@@ -122,9 +124,11 @@ src/                 the Worker
   messages.ts        the draft wording of each kind of text, and making a text from a firm's wording and the facts
   send.ts            send(): the one way a text leaves (rules 1 to 4)
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done
-  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts: loads the demo firm, adds /local/example, /local/calls and /local/texts. Never deployed
+  diary/             the diary interface, Front-line's own diary behind it, and which times a firm offers (times.ts)
+  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts: loads the demo firm, adds /local/example, /local/calls, /local/texts and /local/book. Never deployed
   record/            the only code that touches the database. index.ts lists every record function
-  screens/           the owner's screens in the example's look, drawn from the record. Served only by local.ts until slice F
+  screens/           the owner's screens in the example's look, drawn from the record. Served only by local.ts until slice F.
+                     details.ts is the customer's confirm-your-details page, opened from their link
   example/           the demo firm, Tidewell Heating, as data, and its loader
   providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio
 migrations/          plain SQL, numbered 0001_name.sql, applied in tests, on this machine and when deployed
@@ -137,7 +141,7 @@ test/                the tests, which run in the Workers runtime
   wall.test.ts       the cross-firm tests: every record function, tried as another firm
   routes.test.ts     every route, with its cross-firm case or the reason it needs none
   fixtures/          files the tests read
-  fixtures/vapi/     example reports from Vapi as a call ends, with invented people
+  fixtures/vapi/     example reports from Vapi as a call ends, and tool calls during one, with invented people
   fixtures/twilio/   example requests from Twilio: a text coming in, delivery reports
   fixtures/lint/     deliberate mistakes that show the checks in lint still work
 docs/                the build brief, the decisions, and what to set in Vapi (vapi.md) and Twilio (twilio.md)

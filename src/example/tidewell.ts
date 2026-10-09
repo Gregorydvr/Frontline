@@ -18,7 +18,7 @@
 // Every time is UK time with its offset. +01:00 is summer time, which runs to
 // Sunday 25 October 2026.
 
-import type { VisitKind } from '../record/types';
+import type { DiaryRules, VisitKind } from '../record/types';
 
 export const EXAMPLE_FIRM = 'Tidewell Heating';
 export const EXAMPLE_OWNER = 'Tom';
@@ -28,6 +28,21 @@ export const EXAMPLE_OWNER_MOBILE = '07700 900101';
 export const EXAMPLE_NUMBER = '07700 900100';
 /** What counts as urgent: "Anything urgent, like a leak, comes straight to you." */
 export const EXAMPLE_URGENT_LIST = ['a leak'];
+
+/**
+ * When quote visits can be booked: "Quote visits go in Monday to Friday, 8am
+ * to 4pm", from the example's rules, read as the first starting at 8am and
+ * the last ending by 4pm. An hour each, on the hour, up to two weeks ahead:
+ * the slice E build's answer to open question 4, at Greg's request.
+ */
+export const EXAMPLE_DIARY_RULES: DiaryRules = {
+  days: [1, 2, 3, 4, 5],
+  opens: 8 * 60,
+  closes: 16 * 60,
+  every: 60,
+  lengths: { quote_visit: 60 },
+  daysAhead: 14,
+};
 
 /** When the firm was set up, before anything in the example happened. */
 export const EXAMPLE_SET_UP = '2026-09-01T09:00:00+01:00';

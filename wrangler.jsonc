@@ -45,7 +45,13 @@
   // each text's delivery to PUBLIC_ADDRESS/twilio/status. Empty on this
   // machine, which sends nothing to Twilio. The address for practice and live
   // waits on open question 9 in docs/decisions.md.
-  "vars": { "PUBLIC_ADDRESS": "" },
+  //
+  // LINK_ADDRESS: where the links customers open from a text are served,
+  // such as https://links.example, with no slash at the end. On this machine
+  // it is the address `npm run dev` answers on, so the links in its texts
+  // open here. While it is empty, no text that carries a link goes: the
+  // record says why. Open question 9 again.
+  "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "http://localhost:8787" },
 
   // The clock: every minute, the due list's rows whose time has come go on
   // the queue (src/due.ts).
@@ -73,8 +79,9 @@
     "practice": {
       "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
       // A placeholder until open question 9 is answered. Greg puts the
-      // address of the practice copy here.
-      "vars": { "PUBLIC_ADDRESS": "" },
+      // address of the practice copy here, and the address for customers'
+      // links.
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
@@ -109,8 +116,9 @@
     "live": {
       "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
       // A placeholder until open question 9 is answered. Greg puts the
-      // address of the live copy here.
-      "vars": { "PUBLIC_ADDRESS": "" },
+      // address of the live copy here, and the address for customers'
+      // links.
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {

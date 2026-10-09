@@ -4,10 +4,17 @@
 // one, open a job, and store the call with its outcome and its history.
 //
 // The outcome is worked out here, never taken from the voice agent: urgent
-// when the call matched an item on the firm's own urgent list, otherwise a
-// message taken. A call becomes booked only when a visit in the diary is
-// booked on it, which comes with slice E.
+// when the call matched an item on the firm's own urgent list, booked when a
+// time was held in the diary during the call (src/booking.ts), otherwise a
+// message taken.
+//
+// A time held during the call is filed here, as a visit on the job the call
+// opens, in the same step as the call, with its confirmation and reminder in
+// the due list. An urgent call, or one whose details did not come through,
+// has no job to put a visit on, or is the owner's to deal with: its held
+// time is let go, and a log line tells staff.
 
+import { bookingDues } from './diary/times';
 import { log } from './log';
 import type { CallerNumber } from './phone';
 import {
@@ -15,17 +22,22 @@ import {
   findCustomersByLandline,
   findCustomersByMobile,
   findFirmByNumber,
+  findHoldForCall,
   getFirm,
   recordCall,
+  releaseHold,
 } from './record';
 import type { RecordedCall } from './record/calls';
 import { Refused, type RecordDb } from './record/db';
-import type { CallFor, CallId, Customer, DueId, Firm, FirmId } from './record/types';
+import type { CallFor, CallId, Customer, DueId, Firm, FirmId, NewBooking, VisitId } from './record/types';
 import type { CallDetails, CallReport } from './vapi-report';
 
 export type Landed =
-  /** Stored. An urgent call comes with the row in the due list that alerts the owner. */
-  | { result: 'stored'; firm: FirmId; call: CallId; alert: DueId | null }
+  /**
+   * Stored. An urgent call comes with the row in the due list that alerts
+   * the owner; a booked one with its visit and the visit's rows.
+   */
+  | { result: 'stored'; firm: FirmId; call: CallId; alert: DueId | null; booking: { visit: VisitId; dues: DueId[] } | null }
   /** The record already held this call, so nothing changed. */
   | { result: 'repeat'; firm: FirmId; call: CallId }
   /** No firm has the number that was rung. Nothing was kept. */
@@ -46,6 +58,19 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
   }
 
   const urgentItem = urgentItemOf(firm, report.details);
+  const forWhom = await callFor(db, firm.id, report.from, report.details);
+  const hold = await findHoldForCall(db, firm.id, 'vapi', report.providerCallId);
+  const canBook = urgentItem === null && (forWhom.kind === 'new_customer' || forWhom.kind === 'customer');
+  const booking: NewBooking | null =
+    hold !== null && canBook
+      ? {
+          hold: hold.id,
+          kind: hold.kind,
+          startsAt: hold.startsAt,
+          endsAt: hold.endsAt,
+          dues: bookingDues(hold.startsAt, db.clock.now()),
+        }
+      : null;
   let made: RecordedCall;
   try {
     made = await recordCall(db, firm.id, {
@@ -55,10 +80,11 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
       startedAt: report.startedAt ?? report.endedAt ?? db.clock.now(),
       endedAt: report.endedAt,
       from: report.from.kind === 'withheld' ? null : report.from.number,
-      for: await callFor(db, firm.id, report.from, report.details),
+      for: forWhom,
       urgentItem,
       summary: report.details?.summary ?? null,
       transcript: report.transcript,
+      booking,
     });
   } catch (thrown) {
     // The same report arriving twice at once: the second is refused by the
@@ -72,6 +98,13 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
   }
 
   log('call_stored', { firm: firm.id, call: made.call });
+  if (made.visit !== null) {
+    log('hold_filed', { firm: firm.id, call: made.call, visit: made.visit });
+  } else if (hold !== null && (await releaseHold(db, firm.id, hold.id))) {
+    // A time was held on a call that cannot be booked. Staff should know a
+    // caller may have been told a time.
+    log('hold_released', { firm: firm.id, call: made.call, hold: hold.id });
+  }
   if (report.details?.callerType === 'customer' && report.details.urgentMatch !== null && urgentItem === null) {
     log('urgent_not_on_list', { firm: firm.id, call: made.call });
   }
@@ -80,7 +113,13 @@ export async function landCall(db: RecordDb, report: CallReport): Promise<Landed
     // firm's calls are being answered while the service is off.
     log('call_while_calls_off', { firm: firm.id, call: made.call });
   }
-  return { result: 'stored', firm: firm.id, call: made.call, alert: made.alert };
+  return {
+    result: 'stored',
+    firm: firm.id,
+    call: made.call,
+    alert: made.alert,
+    booking: made.visit === null ? null : { visit: made.visit, dues: made.dues },
+  };
 }
 
 /**
