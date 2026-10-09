@@ -56,7 +56,7 @@
         }
       ],
       "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: One of my radiators stays cold even with the heating on.\nAI: I can pass that on. Can I take your name and address?\nUser: Ms Rowe, 3 Ferry Road.\nAI: Thank you, Ms Rowe. Tom will be in touch.",
-      "recordingUrl": "https://example.invalid/recordings/4c9f6d85-1b7a-4e40-8d62-3f0a5b8e1d94-mono.wav"
+      "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/4c9f6d85-1b7a-4e40-8d62-3f0a5b8e1d94-mono.mp3"
     },
     "analysis": {
       "summary": "Ms Rowe reported a radiator that stays cold.",

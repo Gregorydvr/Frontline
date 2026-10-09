@@ -7,11 +7,24 @@
 // What a customer or a caller wrote is escaped like everything else, so it
 // shows as plain text (rule 17).
 
-import type { Instant } from '../clock';
+import { instant, type Instant } from '../clock';
+import { PERIODS } from '../record/periods';
 import { clock24, inLondon, shortDate } from '../london';
 import { nationalNumber } from '../phone';
 import type { FailedText, LookItem, OwnerMessageForStaff } from '../record/control';
-import { SERVICES, type Call, type Customer, type Firm, type Job, type MessageKind, type MessageReason, type Service, type TextIn } from '../record/types';
+import type { FirmExport } from '../record/firm-file';
+import {
+  SERVICES,
+  type Call,
+  type Customer,
+  type DueAction,
+  type Firm,
+  type Job,
+  type MessageKind,
+  type MessageReason,
+  type Service,
+  type TextIn,
+} from '../record/types';
 import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
 import { dayWords } from './home';
@@ -63,13 +76,19 @@ export const CONTROL_WORDS = {
     hold_let_go: 'A time was held on this call and let go. The caller may have been told a time.',
     urgent_not_on_list: 'The agent thought this urgent; it is not on the firm’s urgent list.',
     call_while_off: 'Came while calls were switched off.',
+    recording_not_kept: 'The recording of this call is not in Front-line’s file store. Check the firm’s agent in Vapi.',
   },
   actions: {
     alert_owner: 'urgent alert',
     send_reminder: 'reminder',
     send_confirmation: 'confirmation',
     send_login_link: 'login text',
-  },
+    move_recording: 'move of a recording',
+    delete_recording: 'delete of a recording',
+    sweep: 'daily sweep',
+    make_firm_export: 'firm export',
+    delete_firm: 'delete of the firm',
+  } satisfies Record<DueAction, string>,
   reasons: {
     refused: 'refused by the provider',
     undelivered: 'not delivered',
@@ -102,7 +121,7 @@ export const CONTROL_WORDS = {
   noJobs: 'No jobs.',
   rows: 'Rows held',
   export: 'Export what is held',
-  exportHint: 'A file of everything held about them, for the firm. Front-line keeps no copy.',
+  exportHint: 'A zip of everything held about them, with their recordings, for the firm. Front-line keeps no copy.',
   delete: 'Delete this customer',
   // Deleting.
   deleteTitle: 'Delete {name}?',
@@ -149,6 +168,42 @@ export const CONTROL_WORDS = {
   resetTitle: 'Reset the example?',
   resetWarning: 'This deletes the demo firm and everything in it, and loads it fresh, with its clock at the example’s “today”.',
   resetButton: 'Reset it',
+  // Keeping and deleting a firm (slice H).
+  records: 'The firm’s records',
+  exportFirm: 'Export this firm',
+  exportFirmHint: 'A zip of everything the firm holds, with spreadsheets and the recordings still kept, to hand over. Kept for 30 days.',
+  exportAsked: 'Asked for {when}. Being made.',
+  exportReady: 'Made {when} · {size}',
+  exportDownloaded: 'Last downloaded {when}',
+  exportNotDownloaded: 'Not downloaded yet',
+  download: 'Download',
+  noExports: 'No exports.',
+  leaving: 'Leaving',
+  leavingSince: 'Leaving since {when}. It is deleted on {deleteOn} ({days} days left) unless it is cancelled.',
+  leavingNoExport: 'Its export has not been downloaded yet.',
+  markLeaving: 'This firm is leaving',
+  leavingTitle: '{name} is leaving?',
+  leavingWarning: 'This turns the stop button on, switches every service off, cancels every text still waiting, and makes the firm’s export. The firm and everything it holds is deleted 30 days from now, unless the leaving is cancelled. Its calls and texts are no longer kept.',
+  typeFirmName: 'Type the firm’s name, {name}, to go on',
+  wrongFirmName: 'That is not the firm’s name as it is held. Nothing was changed.',
+  leavingButton: 'Mark as leaving',
+  cancelLeaving: 'Cancel the leaving',
+  deleteFirm: 'Delete the firm now',
+  deleteFirmTitle: 'Delete {name} now?',
+  deleteFirmWarning: 'This cannot be undone. Every file and every row the firm holds is deleted.',
+  deleteFirmNeedsExport: 'The export must be made first. Download it and hand it to the firm.',
+  firmStays: 'The staff log, and a note that the firm was deleted and when, by id only.',
+  firmDeletedTitle: 'Firm deleted',
+  firmDeleted: 'The firm and everything it held is deleted.',
+  firmCannotReach:
+    'Not reached by this: the firm’s number with Twilio and its texts there, its agent and calls with Vapi, and the database’s restore points, which drop out after 30 days. See docs/firm-leaving.md.',
+  // After a restore.
+  afterRestore: 'After a restore',
+  afterRestoreHint: 'A restore brings back customers and firms deleted since its point. Give the time the database was restored to, and every delete noted since then is done again.',
+  restoredTo: 'Restored to (UK time)',
+  deletesSince: '{count} deletes noted since then.',
+  deleteAgain: 'Delete again',
+  deletedAgain: 'Done again: {customers} customers and {firms} firms deleted; {recordings} calls marked as having lost their recording.',
   notAllowed: 'Not allowed',
   notFound: 'Not found',
   back: 'Back',
@@ -236,11 +291,12 @@ ${
     ? html`<p class="meta">${CONTROL_WORDS.noFirms}</p>`
     : html`<div class="card">${lines.map(
         (line) => html`<a class="row" href="/control/firms/${line.firm.id}"><span class="txt"><span class="t1">${line.firm.name} ${badge(line.firm)}</span>
-<span class="t2">${servicesOn(line.firm)}${line.firm.stopped ? html` · <strong class="problem">${CONTROL_WORDS.stopOn}</strong>` : null}</span>
+<span class="t2">${line.firm.leaving === null ? null : html`<strong class="problem">${CONTROL_WORDS.leaving}</strong> · `}${servicesOn(line.firm)}${line.firm.stopped ? html` · <strong class="problem">${CONTROL_WORDS.stopOn}</strong>` : null}</span>
 <span class="t2">${words(CONTROL_WORDS.today, { calls: line.callsToday, failed: line.failedThisWeek, textsIn: line.textsInToday, unread: line.unread })}</span></span></a>`,
       )}</div>`
 }
-${canLoadExample ? html`<form method="post" action="/control/example"><button class="btn btn-line" type="submit">${CONTROL_WORDS.loadExample}</button></form>` : null}`;
+${canLoadExample ? html`<form method="post" action="/control/example"><button class="btn btn-line" type="submit">${CONTROL_WORDS.loadExample}</button></form>` : null}
+<a class="link" href="/control/after-restore">${CONTROL_WORDS.afterRestore}</a>`;
 }
 
 function servicesOn(firm: Firm): string {
@@ -259,6 +315,8 @@ export interface FirmView {
   look: readonly LookItem[];
   /** The demo firm's clock and reset are shown: an example firm, on practice or this machine. */
   exampleTools: boolean;
+  /** The firm's exports, newest first. */
+  exports: readonly FirmExport[];
 }
 
 export function firmScreen(view: FirmView): Html {
@@ -313,7 +371,107 @@ ${section(
     CONTROL_WORDS.noTextsIn,
   ),
 )}
+${recordsSection(view)}
 ${view.exampleTools ? exampleTools(base, view.now) : null}`;
+}
+
+/** The firm's exports, and its leaving: marking it, the days left, cancelling it and deleting it. */
+function recordsSection(view: FirmView): Html {
+  const { firm } = view;
+  const base = `/control/firms/${firm.id}`;
+  const exports = list(
+    view.exports.map((made) =>
+      made.state === 'asked' || made.readyAt === null
+        ? html`${words(CONTROL_WORDS.exportAsked, { when: when(made.askedAt) })}`
+        : html`${words(CONTROL_WORDS.exportReady, { when: when(made.readyAt), size: sizeWords(made.size ?? 0) })}<br><span class="t2">${made.downloadedAt === null ? CONTROL_WORDS.exportNotDownloaded : words(CONTROL_WORDS.exportDownloaded, { when: when(made.downloadedAt) })}</span>
+<br><a class="link" href="${base}/export/${made.id}">${CONTROL_WORDS.download}</a>`,
+    ),
+    CONTROL_WORDS.noExports,
+  );
+  const downloaded = view.exports.some((made) => made.downloadedAt !== null);
+  const leaving =
+    firm.leaving === null
+      ? html`<a class="link" href="${base}/leaving">${CONTROL_WORDS.markLeaving}</a>`
+      : html`<p class="problem">${words(CONTROL_WORDS.leavingSince, {
+          when: when(firm.leaving.at),
+          deleteOn: shortDate(deleteOn(firm.leaving.at)),
+          days: Math.max(0, Math.ceil((deleteOn(firm.leaving.at) - view.now) / DAY)),
+        })}</p>
+${downloaded ? null : html`<p class="problem">${CONTROL_WORDS.leavingNoExport}</p>`}
+<form method="post" action="${base}/leaving/cancel"><button class="btn btn-line" type="submit">${CONTROL_WORDS.cancelLeaving}</button></form>
+<a class="link" href="${base}/delete">${CONTROL_WORDS.deleteFirm}</a>`;
+  return section(
+    CONTROL_WORDS.records,
+    html`<p class="meta">${CONTROL_WORDS.exportFirmHint}</p>
+<form method="post" action="${base}/export"><button class="btn btn-line" type="submit">${CONTROL_WORDS.exportFirm}</button></form>
+${exports}
+${leaving}`,
+  );
+}
+
+const DAY = 24 * 60 * 60_000;
+
+/** When a leaving firm is deleted by the clock: 30 days after it was marked. */
+function deleteOn(leftAt: Instant): Instant {
+  return instant(leftAt + PERIODS.leaving);
+}
+
+function sizeWords(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${String(Math.max(1, Math.round(bytes / 1024)))} kB`;
+}
+
+export function leavingScreen(firm: Firm, wrongName: boolean): Html {
+  const base = `/control/firms/${firm.id}`;
+  return html`<a class="link" href="${base}">${firm.name}</a>
+<div class="block"><h1>${words(CONTROL_WORDS.leavingTitle, { name: firm.name })}</h1><p class="problem">${CONTROL_WORDS.leavingWarning}</p></div>
+<form method="post" action="${base}/leaving" class="stack">
+${wrongName ? html`<p class="problem" role="alert">${CONTROL_WORDS.wrongFirmName}</p>` : null}
+<div class="field cr-field"><label for="cr-name">${words(CONTROL_WORDS.typeFirmName, { name: firm.name })}</label><input id="cr-name" name="name" type="text" autocomplete="off" maxlength="120" required></div>
+<button class="btn cr-danger" type="submit">${CONTROL_WORDS.leavingButton}</button>
+</form>`;
+}
+
+export function firmDeleteScreen(firm: Firm, exportMade: boolean, wrongName: boolean): Html {
+  const base = `/control/firms/${firm.id}`;
+  return html`<a class="link" href="${base}">${firm.name}</a>
+<div class="block"><h1>${words(CONTROL_WORDS.deleteFirmTitle, { name: firm.name })}</h1><p class="problem">${CONTROL_WORDS.deleteFirmWarning}</p></div>
+${section(CONTROL_WORDS.willStay, list([html`${CONTROL_WORDS.firmStays}`], CONTROL_WORDS.staysNothing))}
+${
+  exportMade
+    ? html`<form method="post" action="${base}/delete" class="stack">
+${wrongName ? html`<p class="problem" role="alert">${CONTROL_WORDS.wrongFirmName}</p>` : null}
+<div class="field cr-field"><label for="cr-name">${words(CONTROL_WORDS.typeFirmName, { name: firm.name })}</label><input id="cr-name" name="name" type="text" autocomplete="off" maxlength="120" required></div>
+<button class="btn cr-danger" type="submit">${CONTROL_WORDS.deleteButton}</button>
+</form>`
+    : html`<p class="problem">${CONTROL_WORDS.deleteFirmNeedsExport}</p>`
+}
+<p class="meta">${CONTROL_WORDS.firmCannotReach}</p>`;
+}
+
+export function firmDeletedScreen(): Html {
+  return html`<a class="link" href="/control">${CONTROL_WORDS.allFirms}</a>
+<div class="block"><h1>${CONTROL_WORDS.firmDeletedTitle}</h1><p class="meta">${CONTROL_WORDS.firmDeleted}</p></div>
+<p class="meta">${CONTROL_WORDS.firmCannotReach}</p>`;
+}
+
+/** What the page for after a restore shows: how many deletes are noted since the time given, and what doing them again did. */
+export interface AfterRestoreView {
+  typed: string;
+  since: number | null;
+  done: { customers: number; firms: number; recordings: number } | null;
+}
+
+export function afterRestoreScreen(view: AfterRestoreView): Html {
+  return html`<a class="link" href="/control">${CONTROL_WORDS.allFirms}</a>
+<div class="block"><h1>${CONTROL_WORDS.afterRestore}</h1><p class="meta">${CONTROL_WORDS.afterRestoreHint}</p></div>
+${view.done === null ? null : html`<p class="meta" role="status">${words(CONTROL_WORDS.deletedAgain, view.done)}</p>`}
+<form class="cr-find" method="get" action="/control/after-restore"><div class="field cr-field"><label for="cr-since">${CONTROL_WORDS.restoredTo}</label><input id="cr-since" name="since" type="datetime-local" value="${view.typed}" required></div><button class="btn btn-line" type="submit">${CONTROL_WORDS.find}</button></form>
+${
+  view.since === null
+    ? null
+    : html`<p class="meta">${words(CONTROL_WORDS.deletesSince, { count: view.since })}</p>
+<form method="post" action="/control/after-restore"><input type="hidden" name="since" value="${view.typed}"><button class="btn cr-danger" type="submit">${CONTROL_WORDS.deleteAgain}</button></form>`
+}`;
 }
 
 function switchRow(base: string, service: Service, on: boolean): Html {

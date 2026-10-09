@@ -56,7 +56,7 @@
         }
       ],
       "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: Hello. I'd like someone to service my boiler before the winter.\nAI: I can help with that. Can I take your name and address?\nUser: Mrs Hall, 12 Kiln Lane.\nAI: Thank you, Mrs Hall. I'll pass this to Tom and he'll be in touch.",
-      "recordingUrl": "https://example.invalid/recordings/3b8e5c74-0a69-4d3f-9c51-2e9f4a7d0c83-mono.wav"
+      "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/3b8e5c74-0a69-4d3f-9c51-2e9f4a7d0c83-mono.mp3"
     },
     "analysis": {
       "summary": "Mrs Hall asked for a boiler service before the winter.",

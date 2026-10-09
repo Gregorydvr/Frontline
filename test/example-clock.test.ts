@@ -128,8 +128,9 @@ describe('resetting the example', () => {
     for (const table of await recordTables(env.DB)) {
       if ((await tableColumns(env.DB, table)).some((column) => column.name === 'firm_id')) withFirm.push(table);
     }
-    // The staff log outlives the firm, and the permission slip is never left behind.
-    expect([...FIRM_TABLES].sort()).toEqual(withFirm.filter((table) => table !== 'staff_log' && table !== 'erasing').sort());
+    // The staff log and the list of deleted firms outlive the firm, and the
+    // permission slip is never left behind.
+    expect([...FIRM_TABLES].sort()).toEqual(withFirm.filter((table) => !['staff_log', 'erasing', 'deleted_firms'].includes(table)).sort());
   });
 
   it('is refused for a firm that is not an example, and deletes nothing', async () => {

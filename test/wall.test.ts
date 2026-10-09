@@ -16,10 +16,13 @@ import { ukLandline, ukMobile } from '../src/phone';
 import * as record from '../src/record';
 import { openRecord, Refused, type RecordDb } from '../src/record/db';
 import type { SessionToken } from '../src/record/logins';
+import { EXPORTED_TABLES } from '../src/record/firm-file';
 import type {
   Call,
+  CallId,
   Customer,
   DueId,
+  FirmExportId,
   FirmId,
   HistoryId,
   HoldId,
@@ -38,6 +41,8 @@ import { testDeps } from './helpers/deps';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
 const db = openRecord(env.DB, clock);
+/** The record with the local file stores, for the functions that keep and delete files. */
+const withFiles = openRecord(env.DB, clock, testDeps(clock).files);
 const frontline = { kind: 'frontline' } as const;
 const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
 const far = instantFromIso('2099-01-01T00:00:00Z');
@@ -85,6 +90,9 @@ let ofA: {
   /** A link to log the first firm's owner in, not yet used, and the cookie of a login they started. */
   login: LoginToken;
   cookie: SessionToken;
+  /** The first firm's call with a recording kept, and its export, made. */
+  recorded: CallId;
+  export: FirmExportId;
   /** Every id of the first firm's, to look for in what the second firm is given. */
   ids: string[];
 };
@@ -110,6 +118,7 @@ beforeAll(async () => {
   const holdBy = new Map<FirmId, HoldId>();
   const linkBy = new Map<FirmId, LinkToken>();
   const loginBy = new Map<FirmId, { login: LoginToken; cookie: SessionToken }>();
+  const recordedBy = new Map<FirmId, CallId>();
   for (const firm of [a, b]) {
     const [clarke] = (await record.findCustomersByMobile(db, firm, ukMobile('07700 900005')));
     const [clarkesJob] = clarke === undefined ? [] : await record.listJobsForCustomer(db, firm, clarke.id);
@@ -160,7 +169,23 @@ beforeAll(async () => {
     if (login === null) throw new Error('Not logged in');
     loginBy.set(firm, { login: unused.token, cookie: login.session });
     await record.recordOwnerMessage(db, firm, owner.id, 'Please put my day rate up.');
+    // A call with its recording kept, and an export of the firm, made.
+    const recording = `firms/${firm}/wall-recording.mp3`;
+    await record.placeInInbox(withFiles, firm, recording, new TextEncoder().encode('Invented bytes.'));
+    const recorded = await record.recordCall(db, firm, { ...newCall({ kind: 'not_customer', caller: 'a supplier' }), recording: { kind: 'waiting', from: recording } });
+    expect(await record.moveRecording(withFiles, firm, recorded.call)).toBe('kept');
+    recordedBy.set(firm, recorded.call);
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await record.askFirmExport(db, firm, staff.id);
   }
+  // The exports made by their rows in the due list, as the clock runs them.
+  for (const { firm, due } of await record.findDue(db)) {
+    if ((await record.getDue(db, firm, due))?.action === 'make_firm_export') {
+      expect(await runDue(withFiles, testDeps(clock), firm, due)).toEqual({ ran: 'done', outcome: 'made' });
+    }
+  }
+  // Each firm's daily sweep, as the clock gives it.
+  await record.addMissingSweeps(db);
   // The first firm alone has Mrs Ahmed's number opted out: the second firm
   // must not see it.
   await record.optOutNumber(db, a, mrsAhmedsMobile);
@@ -193,6 +218,9 @@ beforeAll(async () => {
     throw new Error('No held or waiting row');
   }
   loginOfB = loginBy.get(b) ?? null;
+  const recordedOfA = recordedBy.get(a);
+  const [exportOfA] = await record.listFirmExports(db, a);
+  if (recordedOfA === undefined || exportOfA === undefined) throw new Error('No recording or export');
   dues.push(waiting, held.due);
   // Rows another firm could change if a query lost its firm: one waiting,
   // one held by a claim, and a text still being handed over.
@@ -215,8 +243,11 @@ beforeAll(async () => {
     link: linkOfA,
     login: loginOfA.login,
     cookie: loginOfA.cookie,
+    recorded: recordedOfA,
+    export: exportOfA.id,
     ids: [
       a,
+      exportOfA.id,
       holdOfA,
       linkOfA,
       loginOfA.login,
@@ -237,6 +268,11 @@ beforeAll(async () => {
   if (first === undefined) throw new Error('The second firm has no jobs');
   jobOfB = first;
 });
+
+/** Every file the firm has, in both file stores. */
+async function filesOf(firm: FirmId): Promise<string[]> {
+  return [...(await record.listFiles(withFiles, firm, 'kept')), ...(await record.listFiles(withFiles, firm, 'inbox'))].map((file) => file.key);
+}
 
 /** Fails if anything of the first firm's is in what the second firm was given. */
 function nothingOfA(given: unknown): void {
@@ -899,6 +935,127 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     const staff = await record.findOrAddStaff(db, 'staff@example.com');
     await refused(record.deleteExampleFirm(db, b, staff.id));
   },
+  async redoCustomerDelete() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    for (const customer of ofA.customers) {
+      expect(await record.redoCustomerDelete(withFiles, b, customer.id, staff.id)).toBeNull();
+    }
+  },
+  async logStaffAcrossFirms() {
+    // A view across every firm names no firm, and changes no firm's rows.
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await record.logStaffAcrossFirms(db, staff.id, 'viewed_after_restore');
+  },
+
+  // Keeping and deleting (slice H). The first firm's call, recording and
+  // export, named under the second firm, are not found, and its files stay.
+  async getCallRecording() {
+    expect(await record.getCallRecording(db, b, ofA.recorded)).toBeNull();
+  },
+  async readCallRecording() {
+    expect(await record.readCallRecording(withFiles, b, ofA.recorded)).toBeNull();
+  },
+  async moveRecording() {
+    expect(await record.moveRecording(withFiles, b, ofA.recorded)).toBe('nothing_to_do');
+  },
+  async giveUpRecording() {
+    await record.giveUpRecording(withFiles, b, ofA.recorded);
+  },
+  async deleteRecording() {
+    expect(await record.deleteRecording(withFiles, b, ofA.recorded)).toBe('nothing_to_do');
+  },
+  async markMissingRecordings() {
+    expect(await record.markMissingRecordings(withFiles, b)).toBe(0);
+  },
+  async emptyBin() {
+    await record.emptyBin(withFiles, b);
+  },
+  async sweepFirm() {
+    // Run years on, a firm of the same shape as the first has its sweep
+    // delete what is its own, and nothing of the first firm's. (Not the
+    // second firm, whose shape the last test checks.)
+    const third = await loadExample(env.DB, { name: 'Third Example Firm', isExample: false, number: '07700 900301' });
+    const later = openRecord(env.DB, pretendClock(instantFromIso('2030-01-01T03:15:00Z')), testDeps(clock).files);
+    const swept = await record.sweepFirm(later, third);
+    expect(swept.counts.customers).toBeGreaterThan(0);
+  },
+  async addMissingSweeps() {
+    // A record function that takes no firm: the clock gives every firm its
+    // sweep. The first firm has one, so none is added for it.
+    const added = await record.addMissingSweeps(db);
+    nothingOfA(added);
+  },
+  async listFiles() {
+    for (const store of ['kept', 'inbox'] as const) {
+      const files = await record.listFiles(withFiles, b, store);
+      nothingOfA(files);
+      for (const file of files) expect(file.key.startsWith(`firms/${b}/`)).toBe(true);
+    }
+  },
+  async placeInInbox() {
+    // A name under the first firm's path, given as the second firm, is refused.
+    await expect(record.placeInInbox(withFiles, b, `firms/${a}/stolen.mp3`, new Uint8Array(1))).rejects.toThrow(RangeError);
+  },
+  async ledgerSince() {
+    // The fifteenth: the deletes to do again after a restore, across firms, by id.
+    nothingOfA(await record.ledgerSince(withFiles, allTime[0]));
+  },
+  async askFirmExport() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    const made = await record.askFirmExport(db, b, staff.id);
+    expect((await record.listFirmExports(db, b)).map((one) => one.id)).toContain(made);
+  },
+  async listFirmExports() {
+    const exports = await record.listFirmExports(db, b);
+    expect(exports.length).toBeGreaterThan(0);
+    nothingOfA(exports);
+  },
+  async exportToMake() {
+    expect(await record.exportToMake(db, b)).not.toBe(ofA.export);
+  },
+  async firmTablePage() {
+    for (const table of EXPORTED_TABLES) {
+      nothingOfA(await record.firmTablePage(db, b, table, 0, 1_000));
+    }
+  },
+  async openFirmExportFile() {
+    await refused(record.openFirmExportFile(withFiles, b, ofA.export));
+  },
+  async markFirmExportReady() {
+    await refused(record.markFirmExportReady(db, b, ofA.export, 10));
+  },
+  async downloadFirmExport() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    expect(await record.downloadFirmExport(withFiles, b, ofA.export, staff.id)).toBeNull();
+  },
+  async markLeaving() {
+    // The first firm's name, given as the second firm, is not its name.
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await refused(record.markLeaving(db, b, staff.id, 'Tidewell Heating'));
+  },
+  async cancelLeaving() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await refused(record.cancelLeaving(db, b, staff.id));
+  },
+  async deleteFirm() {
+    // The second firm is not leaving: nothing of it goes, and nothing of the first.
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    await refused(record.deleteFirm(withFiles, b, staff.id, 'Second Example Firm'));
+    expect(await record.getFirm(db, b)).not.toBeNull();
+  },
+  async deleteLeftFirm() {
+    expect(await record.deleteLeftFirm(withFiles, b)).toBe('nothing_to_do');
+  },
+  async redoFirmDelete() {
+    // Done again for a third firm, it deletes that firm alone.
+    const third = await loadExample(env.DB, { name: 'Third Example Firm', isExample: false, number: '07700 900300' });
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    expect(await record.redoFirmDelete(withFiles, third, staff.id)).toBe('deleted');
+    expect(await record.getFirm(db, third)).toBeNull();
+  },
+  async wasFirmDeleted() {
+    expect(await record.wasFirmDeleted(db, b)).toBeNull();
+  },
 };
 
 describe('the wall between firms', () => {
@@ -906,7 +1063,7 @@ describe('the wall between firms', () => {
     expect(Object.keys(cases).sort()).toEqual(Object.keys(record).sort());
   });
 
-  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s, the link’s, the four of logging in, and the control room’s two: staff, and the list of firms', () => {
+  it('has every record function take the firm, apart from the three that find or make a firm, the clock’s two, the link’s, the four of logging in, the control room’s three: staff, the list of firms and a view across firms, and the restore ledger', () => {
     type NotTakingTheFirm = {
       [Name in keyof typeof record]: Parameters<(typeof record)[Name]> extends [RecordDb, FirmId, ...unknown[]]
         ? never
@@ -924,6 +1081,9 @@ describe('the wall between firms', () => {
       | 'findSession'
       | 'findOrAddStaff'
       | 'listFirms'
+      | 'logStaffAcrossFirms'
+      | 'addMissingSweeps'
+      | 'ledgerSince'
     >();
   });
 
@@ -931,8 +1091,10 @@ describe('the wall between firms', () => {
     '%s, used as another firm, finds nothing of this firm and changes nothing',
     async (name) => {
       const before = await firmRows(env.DB, a);
+      const filesBefore = await filesOf(a);
       await cases[name]();
       expect(await firmRows(env.DB, a)).toEqual(before);
+      expect(await filesOf(a)).toEqual(filesBefore);
     },
   );
 

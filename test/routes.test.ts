@@ -11,9 +11,15 @@ import { loadExample } from '../src/example/load';
 import { createLocalApp } from '../src/local';
 import { runDue } from '../src/due';
 import { ukMobile } from '../src/phone';
+import { makeFirmExport } from '../src/firm-export';
 import {
   addDue,
+  askFirmExport,
   createLoginLink,
+  findOrAddStaff,
+  getFirm,
+  listFirmExports,
+  markLeaving,
   findCustomersByMobile,
   linkForDue,
   listTakenTimes,
@@ -49,6 +55,10 @@ const TAKES_NO_FIRM: Record<string, string> = {
   'POST /local/book': 'This machine only. Plays a call to the example firm through the real addresses, and takes nothing from the request.',
   'GET /control': 'The control room’s list of every firm, for staff only: how staff choose a firm. It takes nothing from the request.',
   'POST /control/example': 'Practice and this machine only: loads the demo firm when there is none. It takes nothing from the request.',
+  'GET /control/after-restore': 'The control room’s page for after a restore, for staff only. It takes only a time, and counts the deletes noted since, across every firm.',
+  'POST /control/after-restore':
+    'The control room’s “Delete again”, for staff only. It takes only a time: each delete it does again names its own firm in the restore ledger, as staff asked for it before (tested in test/keeping.test.ts).',
+  'GET /local/files': 'This machine only. Lists the example firm’s files, and takes nothing from the request.',
 };
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -151,6 +161,56 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'POST /control/firms/:firm/clock': () => controlAsB((b) => `/control/firms/${b}/clock`, () => controlForm({ by: 'day' }), [404]),
   'GET /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, undefined, [404]),
   'POST /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, () => controlForm({}), [404]),
+  // The firm's export is asked for, and downloaded, only under its own
+  // address: the first firm's export, asked for under the second firm, is
+  // "not found".
+  'POST /control/firms/:firm/export': () => controlAsB((b) => `/control/firms/${b}/export`, () => controlForm({}), [303]),
+  'GET /control/firms/:firm/export/:export': async () => {
+    const { a } = await twoFirms();
+    const exportOfA = await madeExport(a);
+    await controlAsB((b) => `/control/firms/${b}/export/${exportOfA}`, undefined, [404]);
+  },
+  // Leaving and deleting change only the firm in the address, here a third
+  // firm, so the two firms the other cases use stay as they are.
+  'GET /control/firms/:firm/leaving': () => controlAsB((b) => `/control/firms/${b}/leaving`, undefined, [200]),
+  'POST /control/firms/:firm/leaving': async () => {
+    const { a } = await twoFirms();
+    const third = await thirdFirm();
+    const before = withoutStaffLog(await firmRows(env.DB, a));
+    const open = controlOpener(createApp(deps));
+    // The first firm's name, under the third firm's address, is not its name.
+    expect((await open(`/control/firms/${third}/leaving`, controlForm({ name: 'Tidewell Heating' }))).status).toBe(400);
+    expect((await open(`/control/firms/${third}/leaving`, controlForm({ name: 'Third Example Firm' }))).status).toBe(303);
+    expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+    expect((await getFirm(db, a))?.leaving).toBeNull();
+    expect((await getFirm(db, third))?.leaving).not.toBeNull();
+  },
+  'POST /control/firms/:firm/leaving/cancel': async () => {
+    const { a } = await twoFirms();
+    const third = await thirdFirm();
+    const staff = (await findOrAddStaff(db, 'staff@example.com')).id;
+    if ((await getFirm(db, third))?.leaving === null) await markLeaving(db, third, staff, 'Third Example Firm');
+    const before = withoutStaffLog(await firmRows(env.DB, a));
+    expect((await controlOpener(createApp(deps))(`/control/firms/${third}/leaving/cancel`, controlForm({}))).status).toBe(303);
+    expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+    expect((await getFirm(db, third))?.leaving).toBeNull();
+  },
+  'GET /control/firms/:firm/delete': () => controlAsB((b) => `/control/firms/${b}/delete`, undefined, [303]),
+  'POST /control/firms/:firm/delete': async () => {
+    const { a } = await twoFirms();
+    const leaving = await loadExample(env.DB, { name: 'Fourth Example Firm', isExample: false, number: '07700 900400' });
+    const staff = (await findOrAddStaff(db, 'staff@example.com')).id;
+    await markLeaving(db, leaving, staff, 'Fourth Example Firm');
+    await madeExport(leaving);
+    const before = withoutStaffLog(await firmRows(env.DB, a));
+    const open = controlOpener(createApp(deps));
+    // The first firm's name, under the leaving firm's address, deletes nothing.
+    expect((await open(`/control/firms/${leaving}/delete`, controlForm({ name: 'Tidewell Heating' }))).status).toBe(400);
+    expect(await getFirm(db, leaving)).not.toBeNull();
+    expect((await open(`/control/firms/${leaving}/delete`, controlForm({ name: 'Fourth Example Firm' }))).status).toBe(200);
+    expect(await getFirm(db, leaving)).toBeNull();
+    expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+  },
 
   // The owner's screens take the firm from the login, and nothing else.
   'GET /': () => screenOfB('/'),
@@ -365,6 +425,24 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   },
 };
 
+let third: Promise<FirmId> | null = null;
+
+/** A third firm of the same shape, for the cases that mark a firm as leaving. */
+function thirdFirm(): Promise<FirmId> {
+  third ??= loadExample(env.DB, { name: 'Third Example Firm', isExample: false, number: '07700 900300' });
+  return third;
+}
+
+/** An export of the firm's, asked for and made. */
+async function madeExport(firm: FirmId): Promise<string> {
+  const withFiles = openRecord(env.DB, clock, pretendDeps.files);
+  await askFirmExport(withFiles, firm, (await findOrAddStaff(db, 'staff@example.com')).id);
+  expect(await makeFirmExport(withFiles, firm)).toBe('made');
+  const made = (await listFirmExports(db, firm)).find((one) => one.state === 'ready');
+  if (made === undefined) throw new Error('No export');
+  return made.id;
+}
+
 /** A link for the firm's Mr Clarke, for his job. */
 async function clarkesLink(firm: FirmId): Promise<string> {
   const [clarke] = await findCustomersByMobile(db, firm, ukMobile('07700 900005'));
@@ -429,6 +507,15 @@ describe('every route', () => {
       'POST /control/firms/:firm/customers/:customer/export',
       'GET /control/firms/:firm/customers/:customer/delete',
       'POST /control/firms/:firm/customers/:customer/delete',
+      'POST /control/firms/:firm/export',
+      'GET /control/firms/:firm/export/:export',
+      'GET /control/firms/:firm/leaving',
+      'POST /control/firms/:firm/leaving',
+      'POST /control/firms/:firm/leaving/cancel',
+      'GET /control/firms/:firm/delete',
+      'POST /control/firms/:firm/delete',
+      'GET /control/after-restore',
+      'POST /control/after-restore',
       'POST /control/firms/:firm/clock',
       'GET /control/firms/:firm/reset',
       'POST /control/firms/:firm/reset',

@@ -7,7 +7,17 @@ import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { bit, line, Refused, run, runTogether, words, type RecordDb } from './db';
 import { firmEntry } from './history';
-import { SERVICES, VISIT_KINDS, type Actor, type DiaryRules, type Firm, type FirmId, type Service, type VisitKind } from './types';
+import {
+  SERVICES,
+  VISIT_KINDS,
+  type Actor,
+  type DiaryRules,
+  type Firm,
+  type FirmId,
+  type Service,
+  type StaffId,
+  type VisitKind,
+} from './types';
 
 /** The most items an urgent list holds, and the longest an item may be. */
 export const URGENT_LIST_LIMITS = { items: 20, length: 60 } as const;
@@ -57,13 +67,14 @@ export async function exampleFirms(db: RecordDb): Promise<FirmId[]> {
 /**
  * The firm whose customers ring this number, when a call to it ends. The
  * third record function that cannot take a firm: finding the firm is its job.
- * It gives only the firm's id.
+ * It gives only the firm's id. A firm that is leaving is not found, so its
+ * calls and texts are no longer kept.
  */
 export async function findFirmByNumber(db: RecordDb, number: UkMobile): Promise<FirmId | null> {
   if (!isUkMobile(number)) {
     throw new Refused();
   }
-  const row = await db.d1.prepare('SELECT id FROM firms WHERE phone_number = ?').bind(number).first<{ id: string }>();
+  const row = await db.d1.prepare('SELECT id FROM firms WHERE phone_number = ? AND left_at IS NULL').bind(number).first<{ id: string }>();
   return row === null ? null : (row.id as FirmId);
 }
 
@@ -192,7 +203,7 @@ async function changeFirm(db: RecordDb, statements: D1PreparedStatement[]): Prom
 
 /** The columns a firm is read from, for firmFromRow(). */
 export const FIRM_COLUMNS = `id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-  stopped, phone_number, urgent_list, diary_rules, clock_ahead, created_at`;
+  stopped, phone_number, urgent_list, diary_rules, clock_ahead, left_at, left_by, created_at`;
 
 export interface FirmRow {
   id: string;
@@ -208,6 +219,8 @@ export interface FirmRow {
   urgent_list: string;
   diary_rules: string | null;
   clock_ahead: number;
+  left_at: number | null;
+  left_by: string | null;
   created_at: number;
 }
 
@@ -228,6 +241,7 @@ export function firmFromRow(row: FirmRow): Firm {
     urgentList: urgentListFrom(row.urgent_list),
     diaryRules: diaryRulesFrom(row.diary_rules),
     clockAhead: row.clock_ahead,
+    leaving: row.left_at === null || row.left_by === null ? null : { at: instant(row.left_at), by: row.left_by as StaffId },
     createdAt: instant(row.created_at),
   };
 }

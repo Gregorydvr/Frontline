@@ -56,7 +56,7 @@
         }
       ],
       "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: Hi, it's the merchant. Can you tell Tom his order is ready to collect?\nAI: Of course. I'll pass that on to Tom now. Is there anything else?\nUser: No, that's it, thanks.\nAI: Thanks for calling. Goodbye.",
-      "recordingUrl": "https://example.invalid/recordings/1f6c3a52-8e47-4b1d-9a3f-0c7e2d5b8a61-mono.wav"
+      "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/1f6c3a52-8e47-4b1d-9a3f-0c7e2d5b8a61-mono.mp3"
     },
     "analysis": {
       "summary": "A supplier called to say an order is ready to collect.",

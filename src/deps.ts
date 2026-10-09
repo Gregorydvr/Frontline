@@ -1,6 +1,7 @@
 import type { Clock } from './clock';
 import type { DueQueue } from './due';
 import type { StaffGate } from './providers/access';
+import type { FileStores } from './record/files';
 import type { Texts } from './providers/texts';
 
 /**
@@ -14,8 +15,8 @@ export type Copy = 'local' | 'practice' | 'live';
 
 /**
  * What the system is given from outside, so that tests can give it pretend
- * ones: the clock, the texts provider, and the queue the clock puts due rows
- * on. Later slices add their providers.
+ * ones: the clock, the texts provider, the queue the clock puts due rows on,
+ * and the file stores. Later slices add their providers.
  */
 export interface Deps {
   clock: Clock;
@@ -44,6 +45,12 @@ export interface Deps {
    * copy has one: then the control room is shut.
    */
   controlAddress: string | null;
+  /**
+   * The file stores: the one that keeps recordings and exports (FILES), and
+   * the inbox Vapi writes recordings into (CALLS_IN). Only the record layer
+   * touches them (src/record/files.ts).
+   */
+  files: FileStores;
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */

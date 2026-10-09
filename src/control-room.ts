@@ -27,10 +27,22 @@ import { isId } from './ids';
 import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
 import {
+  askFirmExport,
+  cancelLeaving,
   customerFile,
   customerFileCounts,
   deleteCustomer,
   deleteExampleFirm,
+  deleteFirm,
+  downloadFirmExport,
+  ledgerSince,
+  listFirmExports,
+  logStaffAcrossFirms,
+  markLeaving,
+  markMissingRecordings,
+  readCallRecording,
+  redoCustomerDelete,
+  redoFirmDelete,
   exampleFirms,
   findCustomers,
   findOrAddStaff,
@@ -51,8 +63,9 @@ import {
   setStopButton,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
-import { SERVICES, type CustomerId, type Firm, type FirmId, type Service, type StaffId } from './record/types';
+import { SERVICES, type CallId, type CustomerId, type Firm, type FirmExportId, type FirmId, type Service, type StaffId } from './record/types';
 import {
+  afterRestoreScreen,
   CONTROL_HEADERS,
   CONTROL_WORDS,
   controlPage,
@@ -60,12 +73,16 @@ import {
   deletedScreen,
   deleteScreen,
   findScreen,
+  firmDeletedScreen,
+  firmDeleteScreen,
   firmScreen,
   firmsScreen,
+  leavingScreen,
   messageScreen,
   resetScreen,
   type FirmLine,
 } from './screens/control';
+import { zipInMemory } from './zip';
 import type { Html } from './screens/html';
 
 /** How far back a firm's page looks for failed texts, texts in and what needs a look. */
@@ -136,6 +153,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         ownerMessages: await listOwnerMessages(at.firmDb, at.firm.id),
         look: await needsALook(at.firmDb, at.firm.id, since),
         exampleTools: at.firm.isExample && practiceTools(c),
+        exports: await listFirmExports(at.firmDb, at.firm.id),
       };
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_firm');
       return drawn(c, at.firm.name, firmScreen(view));
@@ -190,8 +208,9 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
-  // The export: a file of everything held about the customer, to the
-  // browser of the member of staff who asked. Front-line keeps no copy.
+  // The export: a zip of everything held about the customer, with their
+  // recordings, to the browser of the member of staff who asked. Front-line
+  // keeps no copy.
   app.post('/control/firms/:firm/customers/:customer/export', (c) =>
     atCustomer(c, 'form', async (at, customer) => {
       const file = await customerFile(at.firmDb, at.firm.id, customer);
@@ -201,12 +220,22 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         at: new Date(entry.at).toISOString(),
         line: historyLine(entry, 'job', wording) ?? historyLine(entry, 'feed', wording),
       }));
+      const kept = (file.tables.calls ?? []).filter((row) => row.recording_state === 'kept').map((row) => String(row.id) as CallId);
       await logStaff(at.firmDb, at.firm.id, at.staff, 'exported_customer', { customer });
+      const zip = await zipInMemory(at.firmDb.clock.now(), async (writer) => {
+        const missing: CallId[] = [];
+        for (const call of kept) {
+          const recording = await readCallRecording(at.firmDb, at.firm.id, call);
+          if (recording === null) missing.push(call);
+          else await writer.stream(`recordings/${call}${recordingEnding(recording.key)}`, recording.body);
+        }
+        await writer.text('customer.json', JSON.stringify({ ...file, historyAsTheOwnerReadsIt: lines, recordingsMissing: missing }, null, 2));
+      });
       log('customer_exported', { firm: at.firm.id, customer, staff: at.staff });
-      return c.body(JSON.stringify({ ...file, historyAsTheOwnerReadsIt: lines }, null, 2), 200, {
+      return c.body(zip, 200, {
         ...CONTROL_HEADERS,
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="frontline-export-${at.firm.id}-${customer}.json"`,
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="frontline-export-${at.firm.id}-${customer}.zip"`,
       });
     }),
   );
@@ -241,6 +270,116 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         log('customer_deleted', { firm: at.firm.id, customer, staff: at.staff });
       }
       return drawn(c, CONTROL_WORDS.deletedTitle, deletedScreen(at.firm, deleted?.removed ?? null));
+    }),
+  );
+
+  // The firm's records: an export made by a row in the due list, and
+  // downloading one once it is made.
+  app.post('/control/firms/:firm/export', (c) =>
+    atFirm(c, 'form', async (at) => {
+      await askFirmExport(at.firmDb, at.firm.id, at.staff);
+      log('firm_export_asked', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/export/:export', (c) =>
+    atFirm(c, 'view', async (at) => {
+      const id = c.req.param('export');
+      const file = isId(id) ? await downloadFirmExport(at.firmDb, at.firm.id, id as FirmExportId, at.staff) : null;
+      if (file === null) return notFound(c);
+      log('firm_export_downloaded', { firm: at.firm.id, staff: at.staff });
+      return c.body(file.body, 200, {
+        ...CONTROL_HEADERS,
+        'Content-Type': 'application/zip',
+        'Content-Length': String(file.size),
+        'Content-Disposition': `attachment; filename="frontline-firm-export-${at.firm.id}-${id}.zip"`,
+      });
+    }),
+  );
+
+  // A firm leaving: its name typed to go on.
+  app.get('/control/firms/:firm/leaving', (c) =>
+    atFirm(c, 'view', async (at) => {
+      if (at.firm.leaving !== null) return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_leaving');
+      return drawn(c, CONTROL_WORDS.markLeaving, leavingScreen(at.firm, false));
+    }),
+  );
+
+  app.post('/control/firms/:firm/leaving', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 120);
+      try {
+        await markLeaving(at.firmDb, at.firm.id, at.staff, typed);
+      } catch (thrown) {
+        if (!(thrown instanceof Refused)) throw thrown;
+        // Not its name as held, or already leaving: nothing changed.
+        return at.firm.leaving === null
+          ? drawn(c, CONTROL_WORDS.markLeaving, leavingScreen(at.firm, true), 400)
+          : c.redirect(`/control/firms/${at.firm.id}`, 303);
+      }
+      log('firm_leaving', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  app.post('/control/firms/:firm/leaving/cancel', (c) =>
+    atFirm(c, 'form', async (at) => {
+      try {
+        await cancelLeaving(at.firmDb, at.firm.id, at.staff);
+        log('firm_leaving_cancelled', { firm: at.firm.id, staff: at.staff });
+      } catch (thrown) {
+        if (!(thrown instanceof Refused)) throw thrown;
+      }
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  // Deleting a leaving firm before its 30 days are up, once its export is made.
+  app.get('/control/firms/:firm/delete', (c) =>
+    atFirm(c, 'view', async (at) => {
+      if (at.firm.leaving === null) return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_firm_delete');
+      return drawn(c, CONTROL_WORDS.deleteFirm, firmDeleteScreen(at.firm, await exportMade(at), false));
+    }),
+  );
+
+  app.post('/control/firms/:firm/delete', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 120);
+      try {
+        await deleteFirm(at.firmDb, at.firm.id, at.staff, typed);
+      } catch (thrown) {
+        if (!(thrown instanceof Refused)) throw thrown;
+        if (at.firm.leaving === null) return c.redirect(`/control/firms/${at.firm.id}`, 303);
+        return drawn(c, CONTROL_WORDS.deleteFirm, firmDeleteScreen(at.firm, await exportMade(at), true), 400);
+      }
+      log('firm_deleted', { firm: at.firm.id, staff: at.staff });
+      return drawn(c, CONTROL_WORDS.firmDeletedTitle, firmDeletedScreen());
+    }),
+  );
+
+  // After the database is restored to an earlier point: every customer and
+  // firm deleted since then is deleted again (docs/restore.md).
+  app.get('/control/after-restore', (c) =>
+    asStaff(c, 'view', async (who) => {
+      await logStaffAcrossFirms(who.db, who.staff, 'viewed_after_restore');
+      const typed = (c.req.query('since') ?? '').slice(0, 20);
+      const since = ukTime(typed);
+      const count = since === null ? null : (await ledgerSince(who.db, since)).length;
+      return drawn(c, CONTROL_WORDS.afterRestore, afterRestoreScreen({ typed, since: count, done: null }));
+    }),
+  );
+
+  app.post('/control/after-restore', (c) =>
+    asStaff(c, 'form', async (who) => {
+      const typed = ((await readForm(c.req.raw)).get('since') ?? '').slice(0, 20);
+      const since = ukTime(typed);
+      if (since === null) return c.redirect('/control/after-restore', 303);
+      const done = await replayDeletions(who, since);
+      log('deletions_replayed', { staff: who.staff, ...done });
+      return drawn(c, CONTROL_WORDS.afterRestore, afterRestoreScreen({ typed, since: null, done }));
     }),
   );
 
@@ -308,7 +447,7 @@ async function asStaff(c: Context<AppEnv>, kind: 'view' | 'form', draw: (who: Lo
     log('staff_request_refused');
     return refused(c);
   }
-  const db = openRecord(c.env.DB, deps.clock);
+  const db = openRecord(c.env.DB, deps.clock, deps.files);
   const staff = await findOrAddStaff(db, email);
   return draw({ db, staff: staff.id });
 }
@@ -368,4 +507,39 @@ function ukTime(typed: string | null): Instant | null {
   } catch {
     return null;
   }
+}
+
+/** Whether one of the firm's exports is made. */
+async function exportMade(at: AtFirm): Promise<boolean> {
+  return (await listFirmExports(at.firmDb, at.firm.id)).some((made) => made.state === 'ready');
+}
+
+/** A recording's ending in an export, from the name it is kept under. */
+function recordingEnding(key: string): string {
+  const ending = /\.(mp3|wav)$/.exec(key)?.[1];
+  return ending === undefined ? '' : `.${ending}`;
+}
+
+/**
+ * Does again every delete the restore ledger noted since an instant, for
+ * customers and firms the database holds again after a restore, then marks
+ * every call whose recording file is gone. Each delete is recorded in the
+ * staff log as done again, by the member of staff who asked.
+ */
+async function replayDeletions(who: Looking, since: Instant): Promise<{ customers: number; firms: number; recordings: number }> {
+  const done = { customers: 0, firms: 0, recordings: 0 };
+  for (const entry of await ledgerSince(who.db, since)) {
+    const firm = await getFirm(who.db, entry.firm);
+    if (firm === null) continue;
+    const firmDb = withFirmClock(who.db, firm);
+    if (entry.kind === 'customer') {
+      if ((await redoCustomerDelete(firmDb, firm.id, entry.customer, who.staff)) !== null) done.customers += 1;
+    } else if ((await redoFirmDelete(firmDb, firm.id, who.staff)) === 'deleted') {
+      done.firms += 1;
+    }
+  }
+  for (const firm of await listFirms(who.db, who.staff)) {
+    done.recordings += await markMissingRecordings(withFirmClock(who.db, firm), firm.id);
+  }
+  return done;
 }

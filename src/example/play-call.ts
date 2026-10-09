@@ -8,15 +8,29 @@
 // she is a new customer and her confirmation is her first text, with its
 // link. Nothing here is deployed: practice and live are built from
 // src/index.ts.
+//
+// The call comes with a recording, as Vapi writes one into the inbox file
+// store: a few invented bytes, not a real sound. It is moved into the kept
+// store at once, and deleted by the clock 30 days on, which the control room
+// can show by moving the demo firm's clock (see /local/files).
 
 import type { Hono } from 'hono';
 import { instant } from '../clock';
 import type { AppEnv } from '../app';
 import { runDue, type DueDeps } from '../due';
 import { newId } from '../ids';
-import { listCustomers, listDueForVisit, listJobsForCustomer, listMessagesBetween, listVisitsForJob } from '../record';
+import {
+  listCallsBetween,
+  listCustomers,
+  listDueForCall,
+  listDueForVisit,
+  listJobsForCustomer,
+  listMessagesBetween,
+  listVisitsForJob,
+  placeInInbox,
+} from '../record';
 import type { RecordDb } from '../record/db';
-import type { FirmId } from '../record/types';
+import type { CallId, CustomerId, FirmId } from '../record/types';
 import { EXAMPLE_NUMBER } from './tidewell';
 import { ukMobile } from '../phone';
 
@@ -66,6 +80,10 @@ export async function playBookingCall(
     return { result: 'no_times' };
   }
   const now = new Date(db.clock.now()).toISOString();
+  const recording = `firms/${firm}/${callId}-mono.mp3`;
+  if (db.files !== null) {
+    await placeInInbox(db, firm, recording, new TextEncoder().encode('Not a real recording: invented bytes for this machine.'));
+  }
   await post(
     '/vapi/server',
     message({
@@ -82,6 +100,7 @@ export async function playBookingCall(
           urgentMatch: null,
         },
       },
+      artifact: { recordingUrl: `https://calls-in.example.invalid/${recording}` },
     }),
   );
 
@@ -91,6 +110,10 @@ export async function playBookingCall(
   const [visit] = job === undefined ? [] : await listVisitsForJob(db, firm, job.id);
   const confirmation = visit === undefined ? undefined : (await listDueForVisit(db, firm, visit.id)).find((due) => due.action === 'send_confirmation');
   const ran = confirmation === undefined ? null : await runDue(db, deps, firm, confirmation.id);
+  // And her recording's move into the kept store.
+  const call = customer === undefined ? undefined : (await listCallsOf(db, firm, customer.id))[0];
+  const move = call === undefined ? undefined : (await listDueForCall(db, firm, call)).find((due) => due.action === 'move_recording');
+  if (move !== undefined) await runDue(db, deps, firm, move.id);
   const sent = (await listMessagesBetween(db, firm, visit?.createdAt ?? db.clock.now(), instant(db.clock.now() + 1))).find(
     (one) => one.visit === visit?.id,
   );
@@ -102,4 +125,10 @@ export async function playBookingCall(
     words,
     link: /https?:\/\/\S+\/d\/[0-9a-z]{26}/.exec(words ?? '')?.[0] ?? null,
   };
+}
+
+/** The calls of one customer of the firm, newest first. */
+async function listCallsOf(db: RecordDb, firm: FirmId, customer: CustomerId): Promise<CallId[]> {
+  const calls = await listCallsBetween(db, firm, instant(0), instant(db.clock.now() + 1));
+  return calls.filter((one) => one.customer?.id === customer).map((one) => one.id).reverse();
 }

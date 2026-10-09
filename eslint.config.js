@@ -38,6 +38,13 @@ const D1_TYPES = new Set(['D1Database', 'D1DatabaseSession', 'D1PreparedStatemen
 const LOOKS_LIKE_SQL =
   /\b(?:SELECT\b[\s\S]*\bFROM|INSERT\s+(?:OR\s+[A-Z]+\s+)?INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM|(?:CREATE|DROP|ALTER)\s+(?:TABLE|INDEX|TRIGGER|VIEW)|PRAGMA\s+[a-z_]+)\b/;
 
+// Rule 8 for the file stores (slice H): only src/record/files.ts touches a
+// file store, so every file's name is made there from the firm it was given,
+// and one firm can never reach another's. The test helper that wraps a file
+// store, to make a step fail on purpose, is the one other place.
+// test/fixtures/lint/ holds deliberate mistakes that show it works.
+const FILE_TYPES = new Set(['R2Bucket', 'R2Object', 'R2ObjectBody', 'R2Objects', 'R2MultipartUpload', 'FileBucket']);
+
 // Rule 1: every text goes out through send() in src/send.ts. Nothing else
 // hands a text to a provider: no call to a texts provider's sendText(), and no
 // address of Twilio's, outside send() and the providers themselves.
@@ -108,6 +115,35 @@ const frontline = {
         };
       },
     },
+    // Using a file store: anything done to an R2 bucket, object or upload,
+    // or to the record's own FileBucket, whatever it is called.
+    'files-outside-record': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { used: 'Rule 8: only src/record/files.ts uses a file store.' },
+      },
+      create(context) {
+        const services = context.sourceCode.parserServices;
+        if (!services?.program) return {};
+        const checker = services.program.getTypeChecker();
+        const isFile = (type) =>
+          (type.isUnion() ? type.types : [type]).some((part) =>
+            FILE_TYPES.has((part.getSymbol() ?? part.aliasSymbol)?.getName() ?? ''),
+          );
+        const typeOf = (node) => checker.getTypeAtLocation(services.esTreeNodeToTSNodeMap.get(node));
+        return {
+          // files.put(…), maybe?.delete(…)
+          MemberExpression(node) {
+            if (isFile(typeOf(node.object))) context.report({ node, messageId: 'used' });
+          },
+          // const { put } = files
+          ObjectPattern(node) {
+            if (isFile(typeOf(node))) context.report({ node, messageId: 'used' });
+          },
+        };
+      },
+    },
     // Writing SQL: any string that reads like a query.
     'sql-outside-record': {
       meta: {
@@ -155,6 +191,7 @@ export default defineConfig(
       'no-restricted-properties': ['error', ...readsTheClock, ...guessable, ...fakesTheClock],
       'no-restricted-syntax': ['error', ...readsTheClockSyntax],
       'frontline/database-outside-record': 'error',
+      'frontline/files-outside-record': 'error',
       'frontline/sql-outside-record': 'error',
       'frontline/text-outside-send': 'error',
     },
@@ -172,6 +209,12 @@ export default defineConfig(
       'frontline/database-outside-record': 'off',
       'frontline/sql-outside-record': 'off',
     },
+  },
+  {
+    // The one place that touches the file stores, and the test helper that
+    // wraps one to make a step fail on purpose.
+    files: ['src/record/files.ts', 'test/helpers/files.ts'],
+    rules: { 'frontline/files-outside-record': 'off' },
   },
   {
     // The one place the system time is read.

@@ -93,7 +93,52 @@ What happens with them:
 
 ## What is kept
 
-Only these: Vapi's id for the call, the number rung, the caller's number, the start and end times, the fields above, and the transcript (`artifact.transcript`). The rest of the report is not stored or logged: it can hold the caller's details and parts of Vapi's set-up. The recording (`artifact.recordingUrl`) is not copied yet. That comes with slice H.
+Only these: Vapi's id for the call, the number rung, the caller's number, the start and end times, the fields above, the transcript (`artifact.transcript`), and the name of the recording in Front-line's inbox (from `artifact.recordingUrl`). The rest of the report is not stored or logged: it can hold the caller's details and parts of Vapi's set-up.
+
+## Recordings (slice H)
+
+Vapi writes each call's recording into an inbox file store of Front-line's own, under the firm's own path. When the call ends, a row in the due list moves it into Front-line's file store (`FILES`) and deletes it from the inbox. The recording is deleted 30 days after the call ends; the call, its summary and its transcript stay. Nothing is ever fetched from Vapi, and Front-line holds no Vapi key.
+
+The names below are Vapi's, from `@vapi-ai/server-sdk` 2.0.1 (`CloudflareCredential`, `CloudflareR2BucketPlan`, `ArtifactPlan`). The slice H cloud session could not open Vapi's documentation website, so these are **Assumed** until checked on practice.
+
+### Once, for each copy (practice, then live)
+
+1. Create the inbox in the EU:
+   `npx wrangler r2 bucket create frontline-practice-calls-in --jurisdiction eu`
+2. Give it a rule that deletes everything in it after a day, so nothing is left there if a move never happens:
+   `npx wrangler r2 bucket lifecycle add frontline-practice-calls-in inbox-one-day --expire-days 1 --abort-multipart-days 1 --jurisdiction eu`
+3. Give Front-line's own file store a rule that removes unfinished uploads (from an export that stopped halfway) after a day, and the restore ledger after 35 days:
+   `npx wrangler r2 bucket lifecycle add frontline-practice-files stray-uploads --abort-multipart-days 1 --jurisdiction eu`
+   `npx wrangler r2 bucket lifecycle add frontline-practice-files ledger-35-days deletions/ --expire-days 35 --jurisdiction eu`
+4. In Cloudflare's dashboard, under R2, make an API token with **Object Read & Write** for the inbox bucket **only**. R2 has no write-only key, so this is the least Vapi can be given. Note its access key id and secret.
+5. In Vapi, under Provider Credentials, Cloud Providers, add a Cloudflare credential with a `bucketPlan`:
+   - `name`: `frontline-practice-calls-in`
+   - `accessKeyId` and `secretAccessKey`: from step 4
+   - `url`: the inbox's S3 address for the EU, `https://<account id>.eu.r2.cloudflarestorage.com` (Assumed: the kit calls it "Cloudflare R2 base url"; check that Vapi accepts an EU address)
+   - `path`: `/`
+
+### On each firm's agent (`assistant.artifactPlan`)
+
+| Setting | Value | Why |
+|---|---|---|
+| `recordingEnabled` | `true` | The greeting says the call is recorded |
+| `recordingFormat` | `mp3` | About a tenth the size of wav |
+| `recordingPath` | `/firms/<the firm's id>` | So the Worker knows whose it is. A recording under another firm's path is never kept for this one. The firm's id is on its page in the control room |
+| `recordingUseCustomStorageEnabled` | `true` (the default) | The recording goes to the inbox **instead of** Vapi's own storage |
+| `pcapEnabled` | `false` | A packet capture is not needed, and could hold the call's sound |
+| `loggingUseCustomStorageEnabled` | `true` (the default) | Vapi's call log goes to the inbox too, where the rule deletes it after a day |
+
+Also, in Vapi's organisation settings, set the shortest data retention your plan offers for Vapi's own call records (the transcript, numbers and summary Vapi keeps), or zero data retention if your plan has it.
+
+### Check on practice, before slice I
+
+Make one test call to the practice firm and check:
+
+- the report's `artifact.recordingUrl` ends with `firms/<the firm's id>/…` (Front-line reads the name from `/firms/` on). If it names somewhere else, the call shows under "Needs a look" as "recording not kept", and nothing is fetched.
+- the file appears in the inbox and, within a minute, in `frontline-practice-files` under `firms/<id>/calls/`, and is gone from the inbox
+- the call in Vapi's dashboard has no recording stored with Vapi
+
+If Vapi cannot write to an EU inbox, the other way is for the Worker to fetch each recording from Vapi when the call ends (route B in the slice H plan). That needs a Vapi private key in the Worker, and Vapi keeps its copy until that key deletes it. Only where the recording is read from would change: `reportedRecording()` in `src/vapi-report.ts` and `moveRecording()` in `src/record/keeping.ts`.
 
 ## Booking during a call (slice E)
 

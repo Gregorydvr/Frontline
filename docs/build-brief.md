@@ -138,7 +138,7 @@ Until slice F there is no owner login, so the app's pages are served only on thi
 
 **Done when:** tests show a view is recorded, an export holds everything stored about that customer, and after a delete nothing about them is left.
 
-### [ ] H. Keeping and deleting
+### [x] H. Keeping and deleting
 
 - Call recordings held in Front-line's own file store, with the reference on the call. Say in the plan how the recording gets there: Vapi writing to the file store itself, or the Worker copying it when the call ends. Check Vapi's current documentation first.
 - The periods in `docs/decisions.md` as rows in the due list.

@@ -8,7 +8,10 @@
 // four that find the firm when an owner logs in: findOwnersByMobile(),
 // findLoginLink(), logInWithLink() and findSession(); and, for the control
 // room, findOrAddStaff(), since staff belong to no firm, and listFirms(), the
-// list staff choose a firm from.
+// list staff choose a firm from; and, for keeping and deleting,
+// addMissingSweeps(), with which the clock gives every firm its daily sweep,
+// ledgerSince(), the deletes to do again after a restore, across firms; and
+// logStaffAcrossFirms(), for what staff view across every firm.
 
 export {
   createFirm,
@@ -62,11 +65,12 @@ export {
   loginLinkForDue,
 } from './logins';
 export { recordOwnerMessage } from './owner-messages';
-export { findOrAddStaff, logStaff } from './staff';
+export { findOrAddStaff, logStaff, logStaffAcrossFirms } from './staff';
 export {
   customerFile,
   customerFileCounts,
   deleteCustomer,
+  redoCustomerDelete,
   findCustomers,
   listFailedTexts,
   listFirms,
@@ -74,3 +78,30 @@ export {
   needsALook,
 } from './control';
 export { deleteExampleFirm, setExampleClock } from './example';
+export {
+  addMissingSweeps,
+  deleteRecording,
+  emptyBin,
+  getCallRecording,
+  giveUpRecording,
+  markMissingRecordings,
+  moveRecording,
+  readCallRecording,
+  sweepFirm,
+} from './keeping';
+export {
+  askFirmExport,
+  cancelLeaving,
+  deleteFirm,
+  deleteLeftFirm,
+  downloadFirmExport,
+  exportToMake,
+  firmTablePage,
+  listFirmExports,
+  markFirmExportReady,
+  markLeaving,
+  openFirmExportFile,
+  redoFirmDelete,
+  wasFirmDeleted,
+} from './firm-file';
+export { ledgerSince, listFiles, placeInInbox } from './files';

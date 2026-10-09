@@ -55,6 +55,20 @@ export interface StaffLogAbout {
   service?: Service | null;
 }
 
+/** What staff view or do across every firm, with no one firm named: the list of firms, and the page for after a restore. */
+const ACROSS_FIRMS: readonly StaffAction[] = ['viewed_firms', 'viewed_after_restore'];
+
+/**
+ * Records that a member of staff viewed or did something across every firm,
+ * such as opening the page for after a restore. Viewing the list of firms is
+ * recorded by listFirms() itself.
+ */
+export async function logStaffAcrossFirms(db: RecordDb, staff: StaffId, what: 'viewed_after_restore'): Promise<StaffLogId> {
+  const [id, statement] = staffLogStatement(db, null, staff, what);
+  await run(statement);
+  return id;
+}
+
 /**
  * Records that a member of staff viewed or did something about one firm.
  * Viewing the list of firms is recorded by listFirms() itself.
@@ -63,7 +77,7 @@ export async function logStaff(
   db: RecordDb,
   firm: FirmId,
   staff: StaffId,
-  what: Exclude<StaffAction, 'viewed_firms'>,
+  what: Exclude<StaffAction, 'viewed_firms' | 'viewed_after_restore'>,
   about: StaffLogAbout = {},
 ): Promise<StaffLogId> {
   const [id, statement] = staffLogStatement(db, firm, staff, what, about);
@@ -88,7 +102,7 @@ export function staffLogStatement(
   what: StaffAction,
   about: StaffLogAbout = {},
 ): [StaffLogId, D1PreparedStatement] {
-  if (!STAFF_ACTIONS.includes(what) || !isId(staff) || (firm !== null && !isId(firm)) || (firm === null) !== (what === 'viewed_firms')) {
+  if (!STAFF_ACTIONS.includes(what) || !isId(staff) || (firm !== null && !isId(firm)) || (firm === null) !== ACROSS_FIRMS.includes(what)) {
     throw new Refused();
   }
   const customer = about.customer ?? null;

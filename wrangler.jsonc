@@ -88,7 +88,13 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "frontline-local-files" }],
+  // FILES keeps call recordings and firm exports. CALLS_IN is the inbox Vapi
+  // writes each recording into as a call ends; the Worker moves it into FILES
+  // and deletes it from the inbox (docs/vapi.md, src/record/files.ts).
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "frontline-local-files" },
+    { "binding": "CALLS_IN", "bucket_name": "frontline-local-calls-in" }
+  ],
   // The queue the clock puts due rows on, and the worker that takes them off:
   // this same Worker. A row that fails is offered again by the clock, so the
   // queue does not retry.
@@ -121,6 +127,15 @@
           "binding": "FILES",
           // Greg creates the practice file store in the EU with this name.
           "bucket_name": "frontline-practice-files",
+          "jurisdiction": "eu"
+        },
+        {
+          "binding": "CALLS_IN",
+          // The inbox Vapi writes recordings into. Greg creates it in the EU
+          // with this name, a rule that deletes everything in it after a
+          // day, and a key for Vapi that reaches this store alone
+          // (docs/vapi.md).
+          "bucket_name": "frontline-practice-calls-in",
           "jurisdiction": "eu"
         }
       ],
@@ -158,6 +173,15 @@
           "binding": "FILES",
           // Greg creates the live file store in the EU with this name.
           "bucket_name": "frontline-live-files",
+          "jurisdiction": "eu"
+        },
+        {
+          "binding": "CALLS_IN",
+          // The inbox Vapi writes recordings into. Greg creates it in the EU
+          // with this name, a rule that deletes everything in it after a
+          // day, and a key for Vapi that reaches this store alone
+          // (docs/vapi.md).
+          "bucket_name": "frontline-live-calls-in",
           "jurisdiction": "eu"
         }
       ],

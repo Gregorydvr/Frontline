@@ -17,7 +17,10 @@
 // - /local/book has one button, which plays a call to the demo firm that
 //   books a quote visit, through the real addresses Vapi calls, and sends
 //   the confirmation at once, so its link to the customer's page can be
-//   opened here.
+//   opened here. The call comes with an invented recording, moved into the
+//   file store at once.
+// - /local/files lists the demo firm's files, in plain text: its kept
+//   recordings and exports, and anything in the inbox.
 // - the control room, at /control, opens with no Cloudflare Access: a
 //   stand-in treats whoever opens it as the invented "Example Staff".
 
@@ -33,7 +36,7 @@ import { showTexts } from './example/texts';
 import { EXAMPLE_NOW, EXAMPLE_OWNER } from './example/tidewell';
 import { StandInStaff } from './providers/access/fake';
 import { FakeTexts } from './providers/texts/fake';
-import { createLoginLink, findMessageForDue, listOwners } from './record';
+import { createLoginLink, findMessageForDue, listFiles, listOwners } from './record';
 import { openRecord } from './record/db';
 import type { FirmId } from './record/types';
 import { DETAILS_HEADERS } from './screens/details';
@@ -103,6 +106,19 @@ ${link === null ? null : html`<p><a href="${link}">Open the link</a></p>`}`,
       return c.text(text, 200, { 'Cache-Control': 'no-store' });
     });
 
+    app.get('/local/files', async (c) => {
+      const firm = await ensureExample(c.env.DB);
+      const deps = c.get('deps');
+      const db = openRecord(c.env.DB, deps.clock, deps.files);
+      const lines = ['The demo firm’s files.', ''];
+      for (const store of ['kept', 'inbox'] as const) {
+        const files = await listFiles(db, firm, store);
+        lines.push(`${store === 'kept' ? 'Kept' : 'Inbox'}: ${files.length === 0 ? 'none' : String(files.length)}`);
+        for (const file of files) lines.push(`  ${file.key} (${String(file.size)} bytes)`);
+      }
+      return c.text(lines.join('\n'), 200, { 'Cache-Control': 'no-store' });
+    });
+
     app.get('/local/book', (c) =>
       c.html(
         page(
@@ -118,7 +134,7 @@ ${link === null ? null : html`<p><a href="${link}">Open the link</a></p>`}`,
     app.post('/local/book', async (c) => {
       const firm = await ensureExample(c.env.DB);
       const deps = c.get('deps');
-      const played = await playBookingCall(app, c.env, openRecord(c.env.DB, deps.clock), deps, firm);
+      const played = await playBookingCall(app, c.env, openRecord(c.env.DB, deps.clock, deps.files), deps, firm);
       const said =
         played.result === 'no_secret'
           ? html`<p class="meta">Put a VAPI_SECRET in .dev.vars first (see the README), then start npm run dev again.</p>`
@@ -147,6 +163,7 @@ const localDeps = (env: Env): Deps => ({
   // "Example Staff".
   staff: new StandInStaff(),
   controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
+  files: { kept: env.FILES, inbox: env.CALLS_IN },
 });
 const app = createLocalApp(localDeps);
 

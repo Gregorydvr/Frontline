@@ -72,7 +72,7 @@
         }
       ],
       "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: My boiler keeps cutting out. I think I need a new one.\nAI: Tom can come and look at it and price a new one. Can I take your name and address?\nUser: Mrs Ahmed, 27 Station Road. Could he come on Thursday?\nAI: Thursday 1 October at 3pm is free. Shall I book that?\nUser: Yes please.\nAI: That's booked. You'll get a text to confirm it. Goodbye.",
-      "recordingUrl": "https://example.invalid/recordings/8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68-mono.wav"
+      "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68-mono.mp3"
     },
     "analysis": {
       "summary": "Mrs Ahmed's boiler keeps cutting out. A quote visit was booked for Thursday at 3pm.",
