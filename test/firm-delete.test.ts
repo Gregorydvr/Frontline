@@ -16,6 +16,18 @@ import {
   addDue,
   askFirmExport,
   cancelLeaving,
+  createLoginLink,
+  giveUpRecording,
+  holdTime,
+  linkForDue,
+  listCustomers,
+  listJobsForCustomer,
+  listOwners,
+  logInWithLink,
+  optOut,
+  optOutNumber,
+  recordOwnerMessage,
+  recordTextIn,
   createCustomer,
   createJob,
   deleteFirm,
@@ -32,7 +44,7 @@ import {
   wasFirmDeleted,
 } from '../src/record';
 import { openRecord, Refused, runTogether } from '../src/record/db';
-import { eraseFirmStatements } from '../src/record/erase';
+import { eraseFirmStatements, FIRM_TABLES } from '../src/record/erase';
 import { forExport } from '../src/record/firm-file';
 import type { CallId, FirmId, StaffId } from '../src/record/types';
 import { controlForm, controlOpener } from './helpers/control';
@@ -75,6 +87,42 @@ async function recordedCall(firm: FirmId): Promise<CallId> {
   });
   expect(await moveRecording(db, firm, made.call)).toBe('kept');
   return made.call;
+}
+
+/** Gives the firm a row in every table that holds a firm's rows. */
+async function everyKindOfRow(firm: FirmId): Promise<void> {
+  const staff = await staffId();
+  const [owner] = await listOwners(db, firm);
+  const [customer] = await listCustomers(db, firm);
+  if (owner === undefined || customer === undefined) throw new Error('Not the example');
+  const [job] = await listJobsForCustomer(db, firm, customer.id);
+  if (job === undefined) throw new Error('No job');
+  await recordedCall(firm);
+  await askFirmExport(db, firm, staff);
+  await optOut(db, firm, customer.id, 'visit_reminder', { kind: 'frontline' });
+  await optOutNumber(db, firm, ukMobile('07700 900399'));
+  await recordTextIn(db, firm, { provider: 'fake', providerId: `every-${firm}`, from: '+447700900399', words: 'Hello.', consent: null });
+  await recordOwnerMessage(db, firm, owner.id, 'Invented words.');
+  await holdTime(db, firm, { provider: 'vapi', providerCallId: `every-${firm}`, kind: 'quote_visit', startsAt: instant(START + 3 * DAY), endsAt: instant(START + 3 * DAY + 3_600_000) });
+  const due = await addDue(db, firm, { action: 'send_confirmation', runAt: START, latestAt: START });
+  await linkForDue(db, firm, { due, customer: customer.id, job: job.id });
+  const login = await createLoginLink(db, firm, { owner: owner.id, job: null });
+  expect(await runDue(db, deps, firm, login.due)).toEqual({ ran: 'done', outcome: 'sent' });
+  expect(await logInWithLink(db, login.token)).not.toBeNull();
+  // A file in the bin, put there as a delete leaves it.
+  const waiting = await recordCall(db, firm, {
+    provider: 'vapi',
+    providerCallId: `every-bin-${firm}`,
+    startedAt: START,
+    endedAt: START,
+    from: null,
+    for: { kind: 'details_missing' },
+    urgentItem: null,
+    summary: null,
+    transcript: null,
+    recording: { kind: 'waiting', from: `firms/${firm}/never-arrived.mp3` },
+  });
+  await giveUpRecording(openRecord(env.DB, clock, { kept: files.kept, inbox: failingOn(files.inbox, 'delete') }), firm, waiting.call).catch(() => undefined);
 }
 
 /** The clock's minute: every row due goes on the queue, and the worker runs each. */
@@ -235,7 +283,13 @@ describe('deleting a firm', () => {
   it('is refused for a firm that is not leaving, by the record and by the database itself', async () => {
     clock.set(START);
     const { firm } = await firmNamed('Steady Example Firm');
+    await everyKindOfRow(firm);
     const before = await firmRows(env.DB, firm);
+    // A row in every table a firm's delete removes, so a statement that
+    // lost its check would have something to delete.
+    for (const table of FIRM_TABLES) {
+      expect(before[table]?.length, table).toBeGreaterThan(0);
+    }
     await expect(deleteFirm(db, firm, await staffId(), 'Steady Example Firm')).rejects.toThrow(Refused);
     expect(await deleteLeftFirm(db, firm)).toBe('nothing_to_do');
     // Even its delete's own statements, run past every check above, delete nothing.

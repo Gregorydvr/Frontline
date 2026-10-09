@@ -109,7 +109,7 @@ src/                 the Worker
   owner-app.ts       the owner's app: logging in by a link sent by text, and the owner's screens, each taking the firm from the login
   control-room.ts    the control room, for Front-line's staff: at its own address, behind the staff gate, every view and action in the staff log
   deps.ts            Deps: what the system is given from outside: the clock, the texts provider, the due list's queue, the staff gate,
-                     which copy this is, and the addresses of customers' links, the owner's app and the control room
+                     which copy this is, the addresses of customers' links, the owner's app and the control room, and the file stores
   clock.ts           Instant, Clock, systemClock (the only reader of the system time), pretendClock, startingAt for this machine,
                      and aheadBy for an example firm's own clock
   money.ts           Pence, pence(), formatMoney()
@@ -126,13 +126,18 @@ src/                 the Worker
   history-lines.ts   the words for each kind of history entry, and the line the owner reads
   words.ts           other labels the owner reads: services, job states, who did it
   gsm.ts             the GSM-7 check for texts, the segment count, and making a caller's words fit for a text
+  firm-export.ts     the zip of one firm's records: everything.json, spreadsheets, and the recordings kept
+  zip.ts             writing zip files a piece at a time, and CSV rows that never run as a formula
   messages.ts        the draft wording of each kind of text, and making a text from a firm's wording and the facts
   send.ts            send(): the one way a text leaves (rules 1 to 4)
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done
   diary/             the diary interface, Front-line's own diary behind it, and which times a firm offers (times.ts)
-  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts and /local/book, and the stand-in for the staff gate. Never deployed
-  record/            the only code that touches the database. index.ts lists every record function. control.ts is the control room's,
-                     with the one list behind exporting and deleting a customer; example.ts moves the demo firm's clock and resets it
+  local.ts           the Worker as `npm run dev` runs it, with the stand-in for texts and a clock that starts at the example's "today": loads the demo firm, adds /local/example, /local/login, /local/texts, /local/book and /local/files, and the stand-in for the staff gate. Never deployed
+  record/            the only code that touches the database. index.ts lists every record function. control.ts is the control room's;
+                     erase.ts the one list of what each delete removes (a customer, an enquiry, a firm); example.ts moves the demo
+                     firm's clock and resets it. files.ts is the only code that touches the file stores (FILES, and the inbox
+                     CALLS_IN), with the restore ledger; keeping.ts moves and deletes recordings and runs each firm's daily sweep;
+                     periods.ts holds every period; firm-file.ts a firm's export, leaving and delete
   screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
                      home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
                      app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link.
@@ -149,6 +154,7 @@ test/                the tests, which run in the Workers runtime
   helpers/deps.ts    pretend dependencies: the pretend clock, the stand-in for texts, a queue that keeps what it is given
   helpers/owner.ts   logs an owner in, and opens the app's pages as them
   helpers/control.ts opens the control room's pages as the stand-in member of staff
+  helpers/files.ts   the local file stores, and a wrapper that makes one step fail on purpose
   wall.test.ts       the cross-firm tests: every record function, tried as another firm
   routes.test.ts     every route, with its cross-firm case or the reason it needs none
   fixtures/          files the tests read
@@ -156,7 +162,8 @@ test/                the tests, which run in the Workers runtime
   fixtures/twilio/   example requests from Twilio: a text coming in, delivery reports
   fixtures/lint/     deliberate mistakes that show the checks in lint still work
 scripts/screens.js   npm run check:screens
-docs/                the build brief, the decisions, and what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md)
+docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
+                     the restore steps (restore.md), and when a firm leaves (firm-leaving.md)
 docs/screens/        screenshots beside the example's, kept with the pull request that took them
 reference/           the example app: read-only
 wrangler.jsonc       the Worker's config: this machine at the top level, then practice and live
@@ -165,4 +172,4 @@ worker-configuration.d.ts   generated by `npm run types`; do not edit
 .claude/settings.json   settings for every Claude Code session: the two Wrangler variables above
 ```
 
-Lint enforces five of the rules: nothing outside `src/send.ts` and `src/providers/texts/` hands a text to a provider (1), nothing outside `src/clock.ts` reads the system time (19), nothing outside `src/log.ts` (and the `scripts/` run on this machine) writes to the console (11), nothing outside `src/record/` (and `test/helpers/db.ts`) uses the database or holds SQL (8), and nothing uses `Math.random`.
+Lint enforces five of the rules: nothing outside `src/send.ts` and `src/providers/texts/` hands a text to a provider (1), nothing outside `src/clock.ts` reads the system time (19), nothing outside `src/log.ts` (and the `scripts/` run on this machine) writes to the console (11), nothing outside `src/record/` (and `test/helpers/db.ts`) uses the database or holds SQL, and nothing outside `src/record/files.ts` (and `test/helpers/files.ts`) uses a file store (8), and nothing uses `Math.random`.

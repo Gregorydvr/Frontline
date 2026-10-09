@@ -189,6 +189,8 @@ async function main() {
       // the firms, the demo firm (with the message just sent, unread), finding
       // a customer, one customer, deleting one (a wrong name first), and
       // resetting the example. A different customer is deleted at each size.
+      // The control room is staff's, so it keeps the same checks with no
+      // example of its own to match.
       const gone = size.name === 'phone' ? 'Mrs Patel' : 'Mr Hughes';
       await page.goto(`${ADDRESS}/control`);
       await check(page, `${size.name}-control-firms`);
@@ -209,6 +211,24 @@ async function main() {
       await check(page, `${size.name}-control-deleted`);
       await page.goto(`${firmAddress}/reset`);
       await check(page, `${size.name}-control-reset`);
+      // Keeping and deleting (slice H): the firm leaving (a wrong name
+      // first), its page while it is leaving, deleting it before its 30
+      // days, and the page for after a restore. Then the leaving is
+      // cancelled, so the next size starts as this one did.
+      await page.goto(`${firmAddress}/leaving`);
+      await check(page, `${size.name}-control-leaving`);
+      await page.fill('#cr-name', 'Somebody Else');
+      await page.click('button:has-text("Mark as leaving")');
+      await check(page, `${size.name}-control-leaving-wrong-name`);
+      await page.fill('#cr-name', 'Tidewell Heating');
+      await page.click('button:has-text("Mark as leaving")');
+      await check(page, `${size.name}-control-firm-leaving`);
+      await page.goto(`${firmAddress}/delete`);
+      await check(page, `${size.name}-control-firm-delete`);
+      await page.goto(`${ADDRESS}/control/after-restore?since=2026-10-15T16:00`);
+      await check(page, `${size.name}-control-after-restore`);
+      await page.goto(firmAddress);
+      await page.click('button:has-text("Cancel the leaving")');
       await context.close();
 
       // The example app at the same size: Home, and Calls & bookings.

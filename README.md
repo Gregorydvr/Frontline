@@ -65,8 +65,11 @@ The control room is for Front-line's own staff. On this machine there is no Clou
 | Firms | http://localhost:8787/control: every firm, with its services, stop button, and today's counts |
 | One firm | Pick Tidewell Heating: switch services and the stop button, today's calls, texts that failed, texts in, Message us (unread until you open the page), and Needs a look |
 | Find a customer | The box at the top of a firm's page: a name, a mobile or a landline |
-| A customer | Pick one: what is held about them, **Export what is held** (a file to your browser) and **Delete this customer** |
+| A customer | Pick one: what is held about them, **Export what is held** (a zip to your browser, with their recordings) and **Delete this customer** |
 | Delete | Shows what goes and what stays. Type their name as shown, then **Delete for good** |
+| The firm's records | On a firm's page: **Export this firm** (a zip, made within a minute; **Download** once made), and **This firm is leaving** |
+| Leaving | Type the firm's name, then **Mark as leaving**. Its page then counts down the 30 days to its delete, with **Cancel the leaving** and **Delete the firm now**. See `docs/firm-leaving.md` |
+| After a restore | The link at the foot of the list of firms: does again each customer and firm deleted since a restore point. See `docs/restore.md` |
 | The example's tools | At the bottom of the demo firm's page, on this machine and practice only: move its clock on, and **Reset the example** |
 
 To see Message us arrive, log in as Tom (above), send one, then open the firm's page. Every page you open and every button you press is written to the staff log. On practice and live the control room sits behind Cloudflare Access: see `docs/access.md`.
@@ -94,7 +97,9 @@ Open http://localhost:8787/local/book and press **Play Mrs Ahmed's call**. It pl
 
 The page shows the visit booked, the confirmation's words, and a link to her confirm-your-details page, which is the link the text carries. Open it, correct her name, address or email, and press **Save my details**. http://localhost:8787/local/example then shows the change in her history, and http://localhost:8787/local/texts lists the text.
 
-Each press is Mrs Ahmed on a new mobile, so she is a new customer every time and her confirmation is always her first text, with its link. Between 8pm and 8am her text waits until 8am (quiet hours), and the page says so.
+Each press is Mrs Ahmed on a new mobile, so she is a new customer every time and her confirmation is always her first text, with its link.
+
+Her call comes with a recording, as Vapi writes one into the inbox file store: a few invented bytes, not a real sound. It is moved into Front-line's file store at once. Open http://localhost:8787/local/files to see the demo firm's files. In the control room, move the demo firm's clock on 31 days (**Move on to**): the recording is gone from `/local/files`, and her call is still on Calls & bookings. What to set on each firm's agent for recordings is in `docs/vapi.md`, under "Recordings". Between 8pm and 8am her text waits until 8am (quiet hours), and the page says so.
 
 Links on this machine start `http://localhost:8787`, from `LINK_ADDRESS` (customers' links) and `PUBLIC_ADDRESS` (the owner's app) in `wrangler.jsonc`. On practice and live both are empty until the addresses are chosen (open question 9). Until then no customer's first text and no login text goes out from them, and the urgent alert goes without its link.
 
@@ -108,7 +113,7 @@ On a deployed copy the clock runs every minute. On this machine it runs only whe
 curl http://localhost:8787/cdn-cgi/local/scheduled
 ```
 
-It puts the rows of the due list whose time has come on the queue, and the queue's worker runs them: confirmations of visits just booked, and reminders at 1pm the day before a visit. The demo firm's own visits are from the example and have no rows; a visit booked through `/local/book` does.
+It puts the rows of the due list whose time has come on the queue, and the queue's worker runs them: confirmations of visits just booked, reminders at 1pm the day before a visit, recordings to move or delete, firm exports, and each firm's daily sweep at 3:15am, which deletes whatever has run past its period (`src/record/periods.ts`). The demo firm's own visits are from the example and have no rows; a visit booked through `/local/book` does.
 
 Wrangler does contact Cloudflare in two small ways unless told not to:
 
