@@ -58,7 +58,7 @@ export const CONTROL_WORDS = {
   nothingNeedsALook: 'Nothing this week.',
   look: {
     stuck: 'Stuck since {time}: a {action} that never finished.',
-    nobody_to_alert: 'An urgent call, and nobody to alert: the owner has no mobile.',
+    nobody_to_alert: 'An urgent call, and nobody to alert: the firm has no owner on record.',
     hold_let_go: 'A time was held on this call and let go. The caller may have been told a time.',
     urgent_not_on_list: 'The agent thought this urgent; it is not on the firm’s urgent list.',
     call_while_off: 'Came while calls were switched off.',

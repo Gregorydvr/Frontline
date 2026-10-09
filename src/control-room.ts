@@ -220,8 +220,13 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
+  // Pressed twice, or for a customer not this firm's, it finds nothing,
+  // deletes nothing, and says so.
   app.post('/control/firms/:firm/customers/:customer/delete', (c) =>
-    atCustomer(c, 'form', async (at, customer) => {
+    atFirm(c, 'form', async (at) => {
+      const asked = c.req.param('customer') ?? '';
+      if (!isId(asked)) return notFound(c);
+      const customer = asked as CustomerId;
       const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 60);
       let deleted;
       try {

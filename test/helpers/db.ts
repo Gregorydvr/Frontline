@@ -115,3 +115,57 @@ export async function optOutsMadeByStop(db: D1Database, customer: string): Promi
     .all<{ kind: string }>();
   return results.map((row) => row.kind);
 }
+
+/** Every row of the staff log, oldest first. */
+export async function staffLogRows(db: D1Database): Promise<Record<string, unknown>[]> {
+  const { results } = await db.prepare('SELECT * FROM staff_log ORDER BY seq').all<Record<string, unknown>>();
+  return results;
+}
+
+/**
+ * Every row, in every table, that holds any of the markers: an id, a name, a
+ * number, words. A table added later is read too. Rows of the firm only,
+ * where the table has a firm; a table with no firm, such as staff, is read
+ * whole.
+ */
+export async function rowsHolding(
+  db: D1Database,
+  firm: string,
+  markers: readonly string[],
+): Promise<{ table: string; row: Record<string, unknown> }[]> {
+  const found: { table: string; row: Record<string, unknown> }[] = [];
+  for (const table of await recordTables(db)) {
+    const columns = (await tableColumns(db, table)).map((column) => column.name);
+    const column = table === 'firms' ? 'id' : columns.includes('firm_id') ? 'firm_id' : null;
+    // Table names come from the database itself, not from a caller.
+    const { results } = await (column === null
+      ? db.prepare(`SELECT * FROM "${table}"`)
+      : db.prepare(`SELECT * FROM "${table}" WHERE ${column} = ?`).bind(firm)
+    ).all<Record<string, unknown>>();
+    for (const row of results) {
+      const cells = Object.values(row).filter((cell): cell is string => typeof cell === 'string');
+      if (markers.some((marker) => cells.some((cell) => cell.includes(marker)))) {
+        found.push({ table, row });
+      }
+    }
+  }
+  return found;
+}
+
+/** Tries to change and to delete rows the database must keep: a history entry, and a row of the staff log. */
+export async function tryToDeleteHistory(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM history WHERE id = ?').bind(id).run();
+}
+
+export async function tryToEditStaffLog(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE staff_log SET what = 'viewed_firm' WHERE id = ?").bind(id).run();
+}
+
+export async function tryToDeleteStaffLog(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM staff_log WHERE id = ?').bind(id).run();
+}
+
+/** Tries to move a firm's clock past the record layer, which the database refuses for a firm that is not an example. */
+export async function tryToMoveClock(db: D1Database, firm: string): Promise<void> {
+  await db.prepare('UPDATE firms SET clock_ahead = 86400000 WHERE id = ?').bind(firm).run();
+}
