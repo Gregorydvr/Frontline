@@ -18,6 +18,8 @@
 //   books a quote visit, through the real addresses Vapi calls, and sends
 //   the confirmation at once, so its link to the customer's page can be
 //   opened here.
+// - the control room, at /control, opens with no Cloudflare Access: a
+//   stand-in treats whoever opens it as the invented "Example Staff".
 
 import type { Hono } from 'hono';
 import { createApp, type AppEnv } from './app';

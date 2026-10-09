@@ -12,7 +12,7 @@ import { clock24, inLondon, shortDate } from '../london';
 import { nationalNumber } from '../phone';
 import type { FailedText, LookItem, OwnerMessageForStaff } from '../record/control';
 import { SERVICES, type Call, type Customer, type Firm, type Job, type MessageKind, type MessageReason, type Service, type TextIn } from '../record/types';
-import { CALL_OUTCOME_WORDS, SERVICE_WORDS } from '../words';
+import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
 import { dayWords } from './home';
 import { html, trusted, type Html } from './html';
@@ -46,6 +46,7 @@ export const CONTROL_WORDS = {
   noneFound: 'Nobody found.',
   callsToday: 'Calls today',
   noCalls: 'No calls today.',
+  outcomes: { booked: 'Visit booked', urgent: 'Urgent', message: 'Message taken', details_missing: 'Details missing' },
   textsFailed: 'Texts that failed this week',
   noTextsFailed: 'None.',
   textsIn: 'Texts in this week',
@@ -121,19 +122,19 @@ export const CONTROL_WORDS = {
   cannotReach:
     'Not reached by this: the provider’s own copies of calls and texts (Vapi, Twilio), and the database’s restore points, which drop out after 30 days.',
   tables: {
-    history: 'history entries',
-    messages: 'texts sent',
-    links: 'links',
-    login_links: 'owner’s login links to their jobs',
-    due: 'rows in the due list',
-    texts_in: 'texts in',
-    opt_outs: 'opt-outs',
-    opted_out_numbers: 'numbers on the no-text list',
-    holds: 'held times',
-    calls: 'calls',
-    visits: 'visits',
-    jobs: 'jobs',
-    customers: 'customer',
+    history: 'History entries',
+    messages: 'Texts sent',
+    links: 'Links',
+    login_links: 'Owner’s login links to their jobs',
+    due: 'Rows in the due list',
+    texts_in: 'Texts in',
+    opt_outs: 'Opt-outs',
+    opted_out_numbers: 'Numbers on the no-text list',
+    holds: 'Held times',
+    calls: 'Calls',
+    visits: 'Visits',
+    jobs: 'Jobs',
+    customers: 'Customer',
   } as Readonly<Record<string, string>>,
   // The demo firm, on practice and this machine only.
   example: 'The example',
@@ -287,7 +288,7 @@ ${section(
   list(
     view.calls.map(
       (call) =>
-        html`${clock24(call.startedAt)} · ${call.customer === null ? (call.caller ?? CONTROL_WORDS.someone) : html`<a href="${base}/customers/${call.customer.id}">${call.customer.name}</a>`} · ${CALL_OUTCOME_WORDS[call.customer === null && call.caller === null ? 'details_missing' : call.outcome]}${call.summary === null ? null : html`<br><span class="t2">${call.summary}</span>`}`,
+        html`${clock24(call.startedAt)} · ${call.customer === null ? (call.caller ?? CONTROL_WORDS.someone) : html`<a class="link" href="${base}/customers/${call.customer.id}">${call.customer.name}</a>`} · ${CONTROL_WORDS.outcomes[call.customer === null && call.caller === null ? 'details_missing' : call.outcome]}${call.summary === null ? null : html`<br><span class="t2">${call.summary}</span>`}`,
     ),
     CONTROL_WORDS.noCalls,
   ),
@@ -297,7 +298,7 @@ ${section(
   list(
     view.failed.map(
       (text) =>
-        html`${when(text.createdAt)} · ${CONTROL_WORDS.kinds[text.kind]} ${text.to.kind === 'customer' ? html`to <a href="${base}/customers/${text.to.id}">${text.to.name}</a>` : words(CONTROL_WORDS.toOwner, { name: text.to.name })}${text.reason === null ? null : html`<br><span class="t2">${CONTROL_WORDS.reasons[text.reason] ?? text.reason}</span>`}`,
+        html`${when(text.createdAt)} · ${CONTROL_WORDS.kinds[text.kind]} ${text.to.kind === 'customer' ? html`to <a class="link" href="${base}/customers/${text.to.id}">${text.to.name}</a>` : words(CONTROL_WORDS.toOwner, { name: text.to.name })}${text.reason === null ? null : html`<br><span class="t2">${CONTROL_WORDS.reasons[text.reason] ?? text.reason}</span>`}`,
     ),
     CONTROL_WORDS.noTextsFailed,
   ),
@@ -307,7 +308,7 @@ ${section(
   list(
     view.textsIn.map(
       (text) =>
-        html`${when(text.receivedAt)} · ${text.customer === null ? html`<span class="chip chip-plain">${CONTROL_WORDS.notACustomer}</span> ${text.from ?? CONTROL_WORDS.withheld}` : html`<a href="${base}/customers/${text.customer.id}">${text.customer.name}</a>`}<br><span class="t2">${text.words}</span>`,
+        html`${when(text.receivedAt)} · ${text.customer === null ? html`<span class="chip chip-plain">${CONTROL_WORDS.notACustomer}</span> ${text.from ?? CONTROL_WORDS.withheld}` : html`<a class="link" href="${base}/customers/${text.customer.id}">${text.customer.name}</a>`}<br><span class="t2">${text.words}</span>`,
     ),
     CONTROL_WORDS.noTextsIn,
   ),
@@ -389,7 +390,7 @@ ${section(CONTROL_WORDS.rows, countList(counts))}
 function countList(counts: Readonly<Record<string, number>>): Html {
   const lines = Object.entries(counts)
     .filter(([, count]) => count > 0)
-    .map(([table, count]) => html`${count} ${CONTROL_WORDS.tables[table] ?? table}`);
+    .map(([table, count]) => html`${CONTROL_WORDS.tables[table] ?? table}: ${count}`);
   return list(lines, CONTROL_WORDS.staysNothing);
 }
 

@@ -128,7 +128,7 @@ Until slice F there is no owner login, so the app's pages are served only on thi
 
 **Done when:** the demo firm's Home and Calls & bookings screens match the example's layout and styles at 390 by 844 and at 1280 by 800, with a screenshot of each beside the example's in the pull request. Blocks for services that are switched off are absent. Everything shown comes from the record.
 
-### [ ] G. The control room
+### [x] G. The control room
 
 - For Front-line's staff only, behind the practice gate and its equivalent on live.
 - A list of firms. For each: the service switches, the stop button, today's calls, texts that failed, texts that came in, and anything the owner sent from Message us.

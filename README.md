@@ -56,6 +56,21 @@ Open http://localhost:8787/local/texts to see the demo firm's texts from the rec
 
 To start again from an empty database, stop `npm run dev`, delete `.wrangler/state`, and run it again. Do this once after an update that changes the demo firm, such as slice C's calls or slice F's (only Calls & bookings is switched on, and the alert and login wording): the demo firm is loaded only into an empty database.
 
+### Open the control room
+
+The control room is for Front-line's own staff. On this machine there is no Cloudflare Access: a stand-in treats you as the invented "Example Staff". Open http://localhost:8787/control.
+
+| Screen | How to get there |
+|---|---|
+| Firms | http://localhost:8787/control: every firm, with its services, stop button, and today's counts |
+| One firm | Pick Tidewell Heating: switch services and the stop button, today's calls, texts that failed, texts in, Message us (unread until you open the page), and Needs a look |
+| Find a customer | The box at the top of a firm's page: a name, a mobile or a landline |
+| A customer | Pick one: what is held about them, **Export what is held** (a file to your browser) and **Delete this customer** |
+| Delete | Shows what goes and what stays. Type their name as shown, then **Delete for good** |
+| The example's tools | At the bottom of the demo firm's page, on this machine and practice only: move its clock on, and **Reset the example** |
+
+To see Message us arrive, log in as Tom (above), send one, then open the firm's page. Every page you open and every button you press is written to the staff log. On practice and live the control room sits behind Cloudflare Access: see `docs/access.md`.
+
 ### Watch a call land
 
 While `npm run dev` is running, this sends an example report to the system, the way Vapi does when a call ends. It is a new customer ringing from a landline at 14:47 on the example's "today":
