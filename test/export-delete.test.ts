@@ -170,11 +170,11 @@ describe('exporting a customer', () => {
     expect(answer.status).toBe(200);
     expect(answer.headers.get('Content-Disposition')).toBe(`attachment; filename="frontline-export-${a}-${quill}.json"`);
     expect(answer.headers.get('Cache-Control')).toBe('no-store');
-    const file = (await answer.json()) as {
+    const file = await answer.json<{
       tables: Record<string, Record<string, unknown>[]>;
       ownerMessagesNamingThem: Record<string, unknown>[];
       historyAsTheOwnerReadsIt: { at: string; line: string | null }[];
-    };
+    }>();
     for (const { table, row } of before) {
       const exported = table === 'owner_messages' ? file.ownerMessagesNamingThem : (file.tables[table] ?? []);
       expect(exported, table).toContainEqual(asExported(row));

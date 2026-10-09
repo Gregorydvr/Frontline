@@ -78,8 +78,8 @@ export async function logStaff(
 /**
  * The statement that adds a row to the staff log, for running in the same
  * step as what it records. For a firm, it writes nothing when there is no
- * such firm, so whoever runs it checks that it wrote one row. For the list
- * of firms, the firm is null.
+ * such firm, or the customer it names is not the firm's, so whoever runs it
+ * checks that it wrote one row. For the list of firms, the firm is null.
  */
 export function staffLogStatement(
   db: RecordDb,
@@ -103,7 +103,8 @@ export function staffLogStatement(
       .prepare(
         `INSERT INTO staff_log (id, firm_id, staff_id, at, seq, what, customer_id, service)
          SELECT ?1, ?2, ?3, ?4, ${NEXT_SEQ}, ?5, ?6, ?7
-         WHERE ?2 IS NULL OR EXISTS (SELECT 1 FROM firms WHERE id = ?2)`,
+         WHERE (?2 IS NULL OR EXISTS (SELECT 1 FROM firms WHERE id = ?2))
+           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM customers WHERE firm_id = ?2 AND id = ?6))`,
       )
       .bind(id, firm, staff, db.clock.now(), what, customer, service),
   ];

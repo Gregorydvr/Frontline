@@ -415,15 +415,16 @@ export async function deleteCustomer(
   const [, logged] = staffLogStatement(db, firm, staff, 'deleted_customer', { customer });
   const removing = BELONGS_TO.filter((belonging) => belonging.kept === undefined);
   const results = await runTogether(db.d1, [
+    // Logged first, while the customer is still there to name.
+    logged,
     // The permission slip: history can be deleted only while it is here.
     db.d1.prepare('INSERT INTO erasing (firm_id) VALUES (?)').bind(firm),
     ...removing.map(({ table, where }) => db.d1.prepare(`DELETE FROM ${table} WHERE firm_id = ?1 AND (${where})`).bind(firm, customer)),
     db.d1.prepare('DELETE FROM erasing WHERE firm_id = ?').bind(firm),
-    logged,
   ]);
   const removed: Record<string, number> = {};
   removing.forEach(({ table }, at) => {
-    removed[table] = results[at + 1]?.meta.changes ?? 0;
+    removed[table] = results[at + 2]?.meta.changes ?? 0;
   });
   if (removed.customers !== 1) {
     // Deleted by someone else in the meantime: cannot happen inside one step.

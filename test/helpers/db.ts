@@ -118,7 +118,7 @@ export async function optOutsMadeByStop(db: D1Database, customer: string): Promi
 
 /** Every row of the staff log, oldest first. */
 export async function staffLogRows(db: D1Database): Promise<Record<string, unknown>[]> {
-  const { results } = await db.prepare('SELECT * FROM staff_log ORDER BY seq').all<Record<string, unknown>>();
+  const { results } = await db.prepare('SELECT * FROM staff_log ORDER BY seq').all();
   return results;
 }
 
@@ -141,7 +141,7 @@ export async function rowsHolding(
     const { results } = await (column === null
       ? db.prepare(`SELECT * FROM "${table}"`)
       : db.prepare(`SELECT * FROM "${table}" WHERE ${column} = ?`).bind(firm)
-    ).all<Record<string, unknown>>();
+    ).all();
     for (const row of results) {
       const cells = Object.values(row).filter((cell): cell is string => typeof cell === 'string');
       if (markers.some((marker) => cells.some((cell) => cell.includes(marker)))) {

@@ -224,7 +224,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   // deletes nothing, and says so.
   app.post('/control/firms/:firm/customers/:customer/delete', (c) =>
     atFirm(c, 'form', async (at) => {
-      const asked = c.req.param('customer') ?? '';
+      const asked = c.req.param('customer');
       if (!isId(asked)) return notFound(c);
       const customer = asked as CustomerId;
       const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 60);
