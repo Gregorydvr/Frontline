@@ -6,27 +6,32 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { instantFromIso, pretendClock } from '../src/clock';
+import { instant, instantFromIso, pretendClock } from '../src/clock';
 import { loadExample } from '../src/example/load';
 import { createLocalApp } from '../src/local';
 import { runDue } from '../src/due';
 import { ukMobile } from '../src/phone';
 import {
   addDue,
+  createLoginLink,
   findCustomersByMobile,
   linkForDue,
   listTakenTimes,
   listCallsBetween,
   listCustomers,
+  listJobs,
   listJobsForCustomer,
+  listOwners,
   listMessagesBetween,
   listTextsInBetween,
   listVisitsForJob,
+  setOwnerMobile,
 } from '../src/record';
 import { openRecord } from '../src/record/db';
 import type { FirmId } from '../src/record/types';
 import { firmRows } from './helpers/db';
-import { testDeps } from './helpers/deps';
+import { LINK_ADDRESS, testDeps } from './helpers/deps';
+import { form, opener, ownerCookie } from './helpers/owner';
 import { postToTwilioRoute, pretendTwilio, twilioFields } from './helpers/twilio';
 import { report, send, sendTool, toolAnswer, toolCall, withDetails } from './helpers/vapi';
 
@@ -34,7 +39,10 @@ import { report, send, sendTool, toolAnswer, toolCall, withDetails } from './hel
 const TAKES_NO_FIRM: Record<string, string> = {
   'GET /health': 'Answers with the version. Holds no firm data.',
   'GET /local/example': 'This machine only. Shows the example firm and takes nothing from the request.',
-  'GET /local/calls': 'This machine only. Shows the example firm and takes nothing from the request.',
+  'GET /local/login': 'This machine only. Shows a button, and takes nothing from the request.',
+  'POST /local/login': 'This machine only. Sends the example firm’s owner a login link, and takes nothing from the request.',
+  'GET /app.js': 'The app’s script. The same for everyone, and holds no firm data.',
+  'GET /login': 'Shows the form to ask for a link. Holds no firm data; a job named in the address is only written back into the form, unread.',
   'GET /local/texts': 'This machine only. Shows the example firm and takes nothing from the request.',
   'GET /local/book': 'This machine only. Shows a button, and takes nothing from the request.',
   'POST /local/book': 'This machine only. Plays a call to the example firm through the real addresses, and takes nothing from the request.',
@@ -56,6 +64,11 @@ function twoFirms(): Promise<{ a: FirmId; b: FirmId }> {
   firms ??= (async () => {
     const a = await loadExample(env.DB);
     const b = await loadExample(env.DB, { name: 'Second Example Firm', isExample: false, number: '07700 900200' });
+    // The second firm's owner has a mobile of their own, so a login link asked
+    // for on it can only be the second firm's.
+    const [ownerOfB] = await listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('No owner');
+    await setOwnerMobile(db, b, ownerOfB.id, ukMobile(OWNER_OF_B), { kind: 'frontline' });
     const [clarke] = await findCustomersByMobile(db, a, ukMobile('07700 900005'));
     const [job] = clarke === undefined ? [] : await listJobsForCustomer(db, a, clarke.id);
     const [visit] = job === undefined ? [] : await listVisitsForJob(db, a, job.id);
@@ -68,8 +81,119 @@ function twoFirms(): Promise<{ a: FirmId; b: FirmId }> {
   return firms;
 }
 
+/** The second firm's owner's mobile. */
+const OWNER_OF_B = '07700 900201';
+
+/**
+ * A screen of the owner's app, opened by the second firm's owner: it holds
+ * nothing of the first firm's, and leaves the first firm as it was.
+ */
+async function screenOfB(path: string): Promise<void> {
+  const { a, b } = await twoFirms();
+  const before = await firmRows(env.DB, a);
+  const answer = await opener(createApp(deps), await ownerCookie(db, b))(path);
+  expect(answer.status).toBe(200);
+  const words = await answer.text();
+  expect(words).not.toContain('Tidewell Heating');
+  for (const job of await listJobs(db, a)) {
+    expect(words).not.toContain(job.id);
+  }
+  expect(await firmRows(env.DB, a)).toEqual(before);
+}
+
 /** Routes that take a firm, each with its cross-firm case. */
 const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
+  // The owner's screens take the firm from the login, and nothing else.
+  'GET /': () => screenOfB('/'),
+  'GET /calls': () => screenOfB('/calls'),
+  'GET /jobs': () => screenOfB('/jobs?q=mrs'),
+  'GET /done': () => screenOfB('/done'),
+  'GET /rules': () => screenOfB('/rules'),
+  'GET /message': () => screenOfB('/message?from=calls'),
+
+  // A job's page looks for the job only in the logged-in firm: the first
+  // firm's jobs are not found, however they are asked for.
+  'GET /jobs/:job': async () => {
+    const { a, b } = await twoFirms();
+    const before = await firmRows(env.DB, a);
+    const asB = opener(createApp(deps), await ownerCookie(db, b));
+    for (const job of await listJobs(db, a)) {
+      const answer = await asB(`/jobs/${job.id}`);
+      expect(answer.status).toBe(404);
+      expect(await answer.text()).not.toContain('Tidewell Heating');
+    }
+    expect(await firmRows(env.DB, a)).toEqual(before);
+  },
+
+  // Message us keeps what was written for the logged-in firm only.
+  'POST /message': async () => {
+    const { a, b } = await twoFirms();
+    const before = await firmRows(env.DB, a);
+    const answer = await opener(createApp(deps), await ownerCookie(db, b))('/message', form({ words: 'Please call me.' }));
+    expect(answer.status).toBe(200);
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    expect((await firmRows(env.DB, b)).owner_messages).toMatchObject([{ words: 'Please call me.' }]);
+  },
+
+  // The firm comes from the owner whose mobile it is. Asked for on the
+  // second firm's owner's mobile, with the first firm's job to land on: the
+  // second firm's owner gets a link, which lands on their Home, and the
+  // first firm is left as it was.
+  'POST /login': async () => {
+    const { a, b } = await twoFirms();
+    const [jobOfA] = await listJobs(db, a);
+    if (jobOfA === undefined) throw new Error('No job');
+    const before = await firmRows(env.DB, a);
+    const linksOfB = (await firmRows(env.DB, b)).login_links ?? [];
+    // Two days on, past the limits the cases above used up for this owner.
+    const later = pretendClock(instant(clock.now() + 2 * 24 * 60 * 60_000));
+    const answer = await opener(createApp(() => ({ ...pretendDeps, clock: later })), null)('/login', form({ mobile: OWNER_OF_B, job: jobOfA.id }));
+    expect(answer.status).toBe(200);
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    const after = (await firmRows(env.DB, b)).login_links ?? [];
+    expect(after).toHaveLength(linksOfB.length + 1);
+    expect(after[after.length - 1]).toMatchObject({ job_id: null });
+  },
+
+  // The firm comes from the link's token. The second firm's link opens, and
+  // logs in to, the second firm only; nothing in the address names a firm.
+  'GET /in/:token': async () => {
+    const { a, b } = await twoFirms();
+    const before = await firmRows(env.DB, a);
+    const [ownerOfB] = await listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('No owner');
+    const { token } = await createLoginLink(db, b, { owner: ownerOfB.id, job: null });
+    const answer = await opener(createApp(deps), null)(`/in/${token}`);
+    expect(answer.status).toBe(200);
+    expect(await answer.text()).not.toContain('Tidewell Heating');
+    expect(await firmRows(env.DB, a)).toEqual(before);
+  },
+  'POST /in/:token': async () => {
+    const { a, b } = await twoFirms();
+    const before = await firmRows(env.DB, a);
+    const [ownerOfB] = await listOwners(db, b);
+    if (ownerOfB === undefined) throw new Error('No owner');
+    const { token } = await createLoginLink(db, b, { owner: ownerOfB.id, job: null });
+    const app = createApp(deps);
+    const tapped = await opener(app, null)(`/in/${token}`, form({}));
+    expect(tapped.status).toBe(303);
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    const home = await opener(app, (tapped.headers.get('Set-Cookie') ?? '').split(';')[0] ?? '')('/');
+    expect(await home.text()).toContain('<h1>Second Example Firm</h1>');
+  },
+
+  // The firm comes from the login. The second firm's owner logging out
+  // ends their own login, and the first firm's stays.
+  'POST /logout': async () => {
+    const { a, b } = await twoFirms();
+    const app = createApp(deps);
+    const cookieOfA = await ownerCookie(db, a);
+    const before = await firmRows(env.DB, a);
+    expect((await opener(app, await ownerCookie(db, b))('/logout', form({}))).status).toBe(303);
+    expect(await firmRows(env.DB, a)).toEqual(before);
+    expect((await opener(app, cookieOfA)('/')).status).toBe(200);
+  },
+
   // The firm comes from the number that was rung. A report to the second
   // firm's number, from Mrs Ahmed's mobile, finds the second firm's own Mrs
   // Ahmed and leaves the first firm exactly as it was.
@@ -131,7 +255,7 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'GET /d/:token': async () => {
     const { a, b } = await twoFirms();
     const linkOfB = await clarkesLink(b);
-    const page = await createApp(deps).request(`/d/${linkOfB}`, {}, env);
+    const page = await createApp(deps).request(`${LINK_ADDRESS}/d/${linkOfB}`, {}, env);
     expect(page.status).toBe(200);
     const words = await page.text();
     expect(words).toContain('Second Example Firm');
@@ -145,7 +269,7 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     const before = await firmRows(env.DB, a);
     const body = new URLSearchParams({ name: 'Mr J Clarke', address: '41 Park Road', email: '' }).toString();
     const answer = await createApp(deps).request(
-      `/d/${linkOfB}`,
+      `${LINK_ADDRESS}/d/${linkOfB}`,
       { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(body.length) }, body },
       env,
     );
@@ -222,7 +346,7 @@ describe('every route', () => {
     }
   });
 
-  it('in the deployed version is /health, the addresses Vapi and Twilio call, and the customer’s page', () => {
+  it('in the deployed version is /health, the addresses Vapi and Twilio call, the customer’s page, and the owner’s app', () => {
     expect(routesOf(createApp(deps))).toEqual([
       'GET /health',
       'POST /vapi/server',
@@ -232,6 +356,20 @@ describe('every route', () => {
       'POST /d/:token',
       'POST /twilio/texts',
       'POST /twilio/status',
+      'GET /app.js',
+      'GET /login',
+      'POST /login',
+      'GET /in/:token',
+      'POST /in/:token',
+      'POST /logout',
+      'GET /',
+      'GET /calls',
+      'GET /jobs',
+      'GET /jobs/:job',
+      'GET /done',
+      'GET /rules',
+      'GET /message',
+      'POST /message',
     ]);
   });
 

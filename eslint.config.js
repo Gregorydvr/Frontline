@@ -189,4 +189,11 @@ export default defineConfig(
     files: ['**/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    // npm run check:screens, a tool for this machine that reports what it
+    // found. It is not the system, which logs only through src/log.ts.
+    files: ['scripts/**'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', fetch: 'readonly', setTimeout: 'readonly' } },
+    rules: { 'no-console': 'off' },
+  },
 );

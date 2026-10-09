@@ -27,3 +27,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      # The owner's screens in a real browser, at a phone's size and a
+      # laptop's: no sideways scroll, nothing under 44px, nothing cut off, and
+      # no accessibility failures. The browser is the one the pinned
+      # Playwright version comes with.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check:screens

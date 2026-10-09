@@ -12,6 +12,7 @@
 // - send_confirmation: text the customer the confirmation of a visit just
 //   booked, with their link if it is the first text the firm sends them
 // - send_reminder: text the customer the reminder for a visit tomorrow
+// - send_login_link: text an owner the link they asked for to log in
 
 import type { Instant } from './clock';
 import type { Deps } from './deps';
@@ -30,17 +31,19 @@ import {
   getFirm,
   getJob,
   getVisit,
+  getOwner,
   hasTextedCustomer,
   linkForDue,
   listOwners,
+  loginLinkForDue,
   releaseDue,
 } from './record';
 import { openRecord, type RecordDb } from './record/db';
 import type { ClaimedDue, DueId, DueOutcome, FirmId } from './record/types';
 import { send, type SendResult } from './send';
 
-/** What running a row needs from outside: the texts provider, and where customers' links go. */
-export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress'>>;
+/** What running a row needs from outside: the texts provider, and where customers' links and the owner's app are. */
+export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress'>>;
 
 /** What goes on the queue for each row: ids only. */
 export interface DueMessage {
@@ -140,13 +143,39 @@ async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): 
       return sendConfirmation(db, deps, firm, row);
     case 'send_reminder':
       return sendReminder(db, deps, firm, row);
+    case 'send_login_link':
+      return sendLoginLink(db, deps, firm, row);
   }
 }
 
 /**
+ * Texts an owner the link they asked for to log in, to the mobile on their
+ * record. While this copy has no address for the app, no link can be made,
+ * and the text is not sent: the record says why.
+ */
+async function sendLoginLink(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome> {
+  const link = await loginLinkForDue(db, firm, row.id);
+  const owner = link === null ? null : await getOwner(db, firm, link.owner);
+  if (link === null || owner === null) {
+    log('login_link_nobody', { firm, due: row.id });
+    return 'nobody_to_tell';
+  }
+  const address = deps.appAddress ?? null;
+  const result = await send(deps.texts, db, firm, {
+    due: row.id,
+    kind: 'login_link',
+    to: { kind: 'owner', owner: owner.id },
+    about: { job: null, visit: null, call: null },
+    facts: { link: address === null ? null : `${address}/in/${link.token}` },
+  });
+  return outcomeOf([result]);
+}
+
+/**
  * Texts each of the firm's owners about an urgent call: who rang, where,
- * what about, and their number. Once one has gone, the job's history says it
- * was passed straight to the owner. A call whose caller's details did not
+ * what about, their number, and a link to the job once this copy has an
+ * address for the app. Once one has gone, the job's history says it was
+ * passed straight to the owner. A call whose caller's details did not
  * all come through has no customer or job to name, so it gets the other
  * wording, with what there is.
  */
@@ -160,6 +189,8 @@ async function alertOwner(db: RecordDb, deps: DueDeps, firm: FirmId, row: Claime
   }
   const number = call.from === null ? 'withheld' : nationalNumber(call.from);
   const summary = asSentence(call.summary);
+  const address = deps.appAddress ?? null;
+  const link = address === null || job === null ? null : `${address}/jobs/${job.id}`;
   const results: SendResult[] = [];
   for (const owner of owners) {
     const to = { kind: 'owner', owner: owner.id } as const;
@@ -181,7 +212,7 @@ async function alertOwner(db: RecordDb, deps: DueDeps, firm: FirmId, row: Claime
               kind: 'urgent_alert',
               to,
               about: { job: job.id, visit: null, call: call.id },
-              facts: { customer: call.customer.name, place: job.place, summary, number },
+              facts: { customer: call.customer.name, place: job.place, summary, number, link },
             },
       ),
     );

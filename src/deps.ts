@@ -17,9 +17,16 @@ export interface Deps {
    * has one (open question 9): then no text with a link goes.
    */
   linkAddress: string | null;
+  /**
+   * Where the owner's app is served, such as https://app.example, with no
+   * slash at the end: the address of the login link and of the urgent
+   * alert's link to the job. Null until this copy has one (open question 9):
+   * then no login text goes, and the alert goes without its link.
+   */
+  appAddress: string | null;
 }
 
-/** The address for customers' links from a copy's setting: no slash at the end, and null when empty. */
+/** An address from a copy's setting, such as LINK_ADDRESS or PUBLIC_ADDRESS: no slash at the end, and null when empty. */
 export function linkAddressFrom(setting: string | undefined): string | null {
   const address = (setting ?? '').trim().replace(/\/+$/, '');
   return address === '' ? null : address;

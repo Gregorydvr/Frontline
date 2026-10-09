@@ -117,7 +117,7 @@ Until slice F there is no owner login, so the app's pages are served only on thi
 
 **Done when:** steps 1 to 4, 7 and 8 of the acceptance story pass with the pretend clock.
 
-### [ ] F. The owner's app on real records
+### [x] F. The owner's app on real records
 
 - Login by a link sent by text. Opening the link shows a button, and the tap on the button logs in, so a phone's link preview cannot use the link up.
 - These screens, with the example's structure, styles and words, and data from the record: Home, the job page with its history, Calls & bookings, All jobs with the find box, Done for you, Your rules (read only), Message us. Message us stores what the owner wrote and alerts staff.

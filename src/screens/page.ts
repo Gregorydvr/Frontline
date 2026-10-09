@@ -1,5 +1,6 @@
-// The frame every screen sits in: the example's look, its font and icons.
-// A page is for the owner, so search engines are told to keep out (rule 13
+// The frame of the customer's page and of this machine's own pages: the
+// example's look, its font and icons, with no side menu. The owner's screens
+// have their own, in shell.ts. Search engines are told to keep out (rule 13
 // in CLAUDE.md), and browsers are told not to keep a copy.
 
 import { ARCHIVO_FONT_FACE } from './archivo';

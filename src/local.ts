@@ -6,9 +6,12 @@
 //   already there
 // - /local/example shows the demo firm in plain text, as it stands on the
 //   example's "today", Thursday 15 October 2026
-// - /local/calls shows the demo firm's Calls & bookings screen on that same
-//   day. Until the owner can log in (slice F), the owner's screens are served
-//   only here.
+// - /local/login has one button, which sends Tom, the demo firm's owner, a
+//   link to log in, through the stand-in for texts, and shows the text with
+//   its link to open here.
+// - the clock starts at the example's "today", Thursday 15 October 2026 at
+//   4pm, when the Worker starts, and runs on from there, so the owner's
+//   screens show the demo firm as the example does.
 // - /local/texts lists the demo firm's texts from the record: what went out
 //   through the stand-in, what was not sent and why, and what came in.
 // - /local/book has one button, which plays a call to the demo firm that
@@ -18,21 +21,21 @@
 
 import type { Hono } from 'hono';
 import { createApp, type AppEnv } from './app';
-import { instantFromIso, systemClock } from './clock';
+import { instantFromIso, startingAt } from './clock';
 import { linkAddressFrom, type Deps } from './deps';
-import { everyMinute, onQueue } from './due';
+import { everyMinute, onQueue, runDue } from './due';
 import { ensureExample } from './example/load';
 import { showExample } from './example/show';
 import { playBookingCall } from './example/play-call';
 import { showTexts } from './example/texts';
-import { EXAMPLE_NOW } from './example/tidewell';
+import { EXAMPLE_NOW, EXAMPLE_OWNER } from './example/tidewell';
 import { FakeTexts } from './providers/texts/fake';
+import { createLoginLink, findMessageForDue, listOwners } from './record';
 import { openRecord } from './record/db';
 import type { FirmId } from './record/types';
-import { callsScreen } from './screens/calls';
 import { DETAILS_HEADERS } from './screens/details';
 import { html } from './screens/html';
-import { page, PAGE_HEADERS } from './screens/page';
+import { page } from './screens/page';
 
 export function createLocalApp(makeDeps: (env: Env) => Deps): Hono<AppEnv> {
   // One load at a time, however many requests arrive together.
@@ -55,10 +58,40 @@ export function createLocalApp(makeDeps: (env: Env) => Deps): Hono<AppEnv> {
       return c.text(text, 200, { 'Cache-Control': 'no-store' });
     });
 
-    app.get('/local/calls', async (c) => {
+    app.get('/local/login', (c) =>
+      c.html(
+        page(
+          'Log in as Tom',
+          html`<div class="block"><h1>Log in as ${EXAMPLE_OWNER}</h1><p class="meta">Sends ${EXAMPLE_OWNER}, the demo firm’s owner, a link to log in, to the stand-in for texts, as the login page does.</p></div>
+<form method="post"><button class="btn" type="submit" style="min-height:56px;padding:0 20px;border:0;border-radius:12px;background:var(--ink);color:var(--cream);font:inherit;font-weight:600">Send ${EXAMPLE_OWNER} a login link</button></form>`,
+        ),
+        200,
+        DETAILS_HEADERS,
+      ),
+    );
+
+    app.post('/local/login', async (c) => {
       const firm = await ensureExample(c.env.DB);
-      const screen = await callsScreen(openRecord(c.env.DB, c.get('deps').clock), firm, instantFromIso(EXAMPLE_NOW));
-      return c.html(screen, 200, PAGE_HEADERS);
+      const deps = c.get('deps');
+      const db = openRecord(c.env.DB, deps.clock);
+      const [owner] = await listOwners(db, firm);
+      if (owner === undefined) {
+        return c.text('The demo firm has no owner.', 500);
+      }
+      const { due } = await createLoginLink(db, firm, { owner: owner.id, job: null });
+      await runDue(db, deps, firm, due);
+      const text = await findMessageForDue(db, firm, due, { kind: 'owner', owner: owner.id });
+      const link = text?.words?.match(/\S+\/in\/\S+/)?.[0] ?? null;
+      return c.html(
+        page(
+          'Sent a login link',
+          html`<div class="block"><h1>Sent a login link</h1><p class="meta">The text, as the stand-in for texts took it:</p></div>
+<div class="card"><div class="row"><span class="txt"><span class="t2" style="overflow-wrap:anywhere">${text?.words ?? 'Not sent. See /local/texts for why.'}</span></span></div></div>
+${link === null ? null : html`<p><a href="${link}">Open the link</a></p>`}`,
+        ),
+        200,
+        DETAILS_HEADERS,
+      );
     });
 
     app.get('/local/texts', async (c) => {
@@ -98,7 +131,15 @@ ${played.link === null ? null : html`<p><a href="${played.link}">Open her confir
 
 // One stand-in for the life of the Worker on this machine.
 const texts = new FakeTexts();
-const localDeps = (env: Env): Deps => ({ clock: systemClock, texts, queue: env.DUE, linkAddress: linkAddressFrom(env.LINK_ADDRESS) });
+// The example's "today", running on from when the Worker started.
+const clock = startingAt(instantFromIso(EXAMPLE_NOW));
+const localDeps = (env: Env): Deps => ({
+  clock,
+  texts,
+  queue: env.DUE,
+  linkAddress: linkAddressFrom(env.LINK_ADDRESS),
+  appAddress: linkAddressFrom(env.PUBLIC_ADDRESS),
+});
 const app = createLocalApp(localDeps);
 
 export default {

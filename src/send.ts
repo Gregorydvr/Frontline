@@ -129,9 +129,10 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   if (firm.phoneNumber === null) {
     return notSent(db, firmId, out, 'no_number');
   }
-  // A text that carries the customer's link, when no link could be made
-  // because this copy has no address for links yet.
-  if ((kind.gaps as readonly string[]).includes('link') && (out.facts.link ?? null) === null) {
+  // A text that must carry its link, such as the customer's first or the
+  // owner's login, when no link could be made because this copy has no
+  // address for it yet.
+  if (kind.linkRequired && (out.facts.link ?? null) === null) {
     return notSent(db, firmId, out, 'no_link_address');
   }
   const wording = (await firmWording(db, firmId))[`text:${out.kind}`];

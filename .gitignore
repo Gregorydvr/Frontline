@@ -2,3 +2,5 @@ node_modules
 .wrangler
 .dev.vars*
 .env*
+# Screenshots from npm run check:screens
+/screens/

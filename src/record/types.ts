@@ -19,6 +19,8 @@ declare const textInBrand: unique symbol;
 declare const wordingBrand: unique symbol;
 declare const holdBrand: unique symbol;
 declare const linkBrand: unique symbol;
+declare const loginBrand: unique symbol;
+declare const ownerMessageBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -36,6 +38,10 @@ export type WordingId = Id & { readonly [wordingBrand]: true };
 export type HoldId = Id & { readonly [holdBrand]: true };
 /** The token in a link a customer opens. It cannot be guessed (rule 13). */
 export type LinkToken = Id & { readonly [linkBrand]: true };
+/** The token in a link that logs an owner in. It cannot be guessed, and works once. */
+export type LoginToken = Id & { readonly [loginBrand]: true };
+/** What an owner wrote in Message us. */
+export type OwnerMessageId = Id & { readonly [ownerMessageBrand]: true };
 
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
@@ -83,7 +89,7 @@ export interface DiaryRules {
 export interface Owner {
   id: OwnerId;
   name: string;
-  /** For alerts and, from slice F, the login link. */
+  /** For alerts and the login link. */
   mobile: UkMobile | null;
   createdAt: Instant;
 }
@@ -167,6 +173,9 @@ export type Actor =
  * - the firm itself: service_on, service_off, stop_on, stop_off, number_set,
  *   urgent_list_set, owner_mobile_set, diary_rules_set, written only by the
  *   functions in firms.ts and owners.ts
+ * - an owner using the app: logged_in and logged_out, written only by
+ *   logins.ts, and owner_message_sent, for Message us, written only by
+ *   owner-messages.ts. Each names the owner who did it.
  * Later slices add their own.
  */
 export const HISTORY_KINDS = {
@@ -193,6 +202,9 @@ export const HISTORY_KINDS = {
   urgent_list_set: 'firm',
   owner_mobile_set: 'firm',
   diary_rules_set: 'firm',
+  logged_in: 'firm',
+  logged_out: 'firm',
+  owner_message_sent: 'firm',
 } as const;
 export type HistoryKind = keyof typeof HISTORY_KINDS;
 
@@ -219,7 +231,7 @@ export interface HistoryEntry {
   job: JobId | null;
   visit: { id: VisitId; kind: VisitKind; startsAt: Instant } | null;
   /** The call the entry names, with what its line is made from. */
-  call: { id: CallId; caller: string | null; summary: string | null } | null;
+  call: { id: CallId; caller: string | null; summary: string | null; from: UkMobile | UkLandline | null } | null;
   /** The text that came in that the entry names, with its words. */
   textIn: { id: TextInId; words: string } | null;
   /** For an opt-out: the kind of text, or every kind. */
@@ -349,7 +361,9 @@ export interface DiaryVisit extends Visit {
 /**
  * The kinds of text. Each says who it goes to, the service it belongs to (for
  * a text to a customer, whose service switch must be on), the history entry
- * written when it has gone, and the gaps its wording may use.
+ * written when it has gone, if any, the gaps its wording may use, and
+ * whether it must carry its link: a text that must, when no link could be
+ * made because this copy has no address for it yet, is not sent.
  *
  * Every kind here uses wording the firm agreed at set-up (rule 2 in
  * CLAUDE.md). Kinds that need the owner's approval of the exact version, such
@@ -362,6 +376,7 @@ export const MESSAGE_KINDS = {
     service: 'calls',
     history: 'confirmation_sent',
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose'],
+    linkRequired: false,
   },
   /**
    * The confirmation as the first text the firm sends a customer: the same,
@@ -372,19 +387,42 @@ export const MESSAGE_KINDS = {
     service: 'calls',
     history: 'confirmation_sent',
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose', 'link'],
+    linkRequired: true,
   },
   /** The reminder the day before a visit. */
-  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'] },
-  /** The owner's alert about an urgent call. */
-  urgent_alert: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['customer', 'place', 'summary', 'number'] },
+  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'], linkRequired: false },
+  /**
+   * The owner's alert about an urgent call, with a link to the job once this
+   * copy has an address for the app. It goes without the link otherwise: an
+   * urgent call is never held up for want of one.
+   */
+  urgent_alert: {
+    to: 'owner',
+    service: null,
+    history: 'passed_to_owner',
+    gaps: ['customer', 'place', 'summary', 'number', 'link'],
+    linkRequired: false,
+  },
   /**
    * The owner's alert about an urgent call whose caller's name, job or
    * address did not come through, so there is no customer or job to name.
    */
-  urgent_alert_details_missing: { to: 'owner', service: null, history: 'passed_to_owner', gaps: ['summary', 'number'] },
+  urgent_alert_details_missing: {
+    to: 'owner',
+    service: null,
+    history: 'passed_to_owner',
+    gaps: ['summary', 'number'],
+    linkRequired: false,
+  },
+  /**
+   * The link that logs the owner in, sent to the owner's own mobile when they
+   * ask for it. The login is recorded when the link is used, so no history
+   * entry is written when the text goes; the text itself is kept.
+   */
+  login_link: { to: 'owner', service: null, history: null, gaps: ['link'], linkRequired: true },
 } as const satisfies Record<
   string,
-  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind; gaps: readonly string[] }
+  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind | null; gaps: readonly string[]; linkRequired: boolean }
 >;
 export type MessageKind = keyof typeof MESSAGE_KINDS;
 
@@ -465,7 +503,7 @@ export interface TextIn {
 }
 
 /** What a row in the due list does. Slice H adds the deletions. */
-export const DUE_ACTIONS = ['alert_owner', 'send_reminder', 'send_confirmation'] as const;
+export const DUE_ACTIONS = ['alert_owner', 'send_reminder', 'send_confirmation', 'send_login_link'] as const;
 export type DueAction = (typeof DUE_ACTIONS)[number];
 
 export const DUE_STATES = ['waiting', 'claimed', 'done', 'skipped', 'cancelled'] as const;
@@ -504,7 +542,7 @@ export interface ClaimedDue extends Due {
 export type WordingKey = `text:${MessageKind}` | `line:${HistoryKind}:${'job' | 'feed'}`;
 
 /** The gaps the owner's lines may use, as src/history-lines.ts fills them. */
-export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when', 'caller', 'message', 'words'] as const;
+export const LINE_GAPS = ['customer', 'customer’s', 'visit', 'Visit', 'short visit', 'when', 'caller', 'message', 'words', 'number'] as const;
 
 /** The firm's words in use: for each key, the newest. */
 export type FirmWording = Partial<Record<WordingKey, { id: WordingId; words: string }>>;

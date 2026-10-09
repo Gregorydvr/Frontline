@@ -59,7 +59,18 @@ export type LogEvent =
   // A customer's link to confirm their details (src/app.ts).
   | 'link_not_found'
   | 'details_saved'
-  | 'details_refused';
+  | 'details_refused'
+  // The owner's app: logging in and out, and Message us (src/owner-app.ts
+  // and src/due.ts).
+  | 'login_asked'
+  | 'login_link_made'
+  | 'login_link_limit'
+  | 'login_link_nobody'
+  | 'login_link_not_found'
+  | 'logged_in'
+  | 'logged_out'
+  | 'owner_request_refused'
+  | 'owner_message_stored';
 
 const ERROR_NAMES = [
   'Error',

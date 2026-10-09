@@ -19,6 +19,7 @@ function realDeps(env: Env): Deps {
     }),
     queue: env.DUE,
     linkAddress: linkAddressFrom(env.LINK_ADDRESS),
+    appAddress: linkAddressFrom(env.PUBLIC_ADDRESS),
   };
 }
 

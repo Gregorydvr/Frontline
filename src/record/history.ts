@@ -3,6 +3,7 @@
 
 import { instant, type Instant } from '../clock';
 import { isId, newId } from '../ids';
+import type { UkLandline, UkMobile } from '../phone';
 import { Refused, run, type RecordDb } from './db';
 import {
   HISTORY_KINDS,
@@ -100,8 +101,8 @@ export function historyStatement(
 
 /**
  * The statement for an entry about the firm itself, such as a service switched
- * on. Only firms.ts and owners.ts use it, in the same step as the change it
- * records.
+ * on. Only firms.ts, owners.ts and owner-messages.ts use it, in the same step
+ * as the change it records.
  */
 export function firmEntry(
   db: RecordDb,
@@ -114,7 +115,8 @@ export function firmEntry(
     | 'number_set'
     | 'urgent_list_set'
     | 'owner_mobile_set'
-    | 'diary_rules_set',
+    | 'diary_rules_set'
+    | 'owner_message_sent',
   by: Actor,
   service: Service | null,
 ): D1PreparedStatement {
@@ -125,6 +127,28 @@ export function firmEntry(
        VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8)`,
     )
     .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, service);
+}
+
+/**
+ * The statement for an owner logging in or out, done by the owner the login
+ * is for. Only logins.ts uses it, in the same step as the change. It writes
+ * nothing when the login is not there: for logging out, when it has already
+ * ended.
+ */
+export function loginEntry(
+  db: RecordDb,
+  kind: 'logged_in' | 'logged_out',
+  session: string,
+  /** The firm the login must be of, or null when the login was just found by its own token. */
+  firm: FirmId | null,
+): D1PreparedStatement {
+  return db.d1
+    .prepare(
+      `INSERT INTO history (${ENTRY_COLUMNS})
+       SELECT ?1, s.firm_id, ?2, ${NEXT_SEQ}, 'owner', s.owner_id, NULL, ?3
+       FROM sessions s WHERE s.id = ?4 AND s.ended_at IS NULL AND (?5 IS NULL OR s.firm_id = ?5)`,
+    )
+    .bind(newId(), db.clock.now(), kind, session, firm);
 }
 
 /**
@@ -233,7 +257,7 @@ const SELECT_ENTRY = `
   SELECT h.id, h.at, h.actor, h.owner_id, h.staff_id, h.kind, h.customer_id,
          c.name AS customer_name, h.job_id, h.visit_id, v.kind AS visit_kind,
          v.starts_at AS visit_starts_at, h.call_id, k.caller AS call_caller,
-         k.summary AS call_summary, h.text_in_id, t.words AS text_in_words, h.text_kind, h.service
+         k.summary AS call_summary, k.from_number AS call_from, h.text_in_id, t.words AS text_in_words, h.text_kind, h.service
   FROM history h
   LEFT JOIN customers c ON c.firm_id = h.firm_id AND c.id = h.customer_id
   LEFT JOIN visits v ON v.firm_id = h.firm_id AND v.id = h.visit_id
@@ -256,6 +280,7 @@ interface EntryRow {
   call_id: string | null;
   call_caller: string | null;
   call_summary: string | null;
+  call_from: string | null;
   text_in_id: string | null;
   text_in_words: string | null;
   text_kind: OptOutKind | null;
@@ -280,7 +305,12 @@ function fromRow(row: EntryRow): HistoryEntry {
     call:
       row.call_id === null
         ? null
-        : { id: row.call_id as CallId, caller: row.call_caller, summary: row.call_summary },
+        : {
+            id: row.call_id as CallId,
+            caller: row.call_caller,
+            summary: row.call_summary,
+            from: row.call_from as UkMobile | UkLandline | null,
+          },
     textIn:
       row.text_in_id === null || row.text_in_words === null
         ? null

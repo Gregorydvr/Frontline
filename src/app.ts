@@ -21,6 +21,7 @@ import {
   recordDelivery,
   recordTextIn,
 } from './record';
+import { ownerRoutes } from './owner-app';
 import { openRecord, type RecordDb } from './record/db';
 import { CUSTOMER_LIMITS, TEXT_LIMITS } from './record/types';
 import { DETAILS_HEADERS, detailsPage, detailsSavedPage, formFromRecord, linkExpiredPage, type DetailsForm } from './screens/details';
@@ -98,6 +99,7 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   // The page a customer opens from the link in their first text, to check
   // their details. No login: the token in the address is the key (rule 13).
   app.get('/d/:token', async (c) => {
+    if (!onLinkAddress(c)) return c.notFound();
     const db = openRecord(c.env.DB, c.get('deps').clock);
     const found = await linkedDetails(db, c.req.param('token'));
     if (found === null) {
@@ -107,6 +109,7 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   });
 
   app.post('/d/:token', async (c) => {
+    if (!onLinkAddress(c)) return c.notFound();
     const db = openRecord(c.env.DB, c.get('deps').clock);
     const found = await linkedDetails(db, c.req.param('token'));
     if (found === null) {
@@ -210,6 +213,9 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
     return c.body(null, 200);
   });
 
+  // The owner's app: logging in, and the owner's screens (src/owner-app.ts).
+  ownerRoutes(app);
+
   app.onError((thrown, c) => {
     // A refusal on purpose, such as a 401 from an auth check, keeps its own
     // answer and is not an error.
@@ -223,6 +229,21 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
   });
 
   return app;
+}
+
+/**
+ * Whether a request for a customer's page came to the address for customers'
+ * links. When this copy serves the app and customers' links from two
+ * addresses, a customer's page answers only on the links' address, so it
+ * never shares an address with the owner's login. On this machine the two
+ * are the same.
+ */
+function onLinkAddress(c: Context<AppEnv>): boolean {
+  const { appAddress, linkAddress } = c.get('deps');
+  if (appAddress === null || linkAddress === null || new URL(appAddress).host === new URL(linkAddress).host) {
+    return true;
+  }
+  return new URL(c.req.url).host === new URL(linkAddress).host;
 }
 
 function errorCode(text: string | null): number | null {

@@ -26,7 +26,6 @@ import {
 import { openRecord } from '../record/db';
 import {
   MESSAGE_KINDS,
-  SERVICES,
   type CallId,
   type CustomerId,
   type FirmId,
@@ -41,6 +40,7 @@ import {
   EXAMPLE_NUMBER,
   EXAMPLE_OWNER,
   EXAMPLE_OWNER_MOBILE,
+  EXAMPLE_SERVICES,
   EXAMPLE_SET_UP,
   EXAMPLE_URGENT_LIST,
   TIMELINE,
@@ -68,7 +68,9 @@ export async function loadExample(
   const db = openRecord(d1, clock);
 
   const firm = await createFirm(db, { name: firmAs.name, isExample: firmAs.isExample });
-  for (const service of SERVICES) {
+  // Release 1's service only. The example's other four come back on with
+  // their releases, as their quotes and invoices do.
+  for (const service of EXAMPLE_SERVICES) {
     await setService(db, firm, service, true, frontline);
   }
   await setFirmNumber(db, firm, ukMobile(firmAs.number), frontline);
