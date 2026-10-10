@@ -106,10 +106,25 @@
   "env": {
     "practice": {
       "secrets": { "required": ["VAPI_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "ACCESS_TEAM", "ACCESS_AUD"] },
-      // A placeholder until open question 9 is answered. Greg puts the
-      // address of the practice copy here, the address for customers'
-      // links, and the control room's.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "practice" },
+      // Practice answers only at its three addresses on
+      // vanrooyenenterprises.com, each behind Cloudflare Access
+      // (docs/access.md): no workers.dev address and no preview addresses.
+      // Each is a custom domain on this Worker; the deploy makes its DNS
+      // record and certificate. Chosen by Greg on 10 October 2026, for
+      // practice only. Live's addresses are a separate decision.
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "practice-app.vanrooyenenterprises.com", "custom_domain": true },
+        { "pattern": "practice-links.vanrooyenenterprises.com", "custom_domain": true },
+        { "pattern": "practice-control.vanrooyenenterprises.com", "custom_domain": true }
+      ],
+      "vars": {
+        "PUBLIC_ADDRESS": "https://practice-app.vanrooyenenterprises.com",
+        "LINK_ADDRESS": "https://practice-links.vanrooyenenterprises.com",
+        "CONTROL_ADDRESS": "https://practice-control.vanrooyenenterprises.com",
+        "COPY": "practice"
+      },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
