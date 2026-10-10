@@ -1,0 +1,4 @@
+# Text files keep LF line endings in every checkout, Windows included.
+# `wrangler types --check` compares worker-configuration.d.ts byte for byte,
+# so a checkout with CRLF endings fails `npm run check` though nothing changed.
+* text=auto eol=lf
