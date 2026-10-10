@@ -114,11 +114,10 @@
       "d1_databases": [
         {
           "binding": "DB",
-          // The id is a placeholder. Greg creates the practice database in the
-          // EU (`wrangler d1 create frontline-practice --jurisdiction eu`) and
-          // puts its id here.
+          // Created by Greg on 10 October 2026 in the EU jurisdiction
+          // (`wrangler d1 create frontline-practice --jurisdiction eu`).
           "database_name": "frontline-practice",
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          "database_id": "bd72a2b6-63d2-4e56-bbf8-290ddbc15005",
           "migrations_dir": "migrations"
         }
       ],
