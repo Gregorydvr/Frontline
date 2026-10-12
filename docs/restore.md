@@ -101,17 +101,23 @@ Fill this in when you do it, and keep it with the pull request that next touches
 
 | | |
 |---|---|
-| Date | |
-| Who ran it | |
-| Practice database id | |
-| Wrangler version (`npx wrangler --version`) | |
-| The restore point (UTC) | |
-| Bookmark restored to | |
-| Bookmark to undo it | |
-| Counts at the restore point (firms, customers, history, staff log) | |
-| Counts after the change | |
-| Counts after the restore | |
-| Counts after "Delete again" | |
-| How long the restore took | |
-| Did anything stop working afterwards? | |
-| What surprised you | |
+| Date | 12 October 2026, slice I |
+| Who ran it | Greg, on his own machine, with Claude Code running the Wrangler commands he agreed |
+| Practice database id | `bd72a2b6-63d2-4e56-bbf8-290ddbc15005` (EU) |
+| Wrangler version (`npx wrangler --version`) | 4.148.0 |
+| The restore point (UTC) | 2026-10-12T14:43:39Z, with practice deployed and the demo firm loaded |
+| Bookmark restored to | `00000002-000000c4-00005102-8edddb1343a1ae0acfac58a4e2e330af` |
+| Bookmark to undo it | `00000002-ffffffff-00005102-fefbe0e96552c64f28092f221ff48499` |
+| Counts at the restore point (firms, customers, history, staff log) | 1, 16, 46, 7 |
+| Counts after the change | 1, 15, 41, 11: Mrs Patel deleted in the control room, with her 5 history entries; the ledger noted it at 14:52:14Z |
+| Counts after the restore | 1, 16, 46, 7: Mrs Patel back |
+| Counts after "Delete again" | 1, 15, 41, 15: Mrs Patel gone again. The page said "Done again: 1 customers and 0 firms deleted; 0 calls marked as having lost their recording." The staff log has the `replayed_deletions` row |
+| How long the restore took | 6 seconds (14:55:52Z to 14:55:59Z) |
+| Did anything stop working afterwards? | No. `/health` answered, and the control room opened and worked |
+| What surprised you | Two tries failed with "fetch failed" on Wrangler's first request, before anything was restored; the counts showed nothing had changed. Preferring IPv4 (below) made the third go through. "After a restore" takes the time to the minute, not the second, so 15:43 was given for 15:43:39; a delete noted in those 39 seconds would be done again, which does no harm, since it was already in the restored database. `wrangler r2 bucket info` showed 0 files in the file store though the ledger's note was there: its count lags. The page's "1 customers". The staff log stamps the demo firm's views, and the replay, with the demo firm's moved clock |
+
+If Wrangler says "fetch failed" on a machine whose network drops IPv6, run this in the same PowerShell terminal first, then the command again. Check the counts before retrying a restore:
+
+```powershell
+$env:NODE_OPTIONS="--dns-result-order=ipv4first"
+```
