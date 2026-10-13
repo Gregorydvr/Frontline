@@ -14,9 +14,9 @@
 // holds every part of each setting it names, such as all of `model`.
 
 import { readFileSync } from 'node:fs';
+import { SECRET_NAME, settingsProblem } from './vapi-settings.js';
 
 const API = 'https://api.vapi.ai';
-const SECRET_NAME = /secret|token|password|api_?key|authorization/i;
 const VAPI_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const [id, file, ...rest] = process.argv.slice(2);
@@ -29,11 +29,8 @@ const key = process.env.VAPI_API_KEY;
 if (!key) fail('VAPI_API_KEY is not set.');
 
 const settings = JSON.parse(readFileSync(file, 'utf8'));
-if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
-  fail('The settings file must hold one JSON object.');
-}
-const secretPath = findSecret(settings);
-if (secretPath) fail(`The settings file has ${secretPath}. Keys and secrets stay out of the repository.`);
+const problem = settingsProblem(settings);
+if (problem) fail(problem);
 
 const before = await vapi('GET');
 const fields = Object.keys(settings);
@@ -104,18 +101,6 @@ function print(value) {
     (name, inner) => (name && SECRET_NAME.test(name) && typeof inner === 'string' ? '(hidden)' : inner),
     2,
   );
-}
-
-/** Where in the settings a field is named like a secret, if anywhere. */
-function findSecret(value, path = '') {
-  if (typeof value !== 'object' || value === null) return null;
-  for (const [name, inner] of Object.entries(value)) {
-    const here = `${path}${Array.isArray(value) ? `[${name}]` : `.${name}`}`;
-    if (!Array.isArray(value) && SECRET_NAME.test(name)) return here;
-    const deeper = findSecret(inner, here);
-    if (deeper) return deeper;
-  }
-  return null;
 }
 
 function fail(message) {

@@ -176,7 +176,7 @@ export default defineConfig(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['eslint.config.js', 'vitest.config.ts'] },
+        projectService: { allowDefaultProject: ['eslint.config.js', 'vitest.config.ts', 'scripts/vapi-settings.d.ts'] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
