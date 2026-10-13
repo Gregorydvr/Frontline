@@ -165,8 +165,10 @@ test/                the tests, which run in the Workers runtime
   fixtures/twilio/   example requests from Twilio: a text coming in, delivery reports
   fixtures/lint/     deliberate mistakes that show the checks in lint still work
 scripts/screens.js   npm run check:screens
+scripts/vapi-assistant.js   sets a firm's voice agent in Vapi from its file in vapi/, on Greg's machine (docs/vapi.md)
+vapi/                each voice agent's settings, as the script puts them on Vapi. No keys or secrets
 docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
-                     the restore steps (restore.md), and when a firm leaves (firm-leaving.md)
+                     the restore steps (restore.md), the checks made on practice (practice-checks.md), and when a firm leaves (firm-leaving.md)
 docs/screens/        screenshots beside the example's, kept with the pull request that took them
 reference/           the example app: read-only
 wrangler.jsonc       the Worker's config: this machine at the top level, then practice and live
