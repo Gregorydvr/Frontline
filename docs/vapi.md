@@ -20,6 +20,8 @@ With `--apply` it changes the agent, reads it back, and shows each setting that 
 - Vapi replaces each top-level setting it is given as a whole, so the file holds every part of each one it names, such as all of `model`. Settings the file does not name, such as the voice, are left alone.
 - The file holds no key, token, secret or password, and the script refuses one that does. The server's secret is named by its credential's id.
 - If it says "fetch failed", set `NODE_OPTIONS=--dns-result-order=ipv4first` and run it again.
+- Opening an assistant in the dashboard can save Vapi's defaults to it, such as the instructions `structuredDataPlan` uses to pull the details out of the transcript. So after any visit to the dashboard, run the script without `--apply`, and if it shows a change, copy what Vapi now holds into the file.
+- The order of a schema's `required` fields does not count as a change: Vapi reorders them.
 
 ## What the agent says
 

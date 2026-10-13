@@ -80,15 +80,22 @@ function show(heading, changed, from, to) {
   }
 }
 
-/** The same JSON, whatever order the keys are in. */
+/**
+ * The same JSON, whatever order the keys are in, and whatever order a
+ * schema's `required` fields are in: Vapi reorders them, and the order means
+ * nothing.
+ */
 function same(a, b) {
   return JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 }
 
-function sorted(value) {
-  if (Array.isArray(value)) return value.map(sorted);
+function sorted(value, name = '') {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => sorted(item));
+    return name === 'required' && items.every((item) => typeof item === 'string') ? items.sort() : items;
+  }
   if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(Object.keys(value).sort().map((name) => [name, sorted(value[name])]));
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key], key)]));
   }
   return value;
 }
