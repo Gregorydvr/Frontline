@@ -15,7 +15,7 @@ npx wrangler secret put TWILIO_ACCOUNT_SID --env practice
 npx wrangler secret put TWILIO_AUTH_TOKEN --env practice
 ```
 
-and likewise with `--env live`. Without both, nothing is sent to Twilio: every text is recorded as refused. Requests from Twilio are checked with the auth token alone, so without it every one is refused with 401.
+and likewise with `--env live`. Use the **live** credentials (Account, API keys & tokens, Auth tokens) of the account that holds the firms' numbers, not its test credentials. On practice, a token from elsewhere showed only when a real text came in: every one was refused as `twilio_refused`. Without both, nothing is sent to Twilio: every text is recorded as refused. Requests from Twilio are checked with the auth token alone, so without it every one is refused with 401.
 
 This machine (`npm run dev`) and the tests never use Twilio. `npm run dev` warns that the two secrets are missing; that is expected.
 

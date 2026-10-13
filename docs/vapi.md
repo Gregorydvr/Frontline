@@ -182,7 +182,7 @@ Make one test call to the practice firm and check:
 - the file appears in the inbox and, within a minute, in `frontline-practice-files` under `firms/<id>/calls/`, and is gone from the inbox
 - the call in Vapi's dashboard has no recording stored with Vapi
 
-A web call from the dashboard was made on 13 October 2026, with what happened in `docs/practice-checks.md`. The first and third passed, and the file was in the inbox. A web call is to no number, so no firm was found and the move into `frontline-practice-files` was not tried: that waits for a call to the practice firm's Twilio number.
+A web call from the dashboard was made on 13 October 2026, with what happened in `docs/practice-checks.md`. The first and third passed, and the file was in the inbox. A web call is to no number, so no firm was found and the move into `frontline-practice-files` was not tried then. Later the same day a call to the practice firm's own number passed the second check too: the call was kept with its customer and job, and the recording moved into `frontline-practice-files` and left the inbox.
 
 ### What Vapi does, as seen on practice
 
