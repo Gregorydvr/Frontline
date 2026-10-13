@@ -23,6 +23,17 @@ With `--apply` it changes the agent, reads it back, and shows each setting that 
 - Opening an assistant in the dashboard can save Vapi's defaults to it, such as the instructions `structuredDataPlan` uses to pull the details out of the transcript. So after any visit to the dashboard, run the script without `--apply`, and if it shows a change, copy what Vapi now holds into the file.
 - The order of a schema's `required` fields does not count as a change: Vapi reorders them.
 
+## Bringing a firm's number in
+
+Vapi's dashboard imports a Twilio number only with the account's auth token, which also signs Twilio's requests to the Worker, so it stays with the Worker alone. Instead, make a Twilio API key for Vapi (Standard), load its SID and secret into `TWILIO_API_KEY` and `TWILIO_API_SECRET`, set the number on the firm in the control room first, then:
+
+```sh
+node scripts/vapi-import-number.js <the number, as +44…> <the Twilio account id> <the agent's id>
+node scripts/vapi-import-number.js <the number, as +44…> <the Twilio account id> <the agent's id> --apply
+```
+
+It sends `smsEnabled: false`, so Vapi leaves the number's messaging webhook alone, and gives the number no server address of its own, so reports go to the agent's server. It refuses a number Vapi already has, and reads the number back. Afterwards Twilio shows **A call comes in** as Vapi's `https://api.vapi.ai/twilio/inbound_call` and messaging empty, ready for `/twilio/texts` (`docs/twilio.md`). Set that last, so the import cannot overwrite it.
+
 ## What the agent says
 
 The greeting (`firstMessage`) names the firm, and says it is an automated assistant and that the call is recorded. On practice:

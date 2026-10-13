@@ -167,6 +167,7 @@ test/                the tests, which run in the Workers runtime
 scripts/screens.js   npm run check:screens
 scripts/vapi-assistant.js   sets a firm's voice agent in Vapi from its file in vapi/, on Greg's machine (docs/vapi.md)
 scripts/vapi-settings.js    its check that a settings file holds no key or secret, tested in test/vapi-settings.test.ts
+scripts/vapi-import-number.js   brings a firm's Twilio number into Vapi with a Twilio API key, on Greg's machine (docs/vapi.md)
 vapi/                each voice agent's settings, as the script puts them on Vapi. No keys or secrets
 docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
                      the restore steps (restore.md), the checks made on practice (practice-checks.md), and when a firm leaves (firm-leaving.md)
