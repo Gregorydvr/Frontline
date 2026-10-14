@@ -70,6 +70,7 @@ Each rule gets a test or a check as soon as the code it covers exists. If a task
 - `reference/` is read-only. Take the look, the layout and the wording from it. Do not copy its screen code, which draws from hand-written example data.
 - Words an owner or a customer will read come from the example app or the brief. Flag any new wording in the pull request. UK English, plain words, and never "shall".
 - Add a dependency only when the plan gives the reason.
+- Automate everything we can without losing accuracy. When a task has a manual step, propose how to automate it and which checks keep it accurate, such as reading back what changed, comparing with the record, or a test that fails when the two drift apart. A step stays manual only when a person's decision is the point, such as an owner agreeing wording or Greg choosing to go live. When you leave a step manual, say why.
 
 ## Pull requests
 
