@@ -96,6 +96,7 @@ Slice A creates these. Keep the names.
 - `npm run dev`: the system on this machine, with the invented data. It applies `migrations/` to the local database first, and loads the demo firm the first time it is used. http://localhost:8787/local/example shows the demo firm in plain text.
 - `npm run types`: rewrites `worker-configuration.d.ts` after a change to `wrangler.jsonc`.
 - `npm run check:screens`: the owner's screens in a real browser at 390 by 844 and 1280 by 800: no sideways scroll, nothing under 44px, nothing cut off, no accessibility failures (axe-core). Saves screenshots in `screens/`, beside the example's. GitHub runs it after `npm run check`.
+- `npm run practice:last-call`: on Greg's machine, the newest practice call in one go: what Vapi holds about it, what Front-line kept, and whether the two agree. Read only. `-- --call <Vapi id>` for another call, `-- --transcript` for the conversation on screen. See `docs/practice-checks.md`.
 
 To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of Vite's optional add-ons. `npm ci` works with either. `.npmrc` makes npm record exact versions.
 
@@ -123,6 +124,7 @@ src/                 the Worker
   vapi-report.ts     reads Vapi's report as a call ends, checking every field
   vapi-tools.ts      reads Vapi's tool calls during a call (free times, book), checking every field
   booking.ts         answers the voice agent's two tools: free times, and holding one for the call
+  call-report.ts     a call's report for staff: ids, states and times for its customer, job, visit, hold, due rows and texts
   land-call.ts       a call lands in the record: the firm, the customer, a job, the call and its history
   job-state.ts       a job's state, worked out from its records
   history-lines.ts   the words for each kind of history entry, and the line the owner reads
@@ -170,6 +172,8 @@ scripts/screens.js   npm run check:screens
 scripts/vapi-assistant.js   sets a firm's voice agent in Vapi from its file in vapi/, on Greg's machine (docs/vapi.md)
 scripts/vapi-settings.js    its check that a settings file holds no key or secret, tested in test/vapi-settings.test.ts
 scripts/vapi-import-number.js   brings a firm's Twilio number into Vapi with a Twilio API key, on Greg's machine (docs/vapi.md)
+scripts/last-call.js        npm run practice:last-call, on Greg's machine: Vapi's record of a call beside the control room's report on it
+scripts/call-report-text.js its report and checks, tested in test/last-call.test.ts
 vapi/                each voice agent's settings, as the script puts them on Vapi. No keys or secrets
 docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
                      the restore steps (restore.md), the checks made on practice (practice-checks.md), and when a firm leaves (firm-leaving.md)

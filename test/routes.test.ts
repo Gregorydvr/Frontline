@@ -180,6 +180,23 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'POST /control/firms/:firm/stop': () => controlAsB((b) => `/control/firms/${b}/stop`, () => controlForm({ on: '0' })),
   'GET /control/firms/:firm/customers': () => controlAsB((b) => `/control/firms/${b}/customers?q=mr`),
   'GET /control/firms/:firm/customers/:customer': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}`, undefined, [404]),
+  // A call's report: the first firm's calls, by Vapi's ids for them, asked
+  // for under the second firm, are "not found", and nothing changes.
+  'GET /control/firms/:firm/calls/vapi/:vapiId': async () => {
+    const { a, b } = await twoFirms();
+    const callsOfA = await listCallsBetween(db, a, ...allTime);
+    expect(callsOfA.length).toBeGreaterThan(0);
+    const before = withoutStaffLog(await firmRows(env.DB, a));
+    const open = controlOpener(createApp(deps));
+    for (const call of callsOfA) {
+      const answer = await open(`/control/firms/${b}/calls/vapi/${call.providerCallId}`);
+      expect(answer.status).toBe(404);
+      const words = await answer.text();
+      expect(words).not.toContain(call.id);
+      expect(words).not.toContain(a);
+    }
+    expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+  },
   'POST /control/firms/:firm/customers/:customer/export': () =>
     controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/export`, () => controlForm({}), [404]),
   'GET /control/firms/:firm/customers/:customer/delete': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, undefined, [404]),
@@ -610,6 +627,7 @@ describe('every route', () => {
       'GET /control/firms/:firm/customers',
       'GET /control/firms/:firm/customers/:customer',
       'POST /control/firms/:firm/customers/:customer/export',
+      'GET /control/firms/:firm/calls/vapi/:vapiId',
       'GET /control/firms/:firm/customers/:customer/delete',
       'POST /control/firms/:firm/customers/:customer/delete',
       'POST /control/firms/:firm/export',

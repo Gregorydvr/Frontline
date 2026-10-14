@@ -1,0 +1,65 @@
+{
+  "id": "6f1c2a9e-3b7d-4e05-9a1c-8d2e4f6a7b10",
+  "assistantId": "00000000-0000-4000-8000-000000000000",
+  "type": "inboundPhoneCall",
+  "startedAt": "2026-09-28T10:14:00.000Z",
+  "endedAt": "2026-09-28T10:15:10.000Z",
+  "createdAt": "2026-09-28T10:13:59.000Z",
+  "endedReason": "customer-ended-call",
+  "customer": { "number": "+447700900003" },
+  "artifact": {
+    "messages": [
+      {
+        "role": "system",
+        "time": 1790590439000,
+        "message": "You answer the phone for a trade firm when nobody there can.\n\nToday is Monday 28 September 2026, UK time. Written as YYYY-MM-DD, that is 2026-09-28.\n\nYour job is to take a message.",
+        "secondsFromStart": 0
+      },
+      { "role": "bot", "time": 1790590440000, "message": "Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?", "secondsFromStart": 0.5 },
+      { "role": "user", "time": 1790590447000, "message": "Mrs Ahmed, 27 Station Road, Z Z 1 4 A B. My boiler keeps cutting out. Could he come on Thursday?", "secondsFromStart": 7.4 },
+      {
+        "role": "tool_calls",
+        "time": 1790590460000,
+        "message": "",
+        "toolCalls": [{ "id": "call_free_1", "type": "function", "function": { "name": "free_times", "arguments": "{\"day\": \"2026-10-01\"}" } }],
+        "secondsFromStart": 20.1
+      },
+      {
+        "role": "tool_call_result",
+        "time": 1790590461000,
+        "name": "free_times",
+        "toolCallId": "call_free_1",
+        "result": "{\"times\":[{\"start\":\"2026-10-01T08:00\",\"say\":\"Thursday 1 October at 8am\"},{\"start\":\"2026-10-01T09:00\",\"say\":\"Thursday 1 October at 9am\"},{\"start\":\"2026-10-01T15:00\",\"say\":\"Thursday 1 October at 3pm\"}]}",
+        "secondsFromStart": 21.2
+      },
+      { "role": "bot", "time": 1790590462000, "message": "Thursday 1 October at 8am, 9am or 3pm. Which would you like?", "secondsFromStart": 22 },
+      { "role": "user", "time": 1790590466000, "message": "3pm please.", "secondsFromStart": 26.5 },
+      {
+        "role": "tool_calls",
+        "time": 1790590468000,
+        "message": "",
+        "toolCalls": [{ "id": "call_book_1", "type": "function", "function": { "name": "book_visit", "arguments": "{\"start\": \"2026-10-01T15:00\"}" } }],
+        "secondsFromStart": 28.3
+      },
+      {
+        "role": "tool_call_result",
+        "time": 1790590469000,
+        "name": "book_visit",
+        "toolCallId": "call_book_1",
+        "result": "{\"booked\":true,\"start\":\"2026-10-01T15:00\",\"say\":\"Thursday 1 October at 3pm\",\"text\":true}",
+        "secondsFromStart": 29.6
+      },
+      { "role": "bot", "time": 1790590470000, "message": "That's booked for Thursday 1 October at 3pm. You'll get a text to confirm it. Goodbye.", "secondsFromStart": 30.4 }
+    ]
+  },
+  "analysis": {
+    "structuredData": {
+      "callerType": "customer",
+      "name": "Mrs Ahmed",
+      "about": "Boiler replacement",
+      "address": "27 Station Road",
+      "postcode": "ZZ1 4AB",
+      "summary": "The boiler keeps cutting out."
+    }
+  }
+}

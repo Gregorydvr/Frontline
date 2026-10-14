@@ -124,3 +124,25 @@ What it shows: the agent's new instructions and schema (postcode and first line 
 | The second try, with a word for each letter | **Not tested.** The caller said yes the first time |
 | The end of the call | **Known issue.** The agent said goodbye, then went on answering the caller's goodbyes, and did not end the call; the caller did |
 | What surprised us | The call was handled in Vapi's US region again (control address in AWS `us-west-2`). The caller's real first name is on practice and in Vapi's record of the call, as the brief allows for Greg's own test calls; it is not written here. The two known issues are to be fixed on Vapi's OpenAI realtime model, not on this one: see open questions 12 to 14 in `docs/decisions.md` |
+
+## Checking a call in one go
+
+After a test call, one command shows what happened on it, from both sides, and checks they agree:
+
+```sh
+npm run practice:last-call
+npm run practice:last-call -- --call <Vapi's id for the call>
+npm run practice:last-call -- --transcript
+```
+
+Run it on your own machine, with your Vapi private key in `VAPI_API_KEY`. It uses `cloudflared` to reach the control room as you: the first time, your browser opens for you to log in to Cloudflare Access. Neither the key nor the token is printed.
+
+What it shows, for the newest call to the practice agent, or the one named:
+
+- **From Vapi:** when the call ran and how it ended; the date line as Vapi filled it in; each tool the agent used, with its arguments (and whether they came as text or an object) and what Front-line answered, `text` included; whether the caller's number came through, as "mobile", "landline" or "withheld"; and which details the agent took down, by name only, with the caller type and the urgent item.
+- **From Front-line** (the control room's report, `GET /control/firms/<firm>/calls/vapi/<Vapi id>`): the call's outcome and recording; the customer, new or known; the job; the visit; the time held and what became of it; every row in the due list for the call and its visit, with UK times; and every text, the owner's urgent alert among them, with its state.
+- **Checks:** whether the two agree. For example: the agent was told a time was booked but no visit was filed; a confirmation was promised but did not go; the visit is not at the time booked; the agent marked a call urgent for something not on the firm's list; or the caller's number reads differently on each side. It ends with a failure when any check does not agree.
+
+No name, number, address or words from the call are printed, unless you add `--transcript`, which shows the conversation on screen and saves nothing.
+
+It changes nothing. It asks Vapi and the control room with GET only, and a test fails if it tries anything else; it does not reach Twilio at all, whose delivery reports are already in the record. Opening the report is a view in the control room, so the staff log records it, naming you (rule 15). That is the one row it adds.

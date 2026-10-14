@@ -19,6 +19,7 @@
 import type { Context, Hono } from 'hono';
 import type { AppEnv } from './app';
 import { instant, instantFromIso, type Instant } from './clock';
+import { callReportForStaff } from './call-report';
 import { everyMinute } from './due';
 import { loadExample } from './example/load';
 import { EXAMPLE_NOW } from './example/tidewell';
@@ -59,6 +60,7 @@ import {
   findCustomers,
   findOrAddStaff,
   firmWording,
+  findCallByProviderId,
   getCustomer,
   getFirm,
   historyForCustomer,
@@ -87,6 +89,7 @@ import {
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
 import {
   AGREED_HOW,
+  CALL_LIMITS,
   MESSAGE_KINDS,
   SERVICES,
   VISIT_KINDS,
@@ -300,6 +303,20 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="frontline-export-${at.firm.id}-${customer}.zip"`,
       });
+    }),
+  );
+
+  // A call's report, by Vapi's id for it, for staff checking what happened
+  // on it (scripts/last-call.js): ids, states and times, never a name, a
+  // number or words from the call. Read only, apart from the staff log.
+  app.get('/control/firms/:firm/calls/vapi/:vapiId', (c) =>
+    atFirm(c, 'view', async (at) => {
+      const vapiId = c.req.param('vapiId');
+      const call = vapiId.length > CALL_LIMITS.providerCallId ? null : await findCallByProviderId(at.firmDb, at.firm.id, 'vapi', vapiId);
+      const report = call === null ? null : await callReportForStaff(at.firmDb, at.firm.id, call);
+      if (report === null) return notFound(c);
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_call_report', report.customer === null ? {} : { customer: report.customer.id });
+      return c.json(report, 200, CONTROL_HEADERS);
     }),
   );
 

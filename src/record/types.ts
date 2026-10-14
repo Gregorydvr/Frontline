@@ -686,6 +686,8 @@ export const STAFF_ACTIONS = [
   'searched_customers',
   'viewed_customer',
   'viewed_delete',
+  // A call's report, for staff checking what happened on it (scripts/last-call.js).
+  'viewed_call_report',
   // Actions on a firm.
   'service_on',
   'service_off',

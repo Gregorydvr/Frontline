@@ -13,7 +13,8 @@
     "check:types": "wrangler types --check --strict-vars=false && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
     "check:lint": "eslint --max-warnings 0 .",
     "types": "wrangler types --strict-vars=false",
-    "check:screens": "node scripts/screens.js"
+    "check:screens": "node scripts/screens.js",
+    "practice:last-call": "node scripts/last-call.js c51d9d12-605d-4877-b762-b967fa5399c5 vapi/practice-assistant.json https://practice-control.vanrooyenenterprises.com"
   },
   "dependencies": {
     "fflate": "0.8.2",

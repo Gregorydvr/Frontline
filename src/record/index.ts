@@ -35,7 +35,7 @@ export {
 } from './customers';
 export { createJob, getJob, listJobs, listJobsForCustomer } from './jobs';
 export { cancelVisit, createVisit, getVisit, listVisitsForJob, listVisitsFrom, moveVisit } from './visits';
-export { findHoldForCall, holdTime, listTakenTimes, releaseHold } from './holds';
+export { findHoldForCall, holdTime, listHoldsForCall, listTakenTimes, releaseHold } from './holds';
 export { findLink, linkForDue } from './links';
 export { findCallByProviderId, getCall, listCallsBetween, markCallBooked, recordCall } from './calls';
 export { addHistory, historyBetween, historyForCustomer, historyForJob } from './history';

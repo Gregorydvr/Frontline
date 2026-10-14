@@ -119,6 +119,18 @@ export async function findHoldForCall(
 }
 
 /**
+ * Every time held on a call, whatever became of it (held, filed as a visit,
+ * let go), earliest first: for staff checking what happened on a call.
+ */
+export async function listHoldsForCall(db: RecordDb, firm: FirmId, provider: CallProvider, providerCallId: string): Promise<Hold[]> {
+  const { results } = await db.d1
+    .prepare(`${SELECT_HOLD} WHERE firm_id = ? AND provider = ? AND provider_call_id = ? ORDER BY created_at, rowid`)
+    .bind(firm, provider, providerCallId)
+    .all<HoldRow>();
+  return results.map(fromRow);
+}
+
+/**
  * Lets a held time go, such as when the call turned out urgent and was passed
  * to the owner. Gives false when it was not held.
  */
