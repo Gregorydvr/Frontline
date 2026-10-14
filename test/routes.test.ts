@@ -17,6 +17,7 @@ import {
   askFirmExport,
   createLoginLink,
   findOrAddStaff,
+  getCustomer,
   getFirm,
   listFirmExports,
   markLeaving,
@@ -126,7 +127,12 @@ async function screenOfB(path: string): Promise<void> {
  * and leaves the first firm as it was (its staff log apart, which is
  * written only by what was done under it).
  */
-async function controlAsB(path: (b: FirmId, customerOfA: string) => string, init: (customerOfA: { name: string }) => RequestInit = () => ({}), status: number[] = [200, 303, 404]): Promise<void> {
+async function controlAsB(
+  path: (b: FirmId, customerOfA: string) => string,
+  init: (customerOfA: { name: string }) => RequestInit = () => ({}),
+  status: number[] = [200, 303, 404],
+  page: (words: string) => void = () => undefined,
+): Promise<void> {
   const { a, b } = await twoFirms();
   const before = withoutStaffLog(await firmRows(env.DB, a));
   const open = controlOpener(createApp(deps));
@@ -150,6 +156,7 @@ async function controlAsB(path: (b: FirmId, customerOfA: string) => string, init
     for (const customer of customers) {
       expect(words).not.toContain(customer.id);
     }
+    page(words);
   }
   expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
 }
@@ -176,8 +183,25 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'POST /control/firms/:firm/customers/:customer/export': () =>
     controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/export`, () => controlForm({}), [404]),
   'GET /control/firms/:firm/customers/:customer/delete': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, undefined, [404]),
-  'POST /control/firms/:firm/customers/:customer/delete': () =>
-    controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, (customer) => controlForm({ name: customer.name }), [200]),
+  // Each of the first firm's customers, with their own name typed, under the
+  // second firm: the answer is the page for a customer already deleted or not
+  // found, never the one for a delete done, and every customer is still there.
+  'POST /control/firms/:firm/customers/:customer/delete': async () => {
+    const { a } = await twoFirms();
+    const customers = await listCustomers(db, a);
+    await controlAsB(
+      (b, customer) => `/control/firms/${b}/customers/${customer}/delete`,
+      (customer) => controlForm({ name: customer.name }),
+      [200],
+      (words) => {
+        expect(words).toContain('Already deleted, or not found.');
+        expect(words).not.toContain('The customer and everything held about them is deleted.');
+      },
+    );
+    for (const customer of customers) {
+      expect(await getCustomer(db, a, customer.id)).toEqual(customer);
+    }
+  },
   // Neither firm here is an example, so the demo firm's tools are "not found" for both.
   'POST /control/firms/:firm/clock': () => controlAsB((b) => `/control/firms/${b}/clock`, () => controlForm({ by: 'day' }), [404]),
   'GET /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, undefined, [404]),
