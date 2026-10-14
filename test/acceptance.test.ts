@@ -54,6 +54,7 @@ interface Caller {
   mobile: string;
   about: string;
   address: string;
+  postcode: string;
   summary: string;
 }
 
@@ -75,6 +76,7 @@ async function bookingCall(firmNumber: string, caller: Caller, callId: string, a
     name: caller.name,
     about: caller.about,
     address: caller.address,
+    postcode: caller.postcode,
     summary: caller.summary,
   }));
   body.message.customer = { number: caller.mobile };
@@ -97,6 +99,7 @@ const MRS_AHMED: Caller = {
   mobile: '+447700900003',
   about: 'Boiler replacement',
   address: '27 Station Road',
+  postcode: 'ZZ1 4AB',
   summary: 'The boiler keeps cutting out.',
 };
 const MRS_GREEN: Caller = {
@@ -104,6 +107,7 @@ const MRS_GREEN: Caller = {
   mobile: '+447700900015',
   about: 'No hot water',
   address: '24 Beech Avenue',
+  postcode: 'ZZ2 7EW',
   summary: 'No hot water since last night.',
 };
 

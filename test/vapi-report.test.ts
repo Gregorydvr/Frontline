@@ -22,6 +22,7 @@ describe('readVapiMessage', () => {
           name: 'Mr Price',
           about: 'Leak under the sink',
           address: '6 Bridge Street',
+          postcode: null,
           summary: 'A leak under the kitchen sink.',
           urgentMatch: 'a leak',
         },
@@ -94,6 +95,25 @@ describe('readVapiMessage', () => {
         },
       },
     });
+  });
+
+  it('reads the postcode in one form, and leaves out one that is not a postcode', () => {
+    const postcodeOf = (postcode: unknown) => {
+      const read = readVapiMessage(withDetails(report('mr-price-leak'), (data) => ({ ...data, postcode })));
+      return read.kind === 'report' && read.report.details?.callerType === 'customer' ? read.report.details.postcode : 'not read';
+    };
+    expect(postcodeOf('ZZ1 4AB')).toBe('ZZ1 4AB');
+    expect(postcodeOf('zz14ab')).toBe('ZZ1 4AB');
+    expect(postcodeOf(' ZZ12\n 3AB ')).toBe('ZZ12 3AB');
+    for (const wrong of ['ZZ1', 'Z Z one four A B', '6 Bridge Street', '', 14, null]) {
+      expect(postcodeOf(wrong)).toBeNull();
+    }
+    expect(postcodeOf(undefined)).toBeNull();
+  });
+
+  it('counts a first line too long to leave room for a postcode as missing', () => {
+    const body = withDetails(report('mr-price-leak'), (data) => ({ ...data, address: 'x'.repeat(111), postcode: 'ZZ1 4AB' }));
+    expect(readVapiMessage(body)).toMatchObject({ report: { details: { address: null, postcode: 'ZZ1 4AB' } } });
   });
 
   it('drops a transcript that is empty or far too long', () => {

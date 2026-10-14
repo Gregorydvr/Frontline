@@ -223,7 +223,8 @@ describe('when the call ends', () => {
     const [customer] = await listCustomers(db, firm);
     const [job] = await listJobs(db, firm);
     if (customer === undefined || job === undefined) throw new Error('Not filed');
-    expect(customer).toMatchObject({ name: 'Mrs Ahmed', mobile: '+447700900003', address: '27 Station Road' });
+    expect(customer).toMatchObject({ name: 'Mrs Ahmed', mobile: '+447700900003', address: '27 Station Road, ZZ1 4AB' });
+    expect(job.place).toBe('27 Station Road, ZZ1 4AB');
     const [visit] = await listVisitsForJob(db, firm, job.id);
     expect(visit).toMatchObject({
       startsAt: instantFromIso('2026-10-01T15:00:00+01:00'),

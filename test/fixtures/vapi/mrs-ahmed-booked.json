@@ -40,11 +40,27 @@
         },
         {
           "role": "user",
-          "message": "Mrs Ahmed, 27 Station Road. Could he come on Thursday?",
+          "message": "Mrs Ahmed, 27 Station Road, Z Z 1 4 A B. Could he come on Thursday?",
           "time": 1790590401000,
           "endTime": 1790590405200,
           "secondsFromStart": 18.88,
           "duration": 4200
+        },
+        {
+          "role": "bot",
+          "message": "That's Z, Z, 1, 4, A, B. Is that right?",
+          "time": 1790590406120,
+          "endTime": 1790590409120,
+          "secondsFromStart": 24,
+          "duration": 3000
+        },
+        {
+          "role": "user",
+          "message": "Yes.",
+          "time": 1790590410120,
+          "endTime": 1790590410920,
+          "secondsFromStart": 28,
+          "duration": 800
         },
         {
           "role": "bot",
@@ -71,7 +87,7 @@
           "duration": 4000
         }
       ],
-      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: My boiler keeps cutting out. I think I need a new one.\nAI: Tom can come and look at it and price a new one. Can I take your name and address?\nUser: Mrs Ahmed, 27 Station Road. Could he come on Thursday?\nAI: Thursday 1 October at 3pm is free. Shall I book that?\nUser: Yes please.\nAI: That's booked. You'll get a text to confirm it. Goodbye.",
+      "transcript": "AI: Hello, Tidewell Heating. I'm the automated assistant and this call is recorded. How can I help?\nUser: My boiler keeps cutting out. I think I need a new one.\nAI: Tom can come and look at it and price a new one. Can I take your name and address?\nUser: Mrs Ahmed, 27 Station Road, Z Z 1 4 A B. Could he come on Thursday?\nAI: That's Z, Z, 1, 4, A, B. Is that right?\nUser: Yes.\nAI: Thursday 1 October at 3pm is free. Shall I book that?\nUser: Yes please.\nAI: That's booked. You'll get a text to confirm it. Goodbye.",
       "recordingUrl": "https://frontline-practice-calls-in.example.invalid/firms/{firm}/8c3e1f5a-6b2d-4e97-a0c4-3d7b9f1e2a68-mono.mp3"
     },
     "analysis": {
@@ -81,6 +97,7 @@
         "name": "Mrs Ahmed",
         "about": "Boiler replacement",
         "address": "27 Station Road",
+        "postcode": "ZZ1 4AB",
         "summary": "The boiler keeps cutting out.",
         "urgentMatch": null
       },

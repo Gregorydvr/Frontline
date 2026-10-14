@@ -28,7 +28,7 @@ import {
   setStopButton,
 } from '../src/record';
 import { openRecord } from '../src/record/db';
-import type { FirmId } from '../src/record/types';
+import { CALL_LIMITS, type FirmId } from '../src/record/types';
 import { firmRows } from './helpers/db';
 import { testDeps } from './helpers/deps';
 import { asAnotherCall, report, send, tidewell, TOMS_MOBILE, withDetails, type Report, type ReportName } from './helpers/vapi';
@@ -426,6 +426,39 @@ describe('a call with its details missing', () => {
   it('makes text on several lines into one line', async () => {
     await send(app, withDetails(to('landline-caller'), (data) => ({ ...data, address: '12 Kiln Lane\n  Tidewell' })));
     expect((await listJobs(db, firm))[0]?.place).toBe('12 Kiln Lane Tidewell');
+  });
+});
+
+describe('the postcode', () => {
+  it('goes after the first line of the address, on the job and the new customer', async () => {
+    await send(app, withDetails(to('landline-caller'), (data) => ({ ...data, postcode: 'zz3 9ht' })));
+    expect((await listJobs(db, firm))[0]?.place).toBe('12 Kiln Lane, ZZ3 9HT');
+    expect((await listCustomers(db, firm))[0]?.address).toBe('12 Kiln Lane, ZZ3 9HT');
+  });
+
+  it('is not needed: a caller who does not know it is still a customer, with the first line alone', async () => {
+    await send(app, to('landline-caller'));
+    expect(await listCustomers(db, firm)).toMatchObject([{ name: 'Mrs Hall', address: '12 Kiln Lane' }]);
+    expect((await listJobs(db, firm))[0]?.place).toBe('12 Kiln Lane');
+  });
+
+  it('is left out when it is not a postcode, and the rest of the call is kept', async () => {
+    await send(app, withDetails(to('landline-caller'), (data) => ({ ...data, postcode: 'Kiln Lane' })));
+    expect((await listJobs(db, firm))[0]?.place).toBe('12 Kiln Lane');
+    expect(await calls()).toMatchObject([{ customer: { name: 'Mrs Hall' } }]);
+  });
+
+  it('always fits: the longest first line and the longest postcode make the longest place', async () => {
+    const firstLine = 'x'.repeat(CALL_LIMITS.firstLine);
+    await send(app, withDetails(to('landline-caller'), (data) => ({ ...data, address: firstLine, postcode: 'ZZ12 3AB' })));
+    expect((await listJobs(db, firm))[0]?.place).toBe(`${firstLine}, ZZ12 3AB`);
+    expect(`${firstLine}, ZZ12 3AB`).toHaveLength(CALL_LIMITS.place);
+  });
+
+  it('is a call with details missing when the first line is too long to leave room for a postcode', async () => {
+    await send(app, withDetails(to('landline-caller'), (data) => ({ ...data, address: 'x'.repeat(CALL_LIMITS.firstLine + 1) })));
+    expect(await listCustomers(db, firm)).toEqual([]);
+    expect(await callHistory()).toEqual(['details_missing']);
   });
 });
 
