@@ -71,6 +71,7 @@ describe('the practice agent’s schema', () => {
 interface AgentTool {
   type: string;
   async?: boolean;
+  messages?: { type: string; content?: string; blocking?: boolean }[];
   function: { name: string; parameters: { properties: Record<string, unknown>; required?: string[] } };
   server: { url: string; credentialId: string };
 }
@@ -110,6 +111,16 @@ describe('the practice agent’s tools', () => {
     }
   });
 
+  it('each say a line of their own as they start, without holding the call up, and another if Front-line does not answer', () => {
+    for (const tool of tools) {
+      const start = tool.messages?.find((message) => message.type === 'request-start');
+      const failed = tool.messages?.find((message) => message.type === 'request-failed');
+      expect(start?.content).toBeTruthy();
+      expect(start?.blocking).toBe(false);
+      expect(failed?.content).toBeTruthy();
+    }
+  });
+
   it('ask for the times on a day and book one, with the names, arguments and addresses the Worker reads', async () => {
     await tidewell(db, number);
     const freeTimes = named(TOOL_NAMES.freeTimes);
@@ -131,7 +142,7 @@ describe('the practice agent’s tools', () => {
     expect(book.function.parameters.required).toEqual([start]);
     const chosen = times[0];
     if (chosen === undefined) throw new Error('No time');
-    expect(await use(book, { [start ?? '']: chosen.start })).toEqual({ booked: true, start: chosen.start, say: chosen.say });
+    expect(await use(book, { [start ?? '']: chosen.start })).toEqual({ booked: true, start: chosen.start, say: chosen.say, text: true });
   });
 
   it('are named in the instructions, which give today’s date in UK time and never Vapi’s own date, which is UTC', () => {

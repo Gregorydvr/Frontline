@@ -118,7 +118,7 @@ describe('the acceptance story, steps 1 to 4', () => {
   it('1. Monday 28 September, 11:15: Mrs Ahmed’s call ends with a quote visit booked for Thursday 1 October at 3pm', async () => {
     firm = await tidewell(db, number);
     const booked = await bookingCall(number, MRS_AHMED, 'ahmed-28-sep', instantFromIso('2026-09-28T11:14:00+01:00'), '2026-10-01T15:00');
-    expect(booked).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm' });
+    expect(booked).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm', text: true });
 
     expect(await listCustomers(db, firm)).toHaveLength(1);
     const { customer, job, visit } = await filed(firm, 'Mrs Ahmed');

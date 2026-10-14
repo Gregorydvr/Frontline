@@ -211,7 +211,7 @@ The names below are again Vapi's, from `@vapi-ai/server-sdk` 2.0.1 (`CreateFunct
 | Free times | `free_times` | `https://<the practice address>/vapi/free-times` | the Bearer credential above |
 | Book | `book_visit` | `https://<the practice address>/vapi/book` | the same |
 
-Leave `async` off (the default), so the agent waits for the answer. Each tool goes in the agent's file under `model.tools`, with `type` `function`, the `function` below, and a `server` with the address above, the same `credentialId` as the reports and `timeoutSeconds` 20. `test/vapi-settings.test.ts` sends each of the practice file's tools to the Worker by its own name, address and argument names, so a mismatch fails the check.
+Leave `async` off (the default), so the agent waits for the answer. Each tool also has `messages`: a `request-start` line the agent says as the tool starts, with `blocking` `false` so it is said while Front-line answers, and a `request-failed` line for when Front-line does not answer in time. A time can be held even when Vapi gave up waiting, and the hold still becomes the visit when the report arrives, so `book_visit`'s failure line says nothing about whether it is booked. Each tool goes in the agent's file under `model.tools`, with `type` `function`, the `function` below, and a `server` with the address above, the same `credentialId` as the reports and `timeoutSeconds` 20. `test/vapi-settings.test.ts` sends each of the practice file's tools to the Worker by its own name, address and argument names, so a mismatch fails the check.
 
 The tools' `function.parameters`, which are ours to define:
 
@@ -247,7 +247,7 @@ The tools' `function.parameters`, which are ours to define:
 Each tool call gets `{ "results": [ { "name", "toolCallId", "result" } ] }`. The `result` is JSON for the agent to read:
 
 - `free_times`: `{ "times": [ { "start": "2026-10-01T08:00", "say": "Thursday 1 October at 8am" }, … ] }`, up to three, earliest first. An empty list means nothing is free then, or the firm takes no bookings.
-- `book_visit`: `{ "booked": true, "start": "2026-10-01T15:00", "say": "Thursday 1 October at 3pm" }`, or `{ "booked": false, "why": "taken" }` (someone else has just taken it), `"not_offered"` (outside the firm's hours, today, more than two weeks ahead, or not a start the firm offers) or `"unreadable"`.
+- `book_visit`: `{ "booked": true, "start": "2026-10-01T15:00", "say": "Thursday 1 October at 3pm", "text": true }`, or `{ "booked": false, "why": "taken" }` (someone else has just taken it), `"not_offered"` (outside the firm's hours, today, more than two weeks ahead, or not a start the firm offers) or `"unreadable"`.
 
 The times are UK time. Only quote visits are booked this way.
 
@@ -256,8 +256,8 @@ The times are UK time. Only quote visits are booked this way.
 - Ask `free_times` before offering any time, and read out the `say` words. Never make up a time.
 - Book with `book_visit` only once the caller has agreed a time, with its `start` exactly as `free_times` gave it.
 - If the caller changes their mind on the same call, book the new time. The first one is let go: one call holds one time.
-- Do not book on an urgent call. That is passed to the owner.
-- Tell the caller they will get a text to confirm it.
+- Do not book on an urgent call. Say it will be passed to the firm as soon as the call ends: the owner's alert goes seconds after the report arrives, at any hour, since quiet hours, the stop button and the service switches do not hold it. A call about something dangerous that is not on the firm's list gets no alert, so for it the agent says only that the firm will get back to them.
+- Tell the caller they will get a text to confirm it only when `book_visit` says `"text": true`. That is the same checks `send()` makes before a confirmation goes, taken on the safe side while the call is on: a UK mobile to text, the stop button off, no STOP from the number and no opt-out from a confirmation by anyone on it, agreed wording for both confirmations, and an address for customers' links. Between 8pm and 8am the text waits until 8am, so it is still `true`, unless 8am is after the visit's start. The caller's number comes from the tool call's `customer.number`, or `call.customer.number`; with neither, it is `false`.
 - Give today's date in UK time, so the agent can turn "Thursday" into a `day`. Vapi's own `{{date}}` and `{{now}}` are UTC, the wrong day between midnight and 1am in summer, so the instructions use Vapi's date filter with the time zone named:
 
   ```

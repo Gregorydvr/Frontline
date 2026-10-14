@@ -7,7 +7,8 @@
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { instantFromIso, pretendClock } from '../src/clock';
+import { runDue } from '../src/due';
+import { instant, instantFromIso, pretendClock } from '../src/clock';
 import { ownDiary } from '../src/diary/own';
 import {
   createCustomer,
@@ -21,8 +22,11 @@ import {
   listJobs,
   listTakenTimes,
   listVisitsForJob,
+  optOut,
+  optOutNumber,
   setDiaryRules,
   setService,
+  setStopButton,
 } from '../src/record';
 import { openRecord, Refused } from '../src/record/db';
 import { HOLD_LASTS } from '../src/record/holds';
@@ -30,6 +34,7 @@ import type { FirmId } from '../src/record/types';
 import { EXAMPLE_DIARY_RULES } from '../src/example/tidewell';
 import { ukMobile } from '../src/phone';
 import { historyLine } from '../src/history-lines';
+import { readToolCalls } from '../src/vapi-tools';
 import { testDeps } from './helpers/deps';
 import { asAnotherCall, report, send, sendTool, tidewell, toolAnswer, toolCall, withDetails, type Report } from './helpers/vapi';
 
@@ -130,7 +135,7 @@ describe('free times', () => {
 
 describe('booking a time', () => {
   it('holds it for the call, and booking twice with the same details holds it once', async () => {
-    expect(await book('2026-10-01T15:00')).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm' });
+    expect(await book('2026-10-01T15:00')).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm', text: true });
     expect(await book('2026-10-01T15:00')).toMatchObject({ booked: true });
     expect(await listTakenTimes(db, firm, ...allTime)).toEqual([
       { startsAt: instantFromIso('2026-10-01T15:00:00+01:00'), endsAt: instantFromIso('2026-10-01T16:00:00+01:00') },
@@ -211,6 +216,154 @@ describe('booking a time', () => {
       expect((await sendTool(app, address, report('supplier', number))).status).toBe(400);
     }
     expect(await listTakenTimes(db, firm, ...allTime)).toEqual([]);
+  });
+});
+
+describe('whether a text will confirm the booking', () => {
+  const MOBILE = '+447700900003';
+  /** Firms of their own, by number, for the cases that need one set up another way. */
+  const others = new Map<string, FirmId>();
+  const firmOn = (to: string): FirmId => others.get(to) ?? firm;
+
+  /** A tool call or report as it comes from this caller: a number, or none when it is withheld. */
+  function fromCaller(body: Report, caller: string | null): Report {
+    const copy = structuredClone(body);
+    const customer = caller === null ? {} : { number: caller };
+    copy.message.customer = customer;
+    (copy.message.call as Record<string, unknown>).customer = customer;
+    return copy;
+  }
+
+  async function bookFrom(caller: string | null, start: string, to: string, call: string, theApp = app): Promise<Record<string, unknown>> {
+    return toolAnswer(await sendTool(theApp, '/vapi/book', fromCaller(toolCall('book', { start }, { to, callId: call }), caller)));
+  }
+
+  /** Another firm set up as Tidewell Heating is, on a number of its own. */
+  async function anotherFirm(without: Parameters<typeof tidewell>[2] = []): Promise<{ to: string; own: FirmId }> {
+    numbers += 1;
+    const to = `+447700900${String(numbers)}`;
+    const own = await tidewell(db, to, without);
+    others.set(to, own);
+    return { to, own };
+  }
+
+  /**
+   * Books a time on a call from this caller, files the call as it ends, then
+   * runs its confirmation: at once, and again at 8am the next morning in case
+   * quiet hours held it. Gives what the agent was told, and whether a
+   * confirmation went to the caller.
+   */
+  async function bookAndFile(
+    caller: string | null,
+    start = '2026-10-01T15:00',
+    options: { to?: string; app?: typeof app; deps?: typeof deps } = {},
+  ): Promise<{ text: unknown; sent: boolean }> {
+    const to = options.to ?? number;
+    const theApp = options.app ?? app;
+    const theDeps = options.deps ?? deps;
+    const call = callId(`text-${String(caller)}`);
+    const answer = await bookFrom(caller, start, to, call, theApp);
+    expect(answer).toMatchObject({ booked: true, start });
+    const sentBefore = theDeps.texts.sent.length;
+    clock.set(instant(clock.now() + 60_000));
+    expect((await send(theApp, fromCaller(asAnotherCall(report('mrs-ahmed-booked', to), call), caller))).status).toBe(200);
+    const [filed] = await listCallsBetween(db, firmOn(to), ...allTime);
+    const visit = filed?.visit?.id;
+    if (visit === undefined) throw new Error('No visit');
+    const confirmation = (await listDueForVisit(db, firmOn(to), visit)).find((due) => due.action === 'send_confirmation');
+    if (confirmation === undefined) throw new Error('No confirmation');
+    await runDue(db, theDeps, firmOn(to), confirmation.id);
+    const morning = instantFromIso('2026-09-29T08:00:00+01:00');
+    if (clock.now() < morning) {
+      clock.set(morning);
+      await runDue(db, theDeps, firmOn(to), confirmation.id);
+    }
+    const sent = theDeps.texts.sent.slice(sentBefore).some((text) => caller === null || text.to === caller);
+    return { text: answer.text, sent };
+  }
+
+  it('is promised to a caller on a mobile, and goes', async () => {
+    expect(await bookAndFile(MOBILE)).toEqual({ text: true, sent: true });
+  });
+
+  it('is not promised to a caller on a landline, and none goes', async () => {
+    expect(await bookAndFile('+441632960123')).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised to a caller whose number is withheld, and none goes', async () => {
+    expect(await bookAndFile(null)).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised to a number that texted STOP, and none goes', async () => {
+    await optOutNumber(db, firm, ukMobile(MOBILE));
+    expect(await bookAndFile(MOBILE)).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised when the customer on the number asked for no texts, and none goes', async () => {
+    const customer = await createCustomer(db, firm, { name: 'Mrs Ahmed', mobile: ukMobile(MOBILE) });
+    await optOut(db, firm, customer, 'every', { kind: 'customer' });
+    expect(await bookAndFile(MOBILE)).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised when anyone on the number opted out of either confirmation: the safe side, since the caller is matched only as the call ends', async () => {
+    for (const kind of ['visit_confirmation', 'visit_confirmation_first'] as const) {
+      const { to, own } = await anotherFirm();
+      const customer = await createCustomer(db, own, { name: 'Someone Else', mobile: ukMobile(MOBILE) });
+      await optOut(db, own, customer, kind, { kind: 'customer' });
+      expect(await bookFrom(MOBILE, '2026-10-01T15:00', to, callId(kind))).toMatchObject({ booked: true, text: false });
+    }
+  });
+
+  it('is not promised while the stop button is on, and none goes', async () => {
+    await setStopButton(db, firm, true, frontline);
+    expect(await bookAndFile(MOBILE)).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised when either confirmation has no agreed wording', async () => {
+    for (const without of ['visit_confirmation', 'visit_confirmation_first'] as const) {
+      const { to } = await anotherFirm([without]);
+      expect(await bookFrom(MOBILE, '2026-10-01T15:00', to, callId(without))).toMatchObject({ booked: true, text: false });
+    }
+  });
+
+  it('is not promised to a new customer when the first text has no agreed wording, and none goes', async () => {
+    const { to } = await anotherFirm(['visit_confirmation_first']);
+    expect(await bookAndFile(MOBILE, '2026-10-01T15:00', { to })).toEqual({ text: false, sent: false });
+  });
+
+  it('is not promised while this copy has no address for customers’ links, and none goes', async () => {
+    const noLinks = { ...testDeps(clock), linkAddress: null };
+    expect(await bookAndFile(MOBILE, '2026-10-01T15:00', { app: createApp(() => noLinks), deps: noLinks })).toEqual({ text: false, sent: false });
+  });
+
+  it('is promised between 8pm and 8am, and goes at 8am', async () => {
+    clock.set(instantFromIso('2026-09-28T21:00:00+01:00'));
+    expect(await bookAndFile(MOBILE, '2026-09-30T15:00')).toEqual({ text: true, sent: true });
+  });
+
+  it('is not promised between 8pm and 8am for a visit that starts before 8am, and none goes', async () => {
+    await setDiaryRules(db, firm, { ...EXAMPLE_DIARY_RULES, opens: 7 * 60 }, frontline);
+    clock.set(instantFromIso('2026-09-28T21:00:00+01:00'));
+    expect(await bookAndFile(MOBILE, '2026-09-29T07:00')).toEqual({ text: false, sent: false });
+  });
+});
+
+describe('reading a tool call', () => {
+  function callerOf(customer: unknown, callCustomer: unknown) {
+    const body = toolCall('book', { start: '2026-10-01T15:00' });
+    body.message.customer = customer;
+    (body.message.call as Record<string, unknown>).customer = callCustomer;
+    const read = readToolCalls(body);
+    return read.kind === 'tool_calls' ? read.from : null;
+  }
+
+  it('reads the number the call came from, from the message or else from the call', () => {
+    expect(callerOf({ number: '+447700900003' }, undefined)).toEqual({ kind: 'mobile', number: '+447700900003' });
+    expect(callerOf(undefined, { number: '07700 900003' })).toEqual({ kind: 'mobile', number: '+447700900003' });
+    expect(callerOf({ number: '+441632960123' }, undefined)).toEqual({ kind: 'landline', number: '+441632960123' });
+    expect(callerOf({}, {})).toEqual({ kind: 'withheld' });
+    expect(callerOf(undefined, undefined)).toEqual({ kind: 'withheld' });
+    expect(callerOf({ number: 'anonymous' }, undefined)).toEqual({ kind: 'withheld' });
   });
 });
 
