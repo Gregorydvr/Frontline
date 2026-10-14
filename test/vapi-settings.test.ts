@@ -1,7 +1,13 @@
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { settingsProblem } from '../scripts/vapi-settings.js';
+import { createApp } from '../src/app';
+import { instantFromIso, pretendClock } from '../src/clock';
+import { openRecord } from '../src/record/db';
 import { readVapiMessage } from '../src/vapi-report';
-import { report, withDetails } from './helpers/vapi';
+import { TOOL_NAMES } from '../src/vapi-tools';
+import { testDeps } from './helpers/deps';
+import { report, sendTool, tidewell, toolAnswer, toolCall, withDetails } from './helpers/vapi';
 import practice from '../vapi/practice-assistant.json';
 
 // scripts/vapi-assistant.js refuses a settings file that holds a key, token,
@@ -58,5 +64,81 @@ describe('the practice agent’s schema', () => {
   it('asks for the first line and the postcode as separate fields', () => {
     expect(properties.address.description).toContain('Not the postcode.');
     expect(properties.postcode.type).toBe('string');
+  });
+});
+
+/** One of the agent's tools, as the settings file holds it. */
+interface AgentTool {
+  type: string;
+  async?: boolean;
+  function: { name: string; parameters: { properties: Record<string, unknown>; required?: string[] } };
+  server: { url: string; credentialId: string };
+}
+
+describe('the practice agent’s tools', () => {
+  const tools = practice.model.tools as readonly AgentTool[];
+  const clock = pretendClock(instantFromIso('2026-09-28T11:14:00+01:00'));
+  const db = openRecord(env.DB, clock);
+  const deps = testDeps(clock);
+  const app = createApp(() => deps);
+  const number = '+447700900150';
+
+  /** Uses one of the file's tools as Vapi would: its name, at its address, with the arguments given. */
+  async function use(tool: AgentTool, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const address = new URL(tool.server.url).pathname;
+    if (address !== '/vapi/free-times' && address !== '/vapi/book') throw new Error(`${tool.function.name} goes to ${address}`);
+    const body = toolCall(address === '/vapi/book' ? 'book' : 'free-times', args, { to: number, callId: 'practice-agent-tools' });
+    const [call] = body.message.toolCallList as { function: { name: string } }[];
+    if (call === undefined) throw new Error('No tool call');
+    call.function.name = tool.function.name;
+    return toolAnswer(await sendTool(app, address, body));
+  }
+
+  function named(name: string): AgentTool {
+    const tool = tools.find((one) => one.function.name === name);
+    if (tool === undefined) throw new Error(`No tool named ${name}`);
+    return tool;
+  }
+
+  it('are exactly Front-line’s two, on the same server as the reports, with the same credential, and the agent waits for each', () => {
+    expect(tools.map((tool) => tool.function.name).sort()).toEqual(Object.values(TOOL_NAMES).sort());
+    for (const tool of tools) {
+      expect(tool.type).toBe('function');
+      expect(tool.async).toBeUndefined();
+      expect(new URL(tool.server.url).origin).toBe(new URL(practice.server.url).origin);
+      expect(tool.server.credentialId).toBe(practice.server.credentialId);
+    }
+  });
+
+  it('ask for the times on a day and book one, with the names, arguments and addresses the Worker reads', async () => {
+    await tidewell(db, number);
+    const freeTimes = named(TOOL_NAMES.freeTimes);
+    const book = named(TOOL_NAMES.book);
+    // The day goes by the name the file gives it: a name the Worker does not
+    // read would give the times from tomorrow, not from Thursday.
+    const [day, ...moreForFreeTimes] = Object.keys(freeTimes.function.parameters.properties);
+    expect(day).toBeDefined();
+    expect(moreForFreeTimes).toEqual([]);
+    expect(freeTimes.function.parameters.required ?? []).toEqual([]);
+    const answer = await use(freeTimes, { [day ?? '']: '2026-10-01' });
+    const times = answer.times as { start: string; say: string }[];
+    expect(times.length).toBeGreaterThan(0);
+    for (const time of times) expect(time.start.startsWith('2026-10-01T')).toBe(true);
+
+    const [start, ...moreForBook] = Object.keys(book.function.parameters.properties);
+    expect(start).toBeDefined();
+    expect(moreForBook).toEqual([]);
+    expect(book.function.parameters.required).toEqual([start]);
+    const chosen = times[0];
+    if (chosen === undefined) throw new Error('No time');
+    expect(await use(book, { [start ?? '']: chosen.start })).toEqual({ booked: true, start: chosen.start, say: chosen.say });
+  });
+
+  it('are named in the instructions, which give today’s date in UK time and never Vapi’s own date, which is UTC', () => {
+    const [system] = practice.model.messages;
+    const instructions = system?.content ?? '';
+    for (const name of Object.values(TOOL_NAMES)) expect(instructions).toContain(name);
+    expect(instructions).toContain('{{"now" | date: "%Y-%m-%d", "Europe/London"}}');
+    for (const filled of instructions.match(/\{\{[^}]*\}\}/g) ?? []) expect(filled).toContain('"Europe/London"');
   });
 });
