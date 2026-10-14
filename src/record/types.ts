@@ -302,6 +302,8 @@ export const CALL_LIMITS = {
   name: 60,
   about: 80,
   place: 120,
+  /** The first line of the address, short enough that ", " and a postcode still fit in the place. */
+  firstLine: 110,
   caller: 60,
   summary: 200,
   urgentItem: 60,

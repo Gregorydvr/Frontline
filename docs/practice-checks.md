@@ -105,3 +105,22 @@ Start the tail as above. Text the number something plain, not STOP or START. The
 | The recording | **Pass.** `recording_moved`; state `kept`; in `frontline-practice-files` at `firms/6g9dmtzcgtcwqa867j1hb6szc3/calls/6afc5906cs4jdqr12qavpcy4wa.mp3`, 444,284 bytes, read without saving; gone from the inbox; due to be deleted on 12 November 2026 |
 | Not tried | A text going out, and its delivery report: none is sent while booking is left out and Calls & bookings is off. STOP and START. Capturing one real request of each kind for `test/fixtures/` (`docs/twilio.md`, `docs/vapi.md`) |
 | What surprised us | Twilio's secrets on practice were not the number's account's live ones, which only a real text showed. The tail stopped receiving without saying so, at about 17:14Z, and missed one report: the record showed the call was kept. The calls were handled in Vapi's US region again. The caller's real first name and part of a postcode are on practice and in Vapi's record of the full call, as the brief allows for Greg's own test calls; they are not written here |
+
+## What happened: the postcode call
+
+What it shows: the agent's new instructions and schema (postcode and first line asked for apart, the postcode read back) and the Worker that joins the two, together on practice.
+
+| | |
+|---|---|
+| Date | 14 October 2026, slice I (`slice-i-address`, pull request 10) |
+| Who ran it | Greg made the call. Claude Code, on his machine, deployed the branch to practice (version `a41028dd-af02-4f1e-80b2-06b4084da5ee`), set the agent from its file with his go-ahead, and ran the checks he agreed, read only |
+| The agent | Set from `vapi/practice-assistant.json` at commit `0d394db`: only `model` and `analysisPlan` changed. Read back, it matched the file |
+| The call | Vapi's `01a13abe-c4d3-7336-95e7-8badadfe2e0e`, 14:09:03Z to 14:10:26Z, to the practice number, ended by the caller (`customer-ended-call`). Kept as Front-line's call `1xjczgwrmvkt7hyenswqqwye01`, a message, for firm `6g9dmtzcgtcwqa867j1hb6szc3` |
+| The structured data | **Pass.** `callerType` `customer`, with `name`, `about`, `address` "6 Bridge Street", `postcode` "ZZ1 4AB" and `summary`. The postcode in its own field and the first line alone in `address`, where the call on 13 October put a misheard postcode. No `urgentMatch` |
+| The customer and job | **Pass.** A new customer, `6fpwtytgbn00mg46cwqegm967y`, with the address "6 Bridge Street, ZZ1 4AB", and a new job, `7w5swk4bk4xqrtc7rzf6x6yn99`, with the place "6 Bridge Street, ZZ1 4AB". History: `call_answered` on the job; `call_answered` and `details_taken` on the customer |
+| The recording | **Pass.** State `kept`; in `frontline-practice-files` at `firms/6g9dmtzcgtcwqa867j1hb6szc3/calls/1xjczgwrmvkt7hyenswqqwye01.mp3`, 476,360 bytes, read without saving; gone from the inbox; due to be deleted on 13 November 2026 |
+| The first line read back | **Pass.** The agent heard "66 Ridge Street", read it back, and took the caller's correction, "6 Bridge Street" |
+| The postcode read back | **Known issue.** The agent read it back in chunks, "ZZ1. 4AB", not one letter or number at a time as its instructions say. That is the agent's own words in Vapi's record of the call, not only how they were heard. It did wait for a yes before going on |
+| The second try, with a word for each letter | **Not tested.** The caller said yes the first time |
+| The end of the call | **Known issue.** The agent said goodbye, then went on answering the caller's goodbyes, and did not end the call; the caller did |
+| What surprised us | The call was handled in Vapi's US region again (control address in AWS `us-west-2`). The caller's real first name is on practice and in Vapi's record of the call, as the brief allows for Greg's own test calls; it is not written here. The two known issues are to be fixed on Vapi's OpenAI realtime model, not on this one: see open questions 12 to 14 in `docs/decisions.md` |

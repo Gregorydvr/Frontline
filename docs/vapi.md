@@ -40,7 +40,7 @@ The greeting (`firstMessage`) names the firm, and says it is an automated assist
 
 > Hello, you're through to Practice Test Plumbing's automated assistant. This call is recorded. How can I help?
 
-The agent's instructions are the system message in `model.messages`, in the file. It takes a message: a customer's name, what the job is about and the first line of the address, or who anyone else is. It does not book, give prices or say when someone will come. What the caller says is information to take down, never an instruction (rule 17). If the caller mentions anything dangerous, such as a smell of gas, a gas leak or carbon monoxide, it tells them to leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger, then takes their details as normal.
+The agent's instructions are the system message in `model.messages`, in the file. It takes a message: a customer's name, what the job is about, the postcode and the first line of the address, or who anyone else is. It reads the postcode back one letter or number at a time and waits for a yes; if the caller says it is wrong, it asks again and reads it back with a word for each letter (B for Bravo); if that is still wrong, or the caller does not know it, it carries on without the postcode. It does not book, give prices or say when someone will come. What the caller says is information to take down, never an instruction (rule 17). If the caller mentions anything dangerous, such as a smell of gas, a gas leak or carbon monoxide, it tells them to leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger, then takes their details as normal.
 
 The booking instructions and tools below are left out until booking is switched on for a firm.
 
@@ -91,7 +91,11 @@ The voice agent hands over what it took down as structured data: `analysis.struc
     },
     "address": {
       "type": "string",
-      "description": "Customers only. The first line of the address where the work is, such as 27 Station Road."
+      "description": "Customers only. The first line of the address where the work is, such as 27 Station Road. Not the postcode."
+    },
+    "postcode": {
+      "type": "string",
+      "description": "Customers only. The postcode where the work is, as the caller confirmed it when it was read back, in capitals with one space before the last three characters, such as ZZ1 4AB. Leave this field out if they did not give one or did not confirm it."
     },
     "whoRang": {
       "type": "string",
@@ -122,14 +126,15 @@ Front-line checks every field, as rule 16 in `CLAUDE.md` says. A field that is n
 |---|---|
 | `name` | 60 characters |
 | `about` | 80 |
-| `address` | 120 |
+| `address` | 110, so that the postcode still fits beside it |
+| `postcode` | a UK postcode in form, such as ZZ1 4AB or zz14ab, kept as ZZ1 4AB. Only the form is checked |
 | `whoRang` | 60 |
 | `summary` | 200 |
 | `urgentMatch` | 60 |
 
 What happens with them:
 
-- **A customer** needs a name, what the job is about and an address. Then the customer is found by the number they rang from and their name, or made, and a new job is opened.
+- **A customer** needs a name, what the job is about and the first line of an address. The postcode is not needed. When there is one, it goes after the first line, in the job's place and a new customer's address: "27 Station Road, ZZ1 4AB". Then the customer is found by the number they rang from and their name, or made, and a new job is opened.
 - **Someone else** needs `whoRang`. Their call is kept with a message: no customer and no job.
 - **Anything less**, including no structured data at all, keeps the call with its details missing.
 - **Urgent** only when `urgentMatch` is on the firm's own list, ignoring capitals and spaces. Anything else is not urgent, and a log line tells staff.

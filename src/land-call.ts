@@ -164,7 +164,8 @@ function urgentItemOf(firm: Firm, details: CallDetails | null): string | null {
 
 /**
  * Who the call was for. A caller who gave a name, what the job is about and
- * an address is a customer; anything less is a call with details missing.
+ * the first line of an address is a customer; anything less is a call with
+ * details missing. The postcode is not needed: the caller may not know it.
  *
  * Every customer's call opens a new job for now. When a second call should
  * join an open job is open question 5 in docs/decisions.md.
@@ -181,23 +182,25 @@ async function callFor(
   if (details.callerType === 'other') {
     return details.whoRang === null ? { kind: 'details_missing' } : { kind: 'not_customer', caller: details.whoRang };
   }
-  const { name, about, address } = details;
+  const { name, about, address, postcode } = details;
   if (name === null || about === null || address === null) {
     return { kind: 'details_missing' };
   }
+  // Where the work is, as one line, such as "27 Station Road, ZZ1 4AB".
+  const place = postcode === null ? address : `${address}, ${postcode}`;
   // The customer on the same number with the same name. Two people can share
   // a number, and a second customer is safer than mixing them up.
   const known = (await customersOn(db, firm, from)).find((customer) => sameWords(customer.name, name));
   if (known !== undefined) {
-    return { kind: 'customer', customer: known.id, about, place: address };
+    return { kind: 'customer', customer: known.id, about, place };
   }
   switch (from.kind) {
     case 'mobile':
-      return { kind: 'new_customer', name, mobile: from.number, landline: null, noText: null, about, place: address };
+      return { kind: 'new_customer', name, mobile: from.number, landline: null, noText: null, about, place };
     case 'landline':
-      return { kind: 'new_customer', name, mobile: null, landline: from.number, noText: 'landline', about, place: address };
+      return { kind: 'new_customer', name, mobile: null, landline: from.number, noText: 'landline', about, place };
     case 'withheld':
-      return { kind: 'new_customer', name, mobile: null, landline: null, noText: 'withheld', about, place: address };
+      return { kind: 'new_customer', name, mobile: null, landline: null, noText: 'withheld', about, place };
   }
 }
 

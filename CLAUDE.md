@@ -117,6 +117,7 @@ src/                 the Worker
   log.ts             log(): the only writer to the console, ids only
   london.ts          reads an instant as UK time (Europe/London), and turns a UK date and time into an instant
   phone.ts           UK mobiles and landlines, kept as +447700900001 and +441632960001
+  postcode.ts        UK postcodes, kept as ZZ1 4AB
   secret.ts          shared secrets, such as the token Vapi sends, compared safely
   vapi-report.ts     reads Vapi's report as a call ends, checking every field
   vapi-tools.ts      reads Vapi's tool calls during a call (free times, book), checking every field

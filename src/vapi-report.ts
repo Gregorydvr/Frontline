@@ -30,6 +30,7 @@
 
 import { instantFromIso, type Instant } from './clock';
 import { callerNumber, ukMobile, type CallerNumber, type UkMobile } from './phone';
+import { ukPostcode } from './postcode';
 import { CALL_LIMITS } from './record/types';
 
 export interface CallReport {
@@ -65,7 +66,10 @@ export type CallDetails =
       name: string | null;
       /** What the job is about, such as "Boiler replacement". */
       about: string | null;
+      /** The first line of the address, such as "27 Station Road". */
       address: string | null;
+      /** The postcode, written as ZZ1 4AB. The caller may not know it. */
+      postcode: string | null;
       summary: string | null;
       /** The item on the firm's urgent list that the call matched, as the agent wrote it. */
       urgentMatch: string | null;
@@ -144,7 +148,8 @@ function readDetails(data: unknown): CallDetails | null {
         callerType: 'customer',
         name: text(field(data, 'name'), CALL_LIMITS.name),
         about: text(field(data, 'about'), CALL_LIMITS.about),
-        address: text(field(data, 'address'), CALL_LIMITS.place),
+        address: text(field(data, 'address'), CALL_LIMITS.firstLine),
+        postcode: postcode(field(data, 'postcode')),
         summary,
         urgentMatch: text(field(data, 'urgentMatch'), CALL_LIMITS.urgentItem),
       };
@@ -153,6 +158,12 @@ function readDetails(data: unknown): CallDetails | null {
     default:
       return null;
   }
+}
+
+/** A UK postcode, or null for anything that is not one. */
+function postcode(value: unknown): string | null {
+  const written = text(value, 20);
+  return written === null ? null : ukPostcode(written);
 }
 
 /** One field of an object, or undefined for anything that is not an object. */
