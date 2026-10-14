@@ -234,6 +234,18 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 13. Whether the realtime mode can run in Vapi's EU region, and with OpenAI's EU data residency. Part of open question 10, and like it, **blocks going live** if live uses realtime.
 14. Two fixes to the agent, to be made on the realtime model once question 12 is answered, not on the model practice uses now. Both were seen on the postcode call on 14 Oct 2026 (`docs/practice-checks.md`): the agent read the postcode back in chunks ("ZZ1. 4AB") rather than one letter or number at a time, and it did not end the call after saying goodbye. The second try, reading the postcode back with a word for each letter, is still to be tested. The agent's wording stays under Assumed until then.
 
+## Next, after booking is tested
+
+Tasks Greg has asked for, in this order, once booking has been tested on practice. Not built yet.
+
+1. **Calls & bookings only with set-up complete.** It cannot be switched on while the firm's page lists anything still missing. Decided 14 Oct 2026: see Settled.
+2. **The agent updates itself.** When a firm's agent settings are saved in the control room, starting with the urgent list, Front-line puts them on that firm's agent in Vapi itself, with the same compare-and-check the script makes (`scripts/vapi-assistant.js`): send only what changed, read it back, and show staff anything Vapi holds that differs. The control room becomes the only place to edit them. Why: today a change made in the control room and not copied to Vapi by hand means the agent does not know it, so an urgent call gets no alert. Asked for by Greg, 14 Oct 2026. To settle before it is built:
+   - The Worker would hold a Vapi private key. The Assumed row on recordings says it holds none, and a Vapi private key reaches the whole Vapi account: every agent, and every call's record. Whether Vapi offers a key that reaches less is to be found out.
+   - `CLAUDE.md` says creating or changing anything in a provider's account happens only on Greg's machine, when he asks. This would have the deployed Worker change a firm's agent when staff save. `CLAUDE.md` changes with it.
+   - What staff see when Vapi refuses or cannot be reached: the change kept in the record, and the firm's page showing that its agent is behind.
+   - What happens to the files in `vapi/` and the script: kept for what the control room does not hold, such as the recording settings, or retired.
+3. **Trade starter packs.** At firm set-up, choosing a trade (such as heating, plumbing or electrical) fills in the urgent list, the diary rules and the draft wording to start from. Staff can change each. The wording still goes only once the owner has agreed it (rule 2). Asked for by Greg, 14 Oct 2026. To settle: which trades, and each pack's urgent list, rules and words, which are new wording for Greg to agree.
+
 ## To do before live
 
 Things already known to need doing when live is set up. Each comes from a check on practice.
