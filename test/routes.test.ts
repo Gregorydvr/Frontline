@@ -4,7 +4,7 @@
 // skip the wall.
 
 import { env } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { instant, instantFromIso, pretendClock } from '../src/clock';
 import { loadExample } from '../src/example/load';
@@ -17,6 +17,7 @@ import {
   askFirmExport,
   createLoginLink,
   findOrAddStaff,
+  getCustomer,
   getFirm,
   listFirmExports,
   markLeaving,
@@ -126,19 +127,43 @@ async function screenOfB(path: string): Promise<void> {
  * and leaves the first firm as it was (its staff log apart, which is
  * written only by what was done under it).
  */
-async function controlAsB(path: (b: FirmId, customerOfA: string) => string, init: (customerOfA: { name: string }) => RequestInit = () => ({}), status: number[] = [200, 303, 404]): Promise<void> {
+async function controlAsB(
+  path: (b: FirmId, customerOfA: string) => string,
+  init: (customerOfA: { name: string }) => RequestInit = () => ({}),
+  status: number[] = [200, 303, 404],
+  page: (words: string) => void = () => undefined,
+): Promise<void> {
   const { a, b } = await twoFirms();
   const before = withoutStaffLog(await firmRows(env.DB, a));
   const open = controlOpener(createApp(deps));
-  for (const customer of await listCustomers(db, a)) {
-    const answer = await open(path(b, customer.id), init(customer));
+  const customers = await listCustomers(db, a);
+  // One request for each of the first firm's customers. Where neither the
+  // address nor the form names the customer, the request is the same for
+  // every one, so it is sent once.
+  const requests = new Map<string, { path: string; init: RequestInit }>();
+  for (const customer of customers) {
+    const request = { path: path(b, customer.id), init: init(customer) };
+    const key = isPlain(request.init) ? JSON.stringify([request.path, request.init]) : customer.id;
+    if (!requests.has(key)) requests.set(key, request);
+  }
+  expect(requests.size).toBeGreaterThan(0);
+  for (const request of requests.values()) {
+    const answer = await open(request.path, request.init);
     expect(status).toContain(answer.status);
     const words = await answer.text();
     expect(words).not.toContain('Tidewell Heating');
-    expect(words).not.toContain(customer.id);
     expect(words).not.toContain(a);
+    for (const customer of customers) {
+      expect(words).not.toContain(customer.id);
+    }
+    page(words);
   }
   expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+}
+
+/** A request whose every part shows in its JSON, so two that read the same are the same request. */
+function isPlain(init: RequestInit): boolean {
+  return (init.body === undefined || typeof init.body === 'string') && (init.headers === undefined || Object.getPrototypeOf(init.headers) === Object.prototype);
 }
 
 function withoutStaffLog(rows: Record<string, unknown[]>): Record<string, unknown[]> {
@@ -158,8 +183,25 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'POST /control/firms/:firm/customers/:customer/export': () =>
     controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/export`, () => controlForm({}), [404]),
   'GET /control/firms/:firm/customers/:customer/delete': () => controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, undefined, [404]),
-  'POST /control/firms/:firm/customers/:customer/delete': () =>
-    controlAsB((b, customer) => `/control/firms/${b}/customers/${customer}/delete`, (customer) => controlForm({ name: customer.name }), [200]),
+  // Each of the first firm's customers, with their own name typed, under the
+  // second firm: the answer is the page for a customer already deleted or not
+  // found, never the one for a delete done, and every customer is still there.
+  'POST /control/firms/:firm/customers/:customer/delete': async () => {
+    const { a } = await twoFirms();
+    const customers = await listCustomers(db, a);
+    await controlAsB(
+      (b, customer) => `/control/firms/${b}/customers/${customer}/delete`,
+      (customer) => controlForm({ name: customer.name }),
+      [200],
+      (words) => {
+        expect(words).toContain('Already deleted, or not found.');
+        expect(words).not.toContain('The customer and everything held about them is deleted.');
+      },
+    );
+    for (const customer of customers) {
+      expect(await getCustomer(db, a, customer.id)).toEqual(customer);
+    }
+  },
   // Neither firm here is an example, so the demo firm's tools are "not found" for both.
   'POST /control/firms/:firm/clock': () => controlAsB((b) => `/control/firms/${b}/clock`, () => controlForm({ by: 'day' }), [404]),
   'GET /control/firms/:firm/reset': () => controlAsB((b) => `/control/firms/${b}/reset`, undefined, [404]),
@@ -519,6 +561,14 @@ function routesOf(app: ReturnType<typeof createApp>): string[] {
 }
 
 describe('every route', () => {
+  // The two firms every cross-firm case uses, loaded before the first of
+  // them, so loading them is not timed as part of whichever case runs first.
+  // Loading the demo firm twice can take several seconds while every test
+  // file runs at once, so the load has a longer limit than a test.
+  beforeAll(async () => {
+    await twoFirms();
+  }, 30_000);
+
   it.each([
     ['the deployed version', createApp(deps)],
     ['the version for this machine', createLocalApp(deps)],
