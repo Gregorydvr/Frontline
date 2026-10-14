@@ -220,6 +220,9 @@ From the build and release plan of 6 October 2026 unless it says otherwise.
 9. The web address for the app and for customers' links. It should be kept apart from the addresses used for outreach emails. Built so that both addresses are settings, empty until they are chosen: see Assumed (9 Oct 2026, slices E and F).
 10. Whether Vapi moves to its EU region. **Blocks going live.** The practice test call on 13 Oct 2026 was handled in Vapi's US region (its control address was in AWS `us-west-2`), though the recording went to the EU. No real customer's call goes through Vapi until where Vapi handles calls, and what it keeps there, is answered and accepted. See `docs/practice-checks.md`.
 11. How staff are alerted when an owner sends Message us. No staff mobiles are held anywhere yet. The message is kept from slice F, and shown in the control room, unread, from slice G (see Assumed); the alert waits for the answer.
+12. Whether live's voice agents use Vapi's OpenAI realtime mode. Greg plans to, as of 14 Oct 2026; practice's agent is still on `gpt-4.1`. Moving is expected to change the agent's `model` in each file in `vapi/`, and nothing in the Worker, which reads only the report as a call ends; that is to be checked on practice first.
+13. Whether the realtime mode can run in Vapi's EU region, and with OpenAI's EU data residency. Part of open question 10, and like it, **blocks going live** if live uses realtime.
+14. Two fixes to the agent, to be made on the realtime model once question 12 is answered, not on the model practice uses now. Both were seen on the postcode call on 14 Oct 2026 (`docs/practice-checks.md`): the agent read the postcode back in chunks ("ZZ1. 4AB") rather than one letter or number at a time, and it did not end the call after saying goodbye. The second try, reading the postcode back with a word for each letter, is still to be tested. The agent's wording stays under Assumed until then.
 
 ## To do before live
 
