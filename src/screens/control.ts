@@ -94,6 +94,7 @@ export const CONTROL_WORDS = {
     move_recording: 'move of a recording',
     delete_recording: 'delete of a recording',
     sweep: 'daily sweep',
+    tell_owner_booked: 'text to the owner about a booking',
     make_firm_export: 'firm export',
     delete_firm: 'delete of the firm',
   } satisfies Record<DueAction, string>,
@@ -110,6 +111,7 @@ export const CONTROL_WORDS = {
     urgent_alert: 'Urgent alert',
     urgent_alert_details_missing: 'Urgent alert',
     login_link: 'Login text',
+    visit_booked: 'Booking text',
   } satisfies Record<MessageKind, string>,
   toOwner: 'to the owner, {name}',
   someone: 'Someone',
@@ -276,6 +278,7 @@ export const CONTROL_WORDS = {
   closes: 'Last visit ends by',
   every: 'Minutes between starts',
   daysAhead: 'Days ahead that times are offered',
+  nextDayFrom: 'On the next working day, nothing before',
   lengths: 'How long each kind of visit takes, in minutes. Leave empty for one that is not booked. The voice agent books quote visits only.',
   visitKinds: { quote_visit: 'Quote visit', install: 'Install', service: 'Service' } satisfies Record<VisitKind, string>,
   diaryProblems: {
@@ -283,6 +286,7 @@ export const CONTROL_WORDS = {
     hours: 'The first visit must start before the last one ends.',
     every: 'Minutes between starts: at least 5, and no more than the hours allow.',
     days_ahead: 'Days ahead: from 1 to 90.',
+    next_day: 'Next working day: a time of day, such as 12:00.',
     length: 'Each length: at least 5 minutes, and no more than the hours allow.',
   } satisfies Record<DiaryProblem['kind'], string>,
   wording: 'Wording',
@@ -296,6 +300,7 @@ export const CONTROL_WORDS = {
     urgent_alert: 'Urgent alert to the owner',
     urgent_alert_details_missing: 'Urgent alert to the owner, details missing',
     login_link: 'Login text to the owner',
+    visit_booked: 'Text to the owner when a visit is booked',
   } satisfies Record<MessageKind, string>,
   gapsItCanUse: 'Gaps it can use',
   gapMeanings: {
@@ -900,6 +905,7 @@ export interface DiaryForm {
   closes: string;
   every: string;
   daysAhead: string;
+  nextDayFrom: string;
   lengths: Readonly<Record<VisitKind, string>>;
 }
 
@@ -923,6 +929,7 @@ ${[1, 2, 3, 4, 5, 6, 0].map(
 <div class="field cr-field"><label for="cr-closes">${CONTROL_WORDS.closes}</label><input id="cr-closes" name="closes" type="time" value="${form.closes}" required></div>
 <div class="field cr-field"><label for="cr-every">${CONTROL_WORDS.every}</label><input id="cr-every" name="every" type="number" min="5" max="720" value="${form.every}" required></div>
 <div class="field cr-field"><label for="cr-ahead">${CONTROL_WORDS.daysAhead}</label><input id="cr-ahead" name="daysAhead" type="number" min="1" max="90" value="${form.daysAhead}" required></div>
+<div class="field cr-field"><label for="cr-next-day">${CONTROL_WORDS.nextDayFrom}</label><input id="cr-next-day" name="nextDayFrom" type="time" value="${form.nextDayFrom}" required></div>
 <p class="meta">${CONTROL_WORDS.lengths}</p>
 ${VISIT_KINDS.map(
   (kind) =>

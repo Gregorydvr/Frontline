@@ -293,7 +293,7 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     controlAsB(
       (b) => `/control/firms/${b}/diary`,
       // The second firm's own rules again, as the other cases use them.
-      () => controlForm({ day: ['1', '2', '3', '4', '5'], opens: '08:00', closes: '16:00', every: '60', daysAhead: '14', length_quote_visit: '60' }),
+      () => controlForm({ day: ['1', '2', '3', '4', '5'], opens: '08:00', closes: '16:00', every: '60', daysAhead: '14', nextDayFrom: '12:00', length_quote_visit: '60' }),
       [303],
     ),
   'GET /control/firms/:firm/wording': () => controlAsB((b) => `/control/firms/${b}/wording`),

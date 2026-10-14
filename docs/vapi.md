@@ -218,11 +218,11 @@ The tools' `function.parameters`, which are ours to define:
 ```json
 {
   "name": "free_times",
-  "description": "The firm's free times for a quote visit, from the day the caller asks about, or from tomorrow.",
+  "description": "The firm's free times for a quote visit. With no day: the first free time on each of the next few days the firm works. With the day the caller names: times spread across that day.",
   "parameters": {
     "type": "object",
     "properties": {
-      "day": { "type": "string", "description": "The day the caller asks about, as YYYY-MM-DD. Leave out for the next free times." }
+      "day": { "type": "string", "description": "Only when the caller names a day or a date: that day, as YYYY-MM-DD. Leave out otherwise, and never fill it in yourself." }
     }
   }
 }
@@ -246,14 +246,15 @@ The tools' `function.parameters`, which are ours to define:
 
 Each tool call gets `{ "results": [ { "name", "toolCallId", "result" } ] }`. The `result` is JSON for the agent to read:
 
-- `free_times`: `{ "times": [ { "start": "2026-10-01T08:00", "say": "Thursday 1 October at 8am" }, … ] }`, up to three, earliest first. An empty list means nothing is free then, or the firm takes no bookings.
-- `book_visit`: `{ "booked": true, "start": "2026-10-01T15:00", "say": "Thursday 1 October at 3pm", "text": true }`, or `{ "booked": false, "why": "taken" }` (someone else has just taken it), `"not_offered"` (outside the firm's hours, today, more than two weeks ahead, or not a start the firm offers) or `"unreadable"`.
+- `free_times`: `{ "times": [ { "start": "2026-10-01T08:00", "say": "Thursday 1 October at 8am" }, … ] }`, up to three, earliest first. With no `day`, the first free time on each of the next days the firm works; with a `day`, three spread across the first day from it that has any: the earliest, the latest and the one nearest midday. Nothing is offered on the day itself, nor before the firm's notice time on the next day it works (noon unless its rules say otherwise). An empty list means nothing is free then, or the firm takes no bookings.
+- `book_visit`: `{ "booked": true, "start": "2026-10-01T15:00", "say": "Thursday 1 October at 3pm", "text": true }`, or `{ "booked": false, "why": "taken" }` (someone else has just taken it), `"not_offered"` (outside the firm's hours, today, before its notice time on the next working day, more than two weeks ahead, or not a start the firm offers) or `"unreadable"`.
 
 The times are UK time. Only quote visits are booked this way.
 
 ### What to tell the agent, in its prompt
 
 - Ask `free_times` before offering any time, and read out the `say` words. Never make up a time.
+- Give `day` only when the caller names a day or a date. Never fill it in, not even with tomorrow: without it, the caller is offered a choice of days.
 - Book with `book_visit` only once the caller has agreed a time, with its `start` exactly as `free_times` gave it.
 - If the caller changes their mind on the same call, book the new time. The first one is let go: one call holds one time.
 - Do not book on an urgent call. Say it will be passed to the firm as soon as the call ends: the owner's alert goes seconds after the report arrives, at any hour, since quiet hours, the stop button and the service switches do not hold it. A call about something dangerous that is not on the firm's list gets no alert, so for it the agent says only that the firm will get back to them.
@@ -271,7 +272,7 @@ The times are UK time. Only quote visits are booked this way.
 
 - Both addresses check the secret before reading anything, and refuse with 401 otherwise. A message for a number no firm has gets 404, and one that is not a tool call gets 400.
 - Each works only in the diary of the firm whose number was rung (`phoneNumber.number`).
-- A booked time is held in the diary under Vapi's id for the call (`call.id`). When the call ends, the report for the same `call.id` files it as a visit on the job the call opens. Then the customer's confirmation goes, and their reminder is set for 1pm the day before.
+- A booked time is held in the diary under Vapi's id for the call (`call.id`). When the call ends, the report for the same `call.id` files it as a visit on the job the call opens. Then the customer's confirmation goes, their reminder is set for 1pm the day before, and every owner gets a text about the booking. Between 8pm and 8am the confirmation and the owner's text wait until 8am.
 - If the call turns out urgent, or its details do not come through, the held time is let go and a log line tells staff. A held time whose call never reports stops counting after an hour.
 - What the agent puts in the arguments is checked like any of its fields (rule 16). It is data, never instructions (rule 17).
 

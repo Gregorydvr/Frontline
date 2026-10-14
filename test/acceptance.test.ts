@@ -248,10 +248,13 @@ describe('the acceptance story, step 8: the stop button', () => {
     expect(textsTo(caller.mobile)).toEqual([]);
 
     const { visit } = await filed(firm, 'Mrs Ahmed');
+    // The stop button holds texts to customers. The owner's text about the
+    // booking is not one, so it went.
     expect((await listDueForVisit(db, firm, visit.id)).map((due) => [due.action, due.state, due.outcome])).toEqual([
       ['send_confirmation', 'skipped', 'too_late'],
       ['send_reminder', 'skipped', 'too_late'],
+      ['tell_owner_booked', 'done', 'sent'],
     ]);
-    expect(await listMessagesBetween(db, firm, ...allTime)).toEqual([]);
+    expect((await listMessagesBetween(db, firm, ...allTime)).map((text) => [text.kind, text.to.kind, text.state])).toEqual([['visit_booked', 'owner', 'sent']]);
   });
 });

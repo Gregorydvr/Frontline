@@ -43,6 +43,8 @@ export type LogEvent =
   | 'alert_nobody_to_tell'
   | 'reminder_visit_changed'
   | 'confirmation_visit_changed'
+  | 'booking_text_visit_changed'
+  | 'booking_text_nobody_to_tell'
   // The voice agent asking for free times and booking one during a call
   // (src/app.ts and src/booking.ts).
   | 'tool_call_refused'
