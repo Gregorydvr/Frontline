@@ -4,7 +4,7 @@
 // skip the wall.
 
 import { env } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { instant, instantFromIso, pretendClock } from '../src/clock';
 import { loadExample } from '../src/example/load';
@@ -130,15 +130,33 @@ async function controlAsB(path: (b: FirmId, customerOfA: string) => string, init
   const { a, b } = await twoFirms();
   const before = withoutStaffLog(await firmRows(env.DB, a));
   const open = controlOpener(createApp(deps));
-  for (const customer of await listCustomers(db, a)) {
-    const answer = await open(path(b, customer.id), init(customer));
+  const customers = await listCustomers(db, a);
+  // One request for each of the first firm's customers. Where neither the
+  // address nor the form names the customer, the request is the same for
+  // every one, so it is sent once.
+  const requests = new Map<string, { path: string; init: RequestInit }>();
+  for (const customer of customers) {
+    const request = { path: path(b, customer.id), init: init(customer) };
+    const key = isPlain(request.init) ? JSON.stringify([request.path, request.init]) : customer.id;
+    if (!requests.has(key)) requests.set(key, request);
+  }
+  expect(requests.size).toBeGreaterThan(0);
+  for (const request of requests.values()) {
+    const answer = await open(request.path, request.init);
     expect(status).toContain(answer.status);
     const words = await answer.text();
     expect(words).not.toContain('Tidewell Heating');
-    expect(words).not.toContain(customer.id);
     expect(words).not.toContain(a);
+    for (const customer of customers) {
+      expect(words).not.toContain(customer.id);
+    }
   }
   expect(withoutStaffLog(await firmRows(env.DB, a))).toEqual(before);
+}
+
+/** A request whose every part shows in its JSON, so two that read the same are the same request. */
+function isPlain(init: RequestInit): boolean {
+  return (init.body === undefined || typeof init.body === 'string') && (init.headers === undefined || Object.getPrototypeOf(init.headers) === Object.prototype);
 }
 
 function withoutStaffLog(rows: Record<string, unknown[]>): Record<string, unknown[]> {
@@ -519,6 +537,14 @@ function routesOf(app: ReturnType<typeof createApp>): string[] {
 }
 
 describe('every route', () => {
+  // The two firms every cross-firm case uses, loaded before the first of
+  // them, so loading them is not timed as part of whichever case runs first.
+  // Loading the demo firm twice can take several seconds while every test
+  // file runs at once, so the load has a longer limit than a test.
+  beforeAll(async () => {
+    await twoFirms();
+  }, 30_000);
+
   it.each([
     ['the deployed version', createApp(deps)],
     ['the version for this machine', createLocalApp(deps)],
