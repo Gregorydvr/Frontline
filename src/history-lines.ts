@@ -133,6 +133,7 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
   stop_off: null,
   number_set: null,
   urgent_list_set: null,
+  trade_set: null,
   owner_mobile_set: null,
   diary_rules_set: null,
   // Setting up a firm, in slice H2: for who did what, not lines the owner reads.

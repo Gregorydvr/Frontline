@@ -305,6 +305,10 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   },
   'GET /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`),
   'POST /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`, () => controlForm({ items: 'a leak' }), [303]),
+  // The trade fills in only the second firm's own list and rules, and the
+  // first firm is unchanged (controlAsB checks it).
+  'GET /control/firms/:firm/trade': () => controlAsB((b) => `/control/firms/${b}/trade`),
+  'POST /control/firms/:firm/trade': () => controlAsB((b) => `/control/firms/${b}/trade`, () => controlForm({ trade: 'plumbing_heating' }), [303]),
   'GET /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`),
   'POST /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`, () => controlForm({ agent: '00000000-0000-4000-8000-0000000000b2' }), [303]),
   'POST /control/firms/:firm/agent/check': () => controlAsB((b) => `/control/firms/${b}/agent/check`, () => controlForm({}), [303]),
@@ -653,6 +657,8 @@ describe('every route', () => {
       'POST /control/firms/:firm/number',
       'GET /control/firms/:firm/urgent',
       'POST /control/firms/:firm/urgent',
+      'GET /control/firms/:firm/trade',
+      'POST /control/firms/:firm/trade',
       'GET /control/firms/:firm/agent',
       'POST /control/firms/:firm/agent',
       'POST /control/firms/:firm/agent/check',

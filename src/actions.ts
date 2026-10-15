@@ -62,6 +62,7 @@ import {
   setOwnerMobile,
   setService,
   setStopButton,
+  setTrade,
   setUrgentList,
   setWording,
   deleteFirm,
@@ -72,7 +73,7 @@ import type { CustomerFile, Deleted } from './record/control';
 import type { CustomerDetails } from './record/customers';
 import { Refused, withFirmClock, type RecordDb } from './record/db';
 import { LOGIN_LINK_LIMITS, type SessionToken } from './record/logins';
-import type { NumberSet } from './record/firms';
+import type { NumberSet, TradeSet } from './record/firms';
 import type { RecordedTextIn } from './record/texts-in';
 import type {
   Actor,
@@ -91,6 +92,7 @@ import type {
   Service,
   StaffId,
   TextProvider,
+  Trade,
   WordingId,
 } from './record/types';
 import { stopOrStart } from './messages';
@@ -435,6 +437,17 @@ export const ACTIONS = {
       const { db } = await firmDb(ctx, input.firm);
       await setDiaryRules(db, input.firm, input.rules, ctx.by);
       log('firm_set_up_changed', { firm: input.firm, staff });
+    },
+  }),
+  choose_trade: action({
+    says: 'Sets the firm’s trade. Its starter pack fills in the urgent list and the diary rules if the firm has none yet, and gives the drafts its wording starts from. Nothing is agreed or sent.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId; trade: Trade }): Promise<TradeSet> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      const filled = await setTrade(db, input.firm, input.trade, ctx.by);
+      log('firm_set_up_changed', { firm: input.firm, staff });
+      return filled;
     },
   }),
   agree_wording: action({

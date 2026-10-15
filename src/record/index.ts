@@ -22,6 +22,7 @@ export {
   setFirmNumber,
   setService,
   setStopButton,
+  setTrade,
   setUrgentList,
 } from './firms';
 export { createOwner, getOwner, listOwners, setOwnerMobile } from './owners';

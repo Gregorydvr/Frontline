@@ -116,6 +116,7 @@ export function firmEntry(
     | 'urgent_list_set'
     | 'owner_mobile_set'
     | 'diary_rules_set'
+    | 'trade_set'
     | 'firm_added'
     | 'owner_added'
     | 'wording_agreed'

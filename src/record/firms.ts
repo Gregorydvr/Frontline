@@ -6,12 +6,14 @@ import { instant } from '../clock';
 import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { diaryRulesProblems, NAME_LIMITS, nameProblems, urgentListProblems } from '../set-up';
+import { TRADE_PACKS } from '../trade-packs';
 import { pushAgentStatements } from './agents';
 import { bit, Refused, runTogether, type RecordDb } from './db';
 import { firmEntry } from './history';
 import { staffLogStatement } from './staff';
 import {
   SERVICES,
+  TRADES,
   VISIT_KINDS,
   type Actor,
   type DiaryRules,
@@ -20,6 +22,7 @@ import {
   type Service,
   type StaffAction,
   type StaffId,
+  type Trade,
   type VisitKind,
 } from './types';
 
@@ -163,6 +166,55 @@ export async function setDiaryRules(db: RecordDb, firm: FirmId, rules: DiaryRule
   ]);
 }
 
+/** What choosing a trade filled in: the urgent list and the diary rules, each only if the firm had none. */
+export interface TradeSet {
+  urgentList: boolean;
+  diaryRules: boolean;
+}
+
+/**
+ * Sets the firm's trade, and records who did it. Its starter pack
+ * (src/trade-packs.ts) fills in the urgent list and the diary rules, each
+ * only if the firm has none yet, recorded as set by the same actor, in the
+ * same step: a pack never changes what the firm already has. The drafts its
+ * wording starts from follow the trade, and are never agreed for it. If the
+ * urgent list is filled and the firm has an agent in Vapi, a row to push it
+ * goes on the due list, as when the list is saved.
+ */
+export async function setTrade(db: RecordDb, firm: FirmId, trade: Trade, by: Actor): Promise<TradeSet> {
+  if (!TRADES.includes(trade)) {
+    throw new Refused();
+  }
+  const found = await getFirm(db, firm);
+  if (found === null) throw new Refused();
+  const pack = TRADE_PACKS[trade];
+  const filled: TradeSet = { urgentList: found.urgentList.length === 0, diaryRules: found.diaryRules === null };
+  // Each fill holds only if the firm still has nothing there; should staff
+  // save one in between, the database changes no row and the whole step is
+  // refused, so nothing they saved is replaced.
+  await changeFirm(
+    db,
+    [
+      db.d1.prepare('UPDATE firms SET trade = ? WHERE id = ?').bind(trade, firm),
+      ...recorded(db, firm, 'trade_set', by, 'set_trade'),
+      ...(filled.urgentList
+        ? [
+            db.d1.prepare("UPDATE firms SET urgent_list = ? WHERE id = ? AND urgent_list = '[]'").bind(JSON.stringify(pack.urgentList), firm),
+            ...recorded(db, firm, 'urgent_list_set', by, 'set_urgent_list'),
+          ]
+        : []),
+      ...(filled.diaryRules
+        ? [
+            db.d1.prepare('UPDATE firms SET diary_rules = ? WHERE id = ? AND diary_rules IS NULL').bind(JSON.stringify(diaryRulesOf(pack.diaryRules)), firm),
+            ...recorded(db, firm, 'diary_rules_set', by, 'set_diary_rules'),
+          ]
+        : []),
+    ],
+    filled.urgentList ? pushAgentStatements(db, firm) : [],
+  );
+  return filled;
+}
+
 /** Whether something is diary rules that make sense, since types can be got round. */
 function areDiaryRules(rules: unknown): rules is DiaryRules {
   return diaryRulesProblems(rules).length === 0;
@@ -193,7 +245,7 @@ function diaryRulesOf(rules: DiaryRules): DiaryRules {
 function recorded(
   db: RecordDb,
   firm: FirmId,
-  kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set',
+  kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set' | 'trade_set',
   by: Actor,
   action: StaffAction,
 ): D1PreparedStatement[] {
@@ -244,7 +296,7 @@ async function changeFirm(db: RecordDb, statements: D1PreparedStatement[], follo
 
 /** The columns a firm is read from, for firmFromRow(). */
 export const FIRM_COLUMNS = `id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-  stopped, phone_number, urgent_list, diary_rules, clock_ahead, left_at, left_by, created_at`;
+  stopped, phone_number, urgent_list, diary_rules, trade, clock_ahead, left_at, left_by, created_at`;
 
 export interface FirmRow {
   id: string;
@@ -259,6 +311,7 @@ export interface FirmRow {
   phone_number: string | null;
   urgent_list: string;
   diary_rules: string | null;
+  trade: string | null;
   clock_ahead: number;
   left_at: number | null;
   left_by: string | null;
@@ -281,6 +334,7 @@ export function firmFromRow(row: FirmRow): Firm {
     phoneNumber: row.phone_number as UkMobile | null,
     urgentList: urgentListFrom(row.urgent_list),
     diaryRules: diaryRulesFrom(row.diary_rules),
+    trade: TRADES.find((trade) => trade === row.trade) ?? null,
     clockAhead: row.clock_ahead,
     leaving: row.left_at === null || row.left_by === null ? null : { at: instant(row.left_at), by: row.left_by as StaffId },
     createdAt: instant(row.created_at),

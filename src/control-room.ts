@@ -27,7 +27,8 @@ import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
 import { act, type ActionContext } from './actions';
 import { VAPI_ID } from './providers/vapi';
-import { DRAFT_WORDING, makeWords } from './messages';
+import { makeWords } from './messages';
+import { draftFor } from './trade-packs';
 import { segments } from './gsm';
 import { callerNumber, nationalNumber } from './phone';
 import {
@@ -74,6 +75,7 @@ import {
   CALL_LIMITS,
   MESSAGE_KINDS,
   SERVICES,
+  TRADES,
   VISIT_KINDS,
   type AgreedHow,
   type CallId,
@@ -103,6 +105,7 @@ import {
   ownerScreen,
   urgentProblemWords,
   urgentScreen,
+  tradeScreen,
   agentScreen,
   type SetUpView,
   wordingListScreen,
@@ -545,6 +548,28 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
+  // Choosing the firm's trade (task 2 of queue 2): its starter pack fills in
+  // only what the firm has none of yet.
+  app.get('/control/firms/:firm/trade', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_trade');
+      return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, []));
+    }),
+  );
+
+  app.post('/control/firms/:firm/trade', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = (await readForm(c.req.raw)).get('trade') ?? '';
+      const trade = TRADES.find((one) => one === typed);
+      if (trade === undefined) {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_trade');
+        return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, [CONTROL_WORDS.tradeChoose]), 400);
+      }
+      await act(asTaken(c, at), 'choose_trade', { firm: at.firm.id, trade });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
   app.get('/control/firms/:firm/agent', (c) =>
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
@@ -626,7 +651,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.get('/control/firms/:firm/wording/:kind', (c) =>
     atKind(c, 'view', async (at, kind) => {
       const versions = await listWording(at.firmDb, at.firm.id, `text:${kind}`);
-      const words = versions[0]?.words ?? DRAFT_WORDING[kind] ?? '';
+      const words = versions[0]?.words ?? draftFor(at.firm.trade, kind) ?? '';
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_wording', { messageKind: kind });
       return drawn(c, CONTROL_WORDS.textKinds[kind], wordingScreen(await wordingView(c, at, kind, words, versions, null, { owner: '', how: '' })));
     }),
