@@ -172,6 +172,58 @@ function at(secondsIn) {
   return secondsIn === null ? '' : `at ${secondsIn.toFixed(1)}s `;
 }
 
+/**
+ * The safety lines the agent may say, word for word, from its settings file:
+ * the quoted line on each "- …: " row under the rule that begins "If the
+ * caller mentions anything dangerous". Empty when there is no such list.
+ */
+export function safetyLines(settings) {
+  const system = settings?.model?.messages?.find((message) => message.role === 'system');
+  const instructions = typeof system?.content === 'string' ? system.content : '';
+  const start = instructions.indexOf('If the caller mentions anything dangerous');
+  if (start < 0) return [];
+  const rule = instructions.slice(start).split('\n\n')[0] ?? '';
+  return [...rule.matchAll(/^- [^:\n]+: "([^"\n]+)"$/gm)].map((found) => found[1]);
+}
+
+/** What marks one of the agent's lines as safety advice (Greg, 15 Oct 2026). */
+const SAFETY_WORDS = ['999', 'leave the property', 'emergency'];
+
+/**
+ * Where the agent gave safety advice that is not one of its safety lines:
+ * a line of its own with 999, "leave the property" or "emergency" in it once
+ * every listed line said in it is taken out. One problem for each, giving
+ * only how far into the call it was, never what was said. Read from Vapi's
+ * record of the call, so it is checked with or without --transcript.
+ */
+export function safetyCheck(call, lines) {
+  if (lines.length === 0) {
+    return ["The agent's settings file has no list of safety lines, so its safety advice could not be checked."];
+  }
+  const allowed = lines.map(plain);
+  const problems = [];
+  for (const message of call?.artifact?.messages ?? []) {
+    if (message.role !== 'bot' || typeof message.message !== 'string') continue;
+    let said = plain(message.message);
+    for (const line of allowed) said = said.split(line).join(' | ');
+    if (SAFETY_WORDS.some((word) => said.includes(plain(word)))) {
+      const at = typeof message.secondsFromStart === 'number' ? ` at ${message.secondsFromStart.toFixed(1)}s` : '';
+      problems.push(`The agent gave safety advice that is not one of its safety lines${at}. Look at it with --transcript.`);
+    }
+  }
+  return problems;
+}
+
+/** Words as spoken, for comparing: lower case, plain apostrophes, no punctuation, and numbers written without gaps. */
+function plain(words) {
+  return words
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[^a-z0-9']+/g, ' ')
+    .replace(/(\d) (?=\d)/g, '$1')
+    .trim();
+}
+
 /** The conversation, with each tool call in its place. Shown only with --transcript. */
 export function conversation(call) {
   const lines = [];

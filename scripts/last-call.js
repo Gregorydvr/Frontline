@@ -19,7 +19,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { conversation, crossCheck, firmFromSettings, readOnly, reportLines, summariseVapiCall } from './call-report-text.js';
+import { conversation, crossCheck, firmFromSettings, readOnly, reportLines, safetyCheck, safetyLines, summariseVapiCall } from './call-report-text.js';
 
 const API = 'https://api.vapi.ai';
 const VAPI_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -39,14 +39,15 @@ for (let i = 0; i < rest.length; i += 1) {
 if (asked !== null && !VAPI_ID.test(asked)) fail('The call id is not one of Vapi\'s ids.');
 const key = process.env.VAPI_API_KEY;
 if (!key) fail('VAPI_API_KEY is not set.');
-const firm = firmFromSettings(JSON.parse(readFileSync(file, 'utf8')));
+const settings = JSON.parse(readFileSync(file, 'utf8'));
+const firm = firmFromSettings(settings);
 if (firm === null) fail('The settings file has no recordingPath of the form /firms/<firm id>.');
 
 const callId = asked ?? (await newestCall());
 const call = await vapi(`/call/${callId}`);
 const frontline = await controlReport(await accessToken());
 const summary = summariseVapiCall(call);
-const problems = crossCheck(summary, frontline);
+const problems = [...crossCheck(summary, frontline), ...safetyCheck(call, safetyLines(settings))];
 console.log(reportLines(summary, frontline, problems).join('\n'));
 if (withTranscript) {
   console.log(`\nThe conversation, on screen only:\n${conversation(call).join('\n')}`);
