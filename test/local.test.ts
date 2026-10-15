@@ -134,7 +134,8 @@ describe('playing a booking call on this machine', () => {
     const answer = await app.request('/local/book', { method: 'POST' }, env);
     expect(answer.status).toBe(200);
     const words = await answer.text();
-    expect(words).toContain('Quote visit booked for Friday 16 October at 8am. Her confirmation: sent.');
+    // Thursday 15 October, 10am: the next working day, Friday, from noon.
+    expect(words).toContain('Quote visit booked for Friday 16 October at midday. Her confirmation: sent.');
     const link = /href="(https:\/\/links\.example\/d\/[0-9a-z]{26})"/.exec(words)?.[1];
     if (link === undefined) throw new Error('No link');
     const page = await app.request(link, {}, env);

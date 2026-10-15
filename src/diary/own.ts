@@ -6,7 +6,7 @@ import { cancelVisit, getFirm, getVisit, holdTime, listTakenTimes, moveVisit } f
 import type { RecordDb } from '../record/db';
 import type { Actor, FirmId, VisitId, VisitKind } from '../record/types';
 import type { CallRef, Diary, FreeTime, HoldResult, MoveResult } from '.';
-import { isOffered, offeredStarts, reminderDue, visitLength, type LondonDate } from './times';
+import { isOffered, offeredStarts, reminderDue, spreadTimes, visitLength, type LondonDate } from './times';
 
 export function ownDiary(db: RecordDb): Diary {
   return {
@@ -28,10 +28,9 @@ export function ownDiary(db: RecordDb): Diary {
         const endsAt = instant(startsAt + length);
         if (!taken.some((time) => time.startsAt < endsAt && time.endsAt > startsAt)) {
           free.push({ startsAt, endsAt });
-          if (free.length === options.count) break;
         }
       }
-      return free;
+      return spreadTimes(free, options.from !== null, options.count);
     },
 
     async holdForCall(firm: FirmId, call: CallRef, kind: VisitKind, startsAt: Instant): Promise<HoldResult> {

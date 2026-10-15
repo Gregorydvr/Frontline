@@ -113,6 +113,7 @@ export type DiaryProblem =
   | { kind: 'hours' }
   | { kind: 'every' }
   | { kind: 'days_ahead' }
+  | { kind: 'next_day' }
   | { kind: 'length'; visit: VisitKind | null };
 
 /**
@@ -123,7 +124,7 @@ export type DiaryProblem =
  */
 export function diaryRulesProblems(rules: unknown): DiaryProblem[] {
   if (typeof rules !== 'object' || rules === null) return [{ kind: 'no_days' }];
-  const { days, opens, closes, every, lengths, daysAhead } = rules as Record<string, unknown>;
+  const { days, opens, closes, every, lengths, daysAhead, nextDayFrom } = rules as Record<string, unknown>;
   const minuteOfDay = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 24 * 60;
   const problems: DiaryProblem[] = [];
   if (
@@ -143,6 +144,9 @@ export function diaryRulesProblems(rules: unknown): DiaryProblem[] {
   }
   if (!Number.isSafeInteger(daysAhead) || (daysAhead as number) < 1 || (daysAhead as number) > DIARY_LIMITS.daysAhead) {
     problems.push({ kind: 'days_ahead' });
+  }
+  if (nextDayFrom !== undefined && !minuteOfDay(nextDayFrom)) {
+    problems.push({ kind: 'next_day' });
   }
   if (typeof lengths !== 'object' || lengths === null || Array.isArray(lengths)) {
     problems.push({ kind: 'length', visit: null });
@@ -277,7 +281,7 @@ export function previewFacts(kind: MessageKind, firm: Firm, owner: Owner | null,
     summary: longest ? long(CALL_LIMITS.summary) : 'Her boiler keeps cutting out.',
     number: nationalNumber('+447700900003' as UkMobile),
     link:
-      kind === 'login_link' ? `${app}/in/${AN_ID}` : kind === 'urgent_alert' ? `${app}/jobs/${AN_ID}` : `${links}/d/${AN_ID}`,
+      kind === 'login_link' ? `${app}/in/${AN_ID}` : kind === 'urgent_alert' || kind === 'visit_booked' ? `${app}/jobs/${AN_ID}` : `${links}/d/${AN_ID}`,
   };
   return Object.fromEntries(MESSAGE_KINDS[kind].gaps.map((gap) => [gap, all[gap] ?? null]));
 }

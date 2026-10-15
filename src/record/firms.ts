@@ -179,6 +179,7 @@ function diaryRulesOf(rules: DiaryRules): DiaryRules {
     every: rules.every,
     lengths,
     daysAhead: rules.daysAhead,
+    ...(rules.nextDayFrom === undefined ? {} : { nextDayFrom: rules.nextDayFrom }),
   };
 }
 

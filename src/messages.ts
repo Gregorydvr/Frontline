@@ -27,6 +27,8 @@ import type { MessageKind, VisitKind } from './record/types';
  *   job, empty while this copy has no address for the app
  * - urgent_alert_details_missing: {summary} and {number}
  * - login_link: {link}, the link that logs the owner in
+ * - visit_booked: {customer}, {day}, {time}, {place}, and {link}, the link
+ *   to the job, when this copy has an address for the app
  *
  * A firm with no agreed wording for a kind gets no text of that kind: send()
  * refuses it.
@@ -57,6 +59,9 @@ export const DRAFT_WORDING: Readonly<Record<MessageKind, string | null>> = {
   // request. "15 minutes" is LOGIN_LINK_LASTS in src/record/logins.ts, and a
   // test checks the two agree.
   login_link: 'Front-line: here is your link to log in. It works for 15 minutes. If you did not ask for it, ignore this text. {link}',
+  // Greg's answer to open question 16, 14 Oct 2026: the draft to start from,
+  // which each owner agrees as for the other texts.
+  visit_booked: 'Front-line: {customer} booked a quote visit for {day} at {time}, {place}. {link}',
 };
 
 /**

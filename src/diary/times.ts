@@ -7,7 +7,10 @@
 // request): visits start every `every` minutes from the firm's first start
 // and end by its close; nothing is offered on the day itself; and a visit
 // booked after 1pm the day before gets no reminder, since its confirmation
-// has only just gone.
+// has only just gone. From Greg's answers to open question 15 (14 Oct 2026):
+// on the next day the firm works, nothing before its notice time, noon
+// unless its rules say otherwise; and the agent is offered times spread
+// across days, or across the day the caller asks about.
 
 import { instant, type Instant } from '../clock';
 import { inLondon, londonDay, londonInstant, MONTHS, startOfLondonDay, WEEKDAYS } from '../london';
@@ -24,6 +27,9 @@ export interface LondonDate {
 /** The hour of the day before a visit when its reminder goes: 1pm UK time. From the example. */
 export const REMINDER_HOUR = 13;
 
+/** On the next day a firm works, the first start offered when its rules do not say: noon (Greg, 14 Oct 2026). */
+export const DEFAULT_NEXT_DAY_FROM = 12 * 60;
+
 /** How long a kind of visit takes under the firm's rules, in milliseconds, or null when the diary does not book it. */
 export function visitLength(rules: DiaryRules, kind: VisitKind): number | null {
   const minutes = rules.lengths[kind];
@@ -33,8 +39,8 @@ export function visitLength(rules: DiaryRules, kind: VisitKind): number | null {
 /**
  * The starts the firm's rules offer for a kind of visit, earliest first:
  * from the day after `now` (or from `from`, if later), on the days it books,
- * up to `daysAhead` days after today. Times taken in the diary are not
- * looked at here.
+ * up to `daysAhead` days after today, and on the next of those days, none
+ * before its notice time. Times taken in the diary are not looked at here.
  */
 export function offeredStarts(rules: DiaryRules, kind: VisitKind, now: Instant, from: LondonDate | null = null): Instant[] {
   const length = rules.lengths[kind];
@@ -43,6 +49,12 @@ export function offeredStarts(rules: DiaryRules, kind: VisitKind, now: Instant, 
   }
   const today = londonDay(now);
   const first = Math.max(today + 1, from === null ? today + 1 : dayNumber(from));
+  // The next day the firm works, on which nothing starts before its notice time.
+  let nextWorkingDay = today + 1;
+  while (!rules.days.includes(weekdayOf(nextWorkingDay)) && nextWorkingDay < today + 7) {
+    nextWorkingDay += 1;
+  }
+  const nextDayFrom = rules.nextDayFrom ?? DEFAULT_NEXT_DAY_FROM;
   const starts: Instant[] = [];
   for (let day = first; day <= today + rules.daysAhead; day += 1) {
     const date = dateOf(day);
@@ -50,6 +62,9 @@ export function offeredStarts(rules: DiaryRules, kind: VisitKind, now: Instant, 
       continue;
     }
     for (let minute = rules.opens; minute + length <= rules.closes; minute += rules.every) {
+      if (day === nextWorkingDay && minute < nextDayFrom) {
+        continue;
+      }
       const start = londonInstant(date.year, date.month, date.day, Math.floor(minute / 60), minute % 60);
       // An hour the clocks skip is not offered.
       const read = inLondon(start);
@@ -59,6 +74,42 @@ export function offeredStarts(rules: DiaryRules, kind: VisitKind, now: Instant, 
     }
   }
   return starts;
+}
+
+/**
+ * Which free times to offer, from every free one, earliest first (Greg's
+ * answer to open question 15, 14 Oct 2026). With no day asked about: the
+ * first on each of the next days that have one. With a day asked about: the
+ * first day from it that has any, and on it the earliest, the latest, then
+ * those nearest midday, up to `count`. Earliest first.
+ */
+export function spreadTimes<T extends { startsAt: Instant }>(free: readonly T[], dayAskedAbout: boolean, count: number): T[] {
+  const [earliest] = free;
+  if (count < 1 || earliest === undefined) {
+    return [];
+  }
+  if (!dayAskedAbout) {
+    const chosen: T[] = [];
+    for (const time of free) {
+      if (chosen.length === count) break;
+      const last = chosen.at(-1);
+      if (last === undefined || londonDay(last.startsAt) !== londonDay(time.startsAt)) chosen.push(time);
+    }
+    return chosen;
+  }
+  const day = londonDay(earliest.startsAt);
+  const thatDay = free.filter((time) => londonDay(time.startsAt) === day);
+  const fromMidday = (time: T) => {
+    const at = inLondon(time.startsAt);
+    return Math.abs(at.hour * 60 + at.minute - 12 * 60);
+  };
+  const byPreference = [thatDay[0], thatDay.at(-1), ...[...thatDay].sort((a, b) => fromMidday(a) - fromMidday(b))];
+  const chosen = new Set<T>();
+  for (const time of byPreference) {
+    if (chosen.size === count) break;
+    if (time !== undefined) chosen.add(time);
+  }
+  return [...chosen].sort((a, b) => a.startsAt - b.startsAt);
 }
 
 /** Whether the firm's rules offer this start for a kind of visit now. */
@@ -114,19 +165,23 @@ export function startToSay(startsAt: Instant): string {
 
 /** A row in the due list that comes with a visit. */
 export interface VisitDue {
-  action: 'send_confirmation' | 'send_reminder';
+  action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked';
   runAt: Instant;
   latestAt: Instant;
 }
 
 /**
- * The rows for a visit just booked: its confirmation, at once and worth
- * sending until the visit starts, and its reminder (see reminderDue()).
+ * The rows for a visit the voice agent just booked: its confirmation, at
+ * once and worth sending until the visit starts; its reminder (see
+ * reminderDue()); and the owner's text about it, on the same terms as the
+ * confirmation.
  */
 export function bookingDues(startsAt: Instant, now: Instant): VisitDue[] {
   const confirmation: VisitDue = { action: 'send_confirmation', runAt: now, latestAt: instant(Math.max(now, startsAt)) };
+  // The owner hears of the booking (Greg's answer to open question 16, 14 Oct 2026).
+  const toldOwner: VisitDue = { action: 'tell_owner_booked', runAt: now, latestAt: instant(Math.max(now, startsAt)) };
   const reminder = reminderDue(startsAt, now);
-  return reminder === null ? [confirmation] : [confirmation, reminder];
+  return reminder === null ? [confirmation, toldOwner] : [confirmation, reminder, toldOwner];
 }
 
 /**

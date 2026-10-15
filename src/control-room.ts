@@ -20,6 +20,7 @@ import type { Context, Hono } from 'hono';
 import type { AppEnv } from './app';
 import { instant, instantFromIso, type Instant } from './clock';
 import { callReportForStaff } from './call-report';
+import { DEFAULT_NEXT_DAY_FROM } from './diary/times';
 import { everyMinute } from './due';
 import { loadExample } from './example/load';
 import { EXAMPLE_NOW } from './example/tidewell';
@@ -810,13 +811,14 @@ async function wordingView(
 function diaryFormOf(rules: DiaryRules | null): DiaryForm {
   const lengths = Object.fromEntries(VISIT_KINDS.map((kind) => [kind, rules?.lengths[kind] === undefined ? '' : String(rules.lengths[kind])])) as Record<VisitKind, string>;
   return rules === null
-    ? { days: [], opens: '', closes: '', every: '60', daysAhead: '14', lengths }
+    ? { days: [], opens: '', closes: '', every: '60', daysAhead: '14', nextDayFrom: minutesToTime(DEFAULT_NEXT_DAY_FROM), lengths }
     : {
         days: rules.days,
         opens: minutesToTime(rules.opens),
         closes: minutesToTime(rules.closes),
         every: String(rules.every),
         daysAhead: String(rules.daysAhead),
+        nextDayFrom: minutesToTime(rules.nextDayFrom ?? DEFAULT_NEXT_DAY_FROM),
         lengths,
       };
 }
@@ -830,6 +832,7 @@ function diaryFormFrom(form: URLSearchParams): DiaryForm {
     closes: field('closes'),
     every: field('every'),
     daysAhead: field('daysAhead'),
+    nextDayFrom: field('nextDayFrom'),
     lengths: Object.fromEntries(VISIT_KINDS.map((kind) => [kind, field(`length_${kind}`)])) as Record<VisitKind, string>,
   };
 }
@@ -840,7 +843,15 @@ function diaryRulesFrom(form: DiaryForm): DiaryRules {
   for (const kind of VISIT_KINDS) {
     if (form.lengths[kind].trim() !== '') lengths[kind] = whole(form.lengths[kind]);
   }
-  return { days: form.days, opens: timeToMinutes(form.opens), closes: timeToMinutes(form.closes), every: whole(form.every), daysAhead: whole(form.daysAhead), lengths };
+  return {
+    days: form.days,
+    opens: timeToMinutes(form.opens),
+    closes: timeToMinutes(form.closes),
+    every: whole(form.every),
+    daysAhead: whole(form.daysAhead),
+    nextDayFrom: timeToMinutes(form.nextDayFrom),
+    lengths,
+  };
 }
 
 /** A whole number as typed, or NaN. */
