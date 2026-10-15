@@ -6,6 +6,8 @@ It sends messages in other firms' names and holds their customers' details. Gett
 
 Before any task, read `docs/build-brief.md` (what to build and in what order) and `docs/decisions.md` (what is settled, what is assumed, what is open). The agreed design is in `reference/example-app/`.
 
+Then read `docs/autopilot.md` and follow it. It is Greg's standing brief for building without him: the queue of tasks, when to merge into `slice-i-practice` and deploy to practice without waiting, and the only points at which to stop and ask him. Where it and this file differ, it says how.
+
 ## Words
 
 - **Firm**: a trade business that is Front-line's client.
