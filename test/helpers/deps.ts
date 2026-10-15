@@ -54,5 +54,7 @@ export function testDeps(clock: Clock): TestDeps {
     files: { kept: env.FILES, inbox: env.CALLS_IN },
     agents: new FakeVapi(),
     vapiCredential: VAPI_CREDENTIAL,
+    // Task 5's texts, switched off as on every copy. A test switches one on.
+    textsOn: [],
   };
 }

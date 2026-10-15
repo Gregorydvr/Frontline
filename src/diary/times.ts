@@ -165,9 +165,21 @@ export function startToSay(startsAt: Instant): string {
 
 /** A row in the due list that comes with a visit. */
 export interface VisitDue {
-  action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked';
+  action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked' | 'send_visit_followup';
   runAt: Instant;
   latestAt: Instant;
+}
+
+/** When the text after a quote visit goes: 10am UK time the morning after (task 5, [to agree]), until quiet hours begin that day. */
+export const FOLLOWUP_HOUR = 10;
+
+/**
+ * The text after a quote visit, while the copy switches it on: at 10am UK
+ * time the day after the visit, worth sending until 8pm that day.
+ */
+export function followupDue(startsAt: Instant): { action: 'send_visit_followup'; runAt: Instant; latestAt: Instant } {
+  const { year, month, day } = inLondon(startsAt);
+  return { action: 'send_visit_followup', runAt: londonInstant(year, month, day + 1, FOLLOWUP_HOUR), latestAt: londonInstant(year, month, day + 1, 20) };
 }
 
 /**
@@ -176,12 +188,14 @@ export interface VisitDue {
  * reminderDue()); and the owner's text about it, on the same terms as the
  * confirmation.
  */
-export function bookingDues(startsAt: Instant, now: Instant): VisitDue[] {
+export function bookingDues(startsAt: Instant, now: Instant, also: { followup: boolean } = { followup: false }): VisitDue[] {
   const confirmation: VisitDue = { action: 'send_confirmation', runAt: now, latestAt: instant(Math.max(now, startsAt)) };
   // The owner hears of the booking (Greg's answer to open question 16, 14 Oct 2026).
   const toldOwner: VisitDue = { action: 'tell_owner_booked', runAt: now, latestAt: instant(Math.max(now, startsAt)) };
   const reminder = reminderDue(startsAt, now);
-  return reminder === null ? [confirmation, toldOwner] : [confirmation, reminder, toldOwner];
+  const dues = reminder === null ? [confirmation, toldOwner] : [confirmation, reminder, toldOwner];
+  // Only quote visits are booked on a call, so this is a quote visit's.
+  return also.followup ? [...dues, followupDue(startsAt)] : dues;
 }
 
 /**

@@ -78,10 +78,11 @@ export async function loadExample(
   await setDiaryRules(db, firm, EXAMPLE_DIARY_RULES, frontline);
   const owner = await createOwner(db, firm, { name: EXAMPLE_OWNER, mobile: ukMobile(EXAMPLE_OWNER_MOBILE) }, frontline);
   // The wording agreed at set-up: the drafts, for each kind that has one,
-  // as the invented Tom agreed them in person.
+  // as the invented Tom agreed them in person. Not task 5's texts, switched
+  // off, whose drafts are still to agree.
   for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
     const draft = DRAFT_WORDING[kind];
-    if (draft !== null) {
+    if (draft !== null && !MESSAGE_KINDS[kind].switchable) {
       await setWording(db, firm, `text:${kind}`, draft, frontline, { owner, how: 'in_person' });
     }
   }

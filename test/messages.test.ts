@@ -80,11 +80,11 @@ describe('the drafts', () => {
 });
 
 describe('the demo firm’s agreed wording', () => {
-  it('is the drafts, for every kind that has one, all GSM-7', async () => {
+  it('is the drafts, for every kind that has one, all GSM-7, apart from the switched-off texts still to agree', async () => {
     const firm = await loadExample(env.DB);
     const words = await firmWording(db, firm);
     for (const kind of Object.keys(MESSAGE_KINDS) as MessageKind[]) {
-      expect(words[`text:${kind}`]?.words, kind).toBe(DRAFT_WORDING[kind]);
+      expect(words[`text:${kind}`]?.words, kind).toBe(MESSAGE_KINDS[kind].switchable ? undefined : DRAFT_WORDING[kind]);
     }
     for (const { words: agreed } of Object.values(words)) {
       expect(isGsm7(agreed)).toBe(true);

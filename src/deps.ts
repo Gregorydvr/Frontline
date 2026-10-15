@@ -4,6 +4,7 @@ import type { StaffGate } from './providers/access';
 import type { FileStores } from './record/files';
 import type { Texts } from './providers/texts';
 import type { VapiAgents } from './providers/vapi';
+import { MESSAGE_KINDS, type MessageKind } from './record/types';
 
 /**
  * Which copy of the system this is: this machine, practice or live. Only
@@ -64,6 +65,12 @@ export interface Deps {
    * Null until this copy has one: then no agent's settings can be made.
    */
   vapiCredential: string | null;
+  /**
+   * The texts of task 5 this copy switches on, from its TEXTS_ON setting:
+   * none, on every copy, until Greg agrees their wording and says so. Only
+   * kinds marked switchable can be named; the texts of Release 1 always go.
+   */
+  textsOn: readonly MessageKind[];
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */
@@ -75,6 +82,12 @@ export function copyFrom(setting: string | undefined): Copy {
 export function vapiCredentialFrom(setting: string | undefined): string | null {
   const id = (setting ?? '').trim();
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) ? id : null;
+}
+
+/** The texts a copy's TEXTS_ON setting switches on, such as "visit_moved_notice,visit_followup". Anything that is not a switchable kind is left out. */
+export function textsOnFrom(setting: string | undefined): MessageKind[] {
+  const named = (setting ?? '').split(',').map((name) => name.trim());
+  return (Object.keys(MESSAGE_KINDS) as MessageKind[]).filter((kind) => MESSAGE_KINDS[kind].switchable && named.includes(kind));
 }
 
 /** An address from a copy's setting, such as LINK_ADDRESS or PUBLIC_ADDRESS: no slash at the end, and null when empty. */

@@ -73,6 +73,20 @@ export const HISTORY_WORDS: Readonly<Record<HistoryKind, Readonly<Record<LineFor
     job: '{Visit} cancelled.',
     feed: 'Cancelled {customer’s} {visit}.',
   },
+  // Task 5's texts to customers, when they go. New, [to agree]
+  // (docs/texts-to-agree.md); the texts are switched off until then.
+  moved_notice_sent: {
+    job: 'Told them the {short visit} has moved.',
+    feed: 'Told {customer} their {short visit} has moved.',
+  },
+  cancelled_notice_sent: {
+    job: 'Told them the {short visit} is cancelled.',
+    feed: 'Told {customer} their {short visit} is cancelled.',
+  },
+  followup_sent: {
+    job: 'Thanked them after the {short visit}.',
+    feed: 'Thanked {customer} after the {short visit}.',
+  },
   details_confirmed: {
     job: 'They checked their details.',
     feed: '{customer} checked their details.',

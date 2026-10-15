@@ -168,6 +168,8 @@ const localDeps = (env: Env): Deps => ({
   // connected.
   agents: null,
   vapiCredential: null,
+  // Task 5's texts, switched off here as on every copy.
+  textsOn: [],
 });
 const app = createLocalApp(localDeps);
 

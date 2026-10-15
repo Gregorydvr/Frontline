@@ -65,12 +65,22 @@ export function insertVisit(
     .bind(id, firm, input.job, startsAt, endsAt, input.kind, state, db.clock.now(), onlyIfHeld);
 }
 
-/** A row for the due list that comes with a visit's new time: its reminder. */
+/**
+ * A row for the due list that comes with a visit's new time: its reminder,
+ * and, while the copy switches them on, the text after the visit and the
+ * text saying it moved (task 5).
+ */
 export interface VisitDue {
-  action: 'send_reminder';
+  action: 'send_reminder' | 'send_visit_followup' | 'send_visit_moved';
   runAt: Instant;
   latestAt: Instant;
 }
+
+/** The rows a visit's new time replaces: those still waiting that were for its old time. */
+const FOR_ITS_TIME = "('send_reminder', 'send_visit_followup', 'send_visit_moved')";
+
+/** Only for a customer told of the visit: its confirmation went. */
+const CONFIRMATION_WENT = `EXISTS (SELECT 1 FROM due c WHERE c.firm_id = ?1 AND c.visit_id = ?2 AND c.action = 'send_confirmation' AND c.state = 'done' AND c.outcome = 'sent')`;
 
 /**
  * Moves one of the firm's booked visits to a new time, if nothing else takes
@@ -91,7 +101,7 @@ export async function moveVisit(
 ): Promise<boolean> {
   const startsAt = instant(to.startsAt);
   const endsAt = instant(to.endsAt);
-  if (endsAt <= startsAt || dues.some((due) => !(['send_reminder'] as readonly string[]).includes(due.action))) {
+  if (endsAt <= startsAt || dues.some((due) => !(['send_reminder', 'send_visit_followup', 'send_visit_moved'] as readonly string[]).includes(due.action))) {
     throw new Refused();
   }
   const now = db.clock.now();
@@ -109,7 +119,7 @@ export async function moveVisit(
     db.d1
       .prepare(
         `UPDATE due SET state = 'cancelled', outcome = 'cancelled', finished_at = ?4
-         WHERE firm_id = ?1 AND visit_id = ?2 AND action = 'send_reminder' AND state = 'waiting' AND ${movedHere}`,
+         WHERE firm_id = ?1 AND visit_id = ?2 AND action IN ${FOR_ITS_TIME} AND state = 'waiting' AND ${movedHere}`,
       )
       .bind(firm, visit, startsAt, now),
     db.d1
@@ -125,7 +135,7 @@ export async function moveVisit(
       return db.d1
         .prepare(
           `INSERT INTO due (id, firm_id, action, visit_id, run_at, latest_at, state, created_at)
-           SELECT ?4, ?1, ?5, ?2, ?6, ?7, 'waiting', ?8 WHERE ${movedHere}`,
+           SELECT ?4, ?1, ?5, ?2, ?6, ?7, 'waiting', ?8 WHERE ${movedHere}${due.action === 'send_visit_moved' ? ` AND ${CONFIRMATION_WENT}` : ''}`,
         )
         .bind(firm, visit, startsAt, newId(), due.action, runAt, latestAt, now);
     }),
@@ -140,13 +150,27 @@ export async function moveVisit(
  * in the due list that are still waiting are cancelled too, in the same step.
  * Gives false when it was not booked.
  */
-export async function cancelVisit(db: RecordDb, firm: FirmId, visit: VisitId, by: Actor): Promise<boolean> {
+export async function cancelVisit(db: RecordDb, firm: FirmId, visit: VisitId, by: Actor, tell = false): Promise<boolean> {
   const found = await getVisit(db, firm, visit);
   if (found?.state !== 'booked') {
     return false;
   }
   const now = db.clock.now();
   const cancelled: VisitState = 'cancelled';
+  // While the copy switches it on (task 5), a text to the customer that the
+  // visit is cancelled, if they were told of it, after the rows above are
+  // cancelled, until the visit would have started.
+  const notice = tell
+    ? [
+        db.d1
+          .prepare(
+            `INSERT INTO due (id, firm_id, action, visit_id, run_at, latest_at, state, created_at)
+             SELECT ?3, ?1, 'send_visit_cancelled', ?2, ?4, ?5, 'waiting', ?4
+             WHERE EXISTS (SELECT 1 FROM visits WHERE firm_id = ?1 AND id = ?2 AND state = 'cancelled') AND ${CONFIRMATION_WENT}`,
+          )
+          .bind(firm, visit, newId(), now, Math.max(now, found.startsAt)),
+      ]
+    : [];
   const [changed] = await runTogether(db.d1, [
     db.d1
       .prepare(`UPDATE visits SET state = ?3 WHERE firm_id = ?1 AND id = ?2 AND state = 'booked'`)
@@ -158,6 +182,7 @@ export async function cancelVisit(db: RecordDb, firm: FirmId, visit: VisitId, by
       )
       .bind(firm, visit, now),
     historyStatement(db, firm, { kind: 'visit_cancelled', by, visit })[1],
+    ...notice,
   ]);
   // Two cancels at once: the second changed nothing, but wrote its entry.
   // Who did what is never edited, so it stays, and this says it was not this one.

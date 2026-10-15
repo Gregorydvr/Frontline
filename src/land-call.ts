@@ -30,7 +30,7 @@ import {
 } from './record';
 import type { RecordedCall } from './record/calls';
 import { Refused, withFirmClock, type RecordDb } from './record/db';
-import type { CallFor, CallId, Customer, DueId, Firm, FirmId, NewBooking, NewCall, VisitId } from './record/types';
+import type { CallFor, CallId, Customer, DueId, Firm, FirmId, MessageKind, NewBooking, NewCall, VisitId } from './record/types';
 import type { CallDetails, CallReport } from './vapi-report';
 
 export type Landed =
@@ -44,7 +44,7 @@ export type Landed =
   /** No firm has the number that was rung. Nothing was kept. */
   | { result: 'unknown_number' };
 
-export async function landCall(realDb: RecordDb, report: CallReport): Promise<Landed> {
+export async function landCall(realDb: RecordDb, report: CallReport, textsOn: readonly MessageKind[] = []): Promise<Landed> {
   const firmId = report.firmNumber === null ? null : await findFirmByNumber(realDb, report.firmNumber);
   const firm = firmId === null ? null : await getFirm(realDb, firmId);
   if (firm === null) {
@@ -72,7 +72,7 @@ export async function landCall(realDb: RecordDb, report: CallReport): Promise<La
           kind: hold.kind,
           startsAt: hold.startsAt,
           endsAt: hold.endsAt,
-          dues: bookingDues(hold.startsAt, db.clock.now()),
+          dues: bookingDues(hold.startsAt, db.clock.now(), { followup: textsOn.includes('visit_followup') }),
         }
       : null;
   let made: RecordedCall;

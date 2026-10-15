@@ -76,12 +76,18 @@
   // settings on an agent only once Greg sets the secret VAPI_API_KEY for a
   // copy (docs/vapi.md); it is not listed with the secrets above, since a
   // copy runs without it.
+  //
+  // TEXTS_ON: the texts to customers of task 5 of docs/autopilot.md that
+  // this copy sends, by kind, separated by commas, such as
+  // "visit_moved_notice,visit_followup". Empty on every copy: they are
+  // switched off until Greg agrees their wording and says to switch them on.
   "vars": {
     "PUBLIC_ADDRESS": "http://localhost:8787",
     "LINK_ADDRESS": "http://localhost:8787",
     "CONTROL_ADDRESS": "http://localhost:8787",
     "COPY": "local",
-    "VAPI_CREDENTIAL_ID": ""
+    "VAPI_CREDENTIAL_ID": "",
+    "TEXTS_ON": ""
   },
 
   // The clock: every minute, the due list's rows whose time has come go on
@@ -135,7 +141,9 @@
         "COPY": "practice",
         // Vapi's id for practice's server credential, which carries VAPI_SECRET,
         // as vapi/practice-assistant.json names it. An id, not a secret.
-        "VAPI_CREDENTIAL_ID": "ecd964a5-42ff-4fca-952a-95ca211d84a5"
+        "VAPI_CREDENTIAL_ID": "ecd964a5-42ff-4fca-952a-95ca211d84a5",
+        // Task 5's texts to customers: none switched on (docs/texts-to-agree.md).
+        "TEXTS_ON": ""
       },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
@@ -181,7 +189,7 @@
       // A placeholder until open question 9 is answered. Greg puts the
       // address of the live copy here, the address for customers' links,
       // and the control room's.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "" },
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "", "TEXTS_ON": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
