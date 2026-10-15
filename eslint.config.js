@@ -71,7 +71,7 @@ const CHANGES_THE_RECORD = [
   'createLoginLink', 'endSession', 'logInWithLink', 'recordOwnerMessage', 'deleteCustomer', 'redoCustomerDelete', 'deleteExampleFirm',
   'setExampleClock', 'setAgent', 'recordAgentPush', 'addMissingSweeps', 'deleteRecording', 'emptyBin', 'giveUpRecording',
   'markMissingRecordings', 'moveRecording', 'sweepFirm', 'askFirmExport', 'cancelLeaving', 'deleteFirm', 'deleteLeftFirm',
-  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox',
+  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox', 'setTrade',
 ];
 const actionsMessage = 'Every action goes through act() in src/actions.ts, which names it and records who did it. Routes only read.';
 const changesOutsideActions = [
