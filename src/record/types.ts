@@ -55,6 +55,13 @@ export type FirmExportId = Id & { readonly [firmExportBrand]: true };
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
 export type Service = (typeof SERVICES)[number];
 
+/**
+ * The trades a firm can choose at set-up, each with a starter pack in
+ * src/trade-packs.ts.
+ */
+export const TRADES = ['plumbing_heating', 'drainage', 'electrical'] as const;
+export type Trade = (typeof TRADES)[number];
+
 export interface Firm {
   id: FirmId;
   name: string;
@@ -69,6 +76,8 @@ export interface Firm {
   urgentList: readonly string[];
   /** When visits can be booked, and how long each kind takes. Null: no times are offered. */
   diaryRules: DiaryRules | null;
+  /** The trade chosen at set-up, whose starter pack its set-up started from. Null: none chosen. */
+  trade: Trade | null;
   /**
    * How far ahead of the real time the firm's clock runs, in milliseconds:
    * 0 for every real firm. Only an example firm's clock is ever moved.
@@ -195,7 +204,7 @@ export type Actor =
  *   the customer's job when it has one
  * - the firm itself: service_on, service_off, stop_on, stop_off, number_set,
  *   urgent_list_set, owner_mobile_set, diary_rules_set, and, from slice H2,
- *   firm_added, owner_added and wording_agreed, written only by the
+ *   firm_added, owner_added and wording_agreed, and trade_set, written only by the
  *   functions in firms.ts, owners.ts and wording.ts. The owner is not shown
  *   them.
  * - an owner using the app: logged_in and logged_out, written only by
@@ -234,6 +243,7 @@ export const HISTORY_KINDS = {
   urgent_list_set: 'firm',
   owner_mobile_set: 'firm',
   diary_rules_set: 'firm',
+  trade_set: 'firm',
   firm_added: 'firm',
   owner_added: 'firm',
   wording_agreed: 'firm',
@@ -812,6 +822,7 @@ export const STAFF_ACTIONS = [
   'viewed_set_up_number',
   'viewed_set_up_urgent',
   'viewed_set_up_diary',
+  'viewed_set_up_trade',
   'viewed_wording',
   'checked_wording',
   'added_firm',
@@ -820,6 +831,7 @@ export const STAFF_ACTIONS = [
   'set_number',
   'set_urgent_list',
   'set_diary_rules',
+  'set_trade',
   'agreed_wording',
   // The firm's voice agent in Vapi (task 3 of docs/autopilot.md).
   'viewed_set_up_agent',

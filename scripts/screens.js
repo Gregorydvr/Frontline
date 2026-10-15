@@ -272,6 +272,12 @@ async function main() {
       await page.fill('#cr-owner-name', 'Example Owner');
       await page.fill('#cr-owner-mobile', own.mobile);
       await page.click('button:has-text("Add")');
+      // Its trade (task 2 of queue 2): the starter pack fills in its urgent
+      // list and diary rules, which the steps below then change.
+      await page.goto(`${setUpAddress}/trade`);
+      await check(page, `${size.name}-control-set-up-trade`);
+      await page.check('input[name=trade][value=plumbing_heating]');
+      await page.click('button:has-text("Save")');
       await page.goto(`${setUpAddress}/number`);
       await page.fill('#cr-number', '07700 900100');
       await page.click('button:has-text("Save")');

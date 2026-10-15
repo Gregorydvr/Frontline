@@ -75,7 +75,7 @@ Updated 15 Oct 2026. Each task's branch is made from `slice-i-practice` after th
 | Task | Branch | State | Waiting on Greg |
 |---|---|---|---|
 | 1. Flaky contrast check | `slice-i-flaky-contrast` | Flaky, not a real contrast problem. The "message sent" panel rises with a fade (60% to full opacity over 0.18 seconds), and the check sometimes measured it part way through. The check now waits for the page to load and for every animation that ends to end. Shown with the fade slowed to 3 seconds: the old check fails on both panels, the new one passes. `npm run check:screens` now also runs on Windows | Nothing |
-| 2. Trade starter packs | | Not started | |
+| 2. Trade starter packs | `slice-i-trade-packs` | Built: three packs in `src/trade-packs.ts`; staff choose a firm's trade at `/control/firms/:firm/trade`, which fills in only what the firm has none of yet, as the action `choose_trade`. Migration 0012 adds the firm's trade | The packs' urgent lists and drafts, in `docs/texts-to-agree.md` [to agree]; the hours and visit lengths |
 | 3. Onboarding flow | | Not started | |
 | 4. Go-live gate | | Not started | |
 

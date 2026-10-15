@@ -443,6 +443,15 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
       await refused(record.setUrgentList(db, b, ['a leak'], { kind: 'owner', owner }));
     }
   },
+  async setTrade() {
+    // The second firm's own trade; the first firm is unchanged, which every
+    // case checks after it runs.
+    await record.setTrade(db, b, 'electrical', frontline);
+    expect((await record.getFirm(db, b))?.trade).toBe('electrical');
+    for (const owner of ofA.owners) {
+      await refused(record.setTrade(db, b, 'drainage', { kind: 'owner', owner }));
+    }
+  },
   async setStopButton() {
     await record.setStopButton(db, b, true, frontline);
     expect((await record.getFirm(db, b))?.stopped).toBe(true);

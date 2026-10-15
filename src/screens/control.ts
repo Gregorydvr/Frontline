@@ -18,12 +18,14 @@ import {
   AGREED_HOW,
   MESSAGE_KINDS,
   SERVICES,
+  TRADES,
   VISIT_KINDS,
   type AgreedHow,
   type Agent,
   type AgentPush,
   type Call,
   type Customer,
+  type DiaryRules,
   type DueAction,
   type Firm,
   type Job,
@@ -32,9 +34,11 @@ import {
   type Owner,
   type Service,
   type TextIn,
+  type Trade,
   type VisitKind,
   type WordingVersion,
 } from '../record/types';
+import { draftFor, TRADE_PACKS } from '../trade-packs';
 import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
 import { dayWords } from './home';
@@ -365,6 +369,20 @@ export const CONTROL_WORDS = {
     link: 'the link: to confirm their details, to the job, or to log in',
   } as Readonly<Record<string, string>>,
   startsFromDraft: 'Not agreed yet. These are the draft words.',
+  startsFromPack: 'Not agreed yet. These are the draft words from the {trade} starter pack, [to agree] with Greg.',
+  // Trade starter packs (task 2 of queue 2). New, for staff only; flagged in
+  // its pull request.
+  trade: 'Trade',
+  chooseTrade: 'Choose its trade',
+  trades: { plumbing_heating: 'Plumbing & heating', drainage: 'Drainage', electrical: 'Electrical' } satisfies Record<Trade, string>,
+  tradeHint:
+    'Its starter pack fills in what counts as urgent and when visits can be booked, each only if the firm has none yet, and gives the draft words its texts start from. Change any of it afterwards, on the owner’s word. Nothing is agreed or sent.',
+  tradeToAgree: 'Every pack’s urgent list and words are drafts, [to agree] with Greg.',
+  tradeDraftReminder: 'Reminder draft',
+  tradeNotChosen: 'Not chosen',
+  tradeKeptUrgent: 'Kept as it is: the firm has its own list.',
+  tradeKeptDiary: 'Kept as they are: the firm has its own rules.',
+  tradeChoose: 'Choose a trade.',
   wordsLabel: 'Words',
   check: 'Check',
   saveAgreed: 'Save as agreed',
@@ -842,6 +860,7 @@ function setUpSection(firm: Firm, setUp: SetUpView): Html {
         : html`${owner.name} · ${owner.mobile === null ? CONTROL_WORDS.noMobile : nationalNumber(owner.mobile)} · <a class="link" href="${base}/owners/${owner.id}/mobile">${CONTROL_WORDS.changeMobile}</a>`
     }</dd>
 <dt>${CONTROL_WORDS.number}</dt><dd>${firm.phoneNumber === null ? CONTROL_WORDS.noneYet : nationalNumber(firm.phoneNumber)} · <a class="link" href="${base}/number">${CONTROL_WORDS.change}</a></dd>
+<dt>${CONTROL_WORDS.trade}</dt><dd>${firm.trade === null ? CONTROL_WORDS.tradeNotChosen : CONTROL_WORDS.trades[firm.trade]} · <a class="link" href="${base}/trade">${firm.trade === null ? CONTROL_WORDS.chooseTrade : CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.urgent}</dt><dd>${firm.urgentList.length === 0 ? CONTROL_WORDS.noneYet : firm.urgentList.join('; ')} · <a class="link" href="${base}/urgent">${CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.diary}</dt><dd>${diaryInWords(firm)} · <a class="link" href="${base}/diary">${CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.wording}</dt><dd>${CONTROL_WORDS.agreed}: ${agreedCount} / ${kinds} · <a class="link" href="${base}/wording">${CONTROL_WORDS.change}</a></dd>
@@ -859,8 +878,11 @@ ${agentSection(firm, setUp.agent, setUp.pushes)}`,
 
 /** When the firm's visits can be booked, in a line for staff. */
 function diaryInWords(firm: Firm): string {
-  const rules = firm.diaryRules;
-  if (rules === null) return CONTROL_WORDS.noneYet;
+  return firm.diaryRules === null ? CONTROL_WORDS.noneYet : rulesInWords(firm.diaryRules);
+}
+
+/** Diary rules in a line for staff. */
+function rulesInWords(rules: DiaryRules): string {
   const days = rules.days.map((day) => CONTROL_WORDS.weekdays[day] ?? '').join(', ');
   const lengths = VISIT_KINDS.filter((kind) => rules.lengths[kind] !== undefined)
     .map((kind) => `${CONTROL_WORDS.visitKinds[kind]} ${String(rules.lengths[kind])} min`)
@@ -986,6 +1008,27 @@ ${problemList(problems)}
 </form>`;
 }
 
+/** Choosing the firm's trade: each pack, with what it would fill in. */
+export function tradeScreen(firm: Firm, problems: readonly string[]): Html {
+  return html`${back(firm)}
+<div class="block"><h1>${CONTROL_WORDS.chooseTrade}</h1><p class="meta">${CONTROL_WORDS.tradeHint}</p><p class="problem">${CONTROL_WORDS.tradeToAgree}</p></div>
+<form method="post" action="/control/firms/${firm.id}/trade" class="stack">
+${problemList(problems)}
+<fieldset class="stack"><legend>${CONTROL_WORDS.trade}</legend>
+${TRADES.map((trade) => {
+  const pack = TRADE_PACKS[trade];
+  return html`<label class="cr-tick"><input type="radio" name="trade" value="${trade}"${firm.trade === trade ? trusted(' checked') : null}>${CONTROL_WORDS.trades[trade]}</label>
+<dl class="card cr-dl">
+<dt>${CONTROL_WORDS.urgent}</dt><dd>${firm.urgentList.length === 0 ? pack.urgentList.join('; ') : CONTROL_WORDS.tradeKeptUrgent}</dd>
+<dt>${CONTROL_WORDS.diary}</dt><dd>${firm.diaryRules === null ? rulesInWords(pack.diaryRules) : CONTROL_WORDS.tradeKeptDiary}</dd>
+<dt>${CONTROL_WORDS.tradeDraftReminder}</dt><dd class="cr-words">${draftFor(trade, 'visit_reminder') ?? ''}</dd>
+</dl>`;
+})}
+</fieldset>
+<button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
+</form>`;
+}
+
 /** The diary form as staff filled it in, or as the firm's rules fill it. */
 export interface DiaryForm {
   days: readonly number[];
@@ -1088,7 +1131,11 @@ export function wordingScreen(view: WordingView): Html {
   const { firm, kind } = view;
   const [inUse, ...earlier] = view.versions;
   return html`<a class="link" href="/control/firms/${firm.id}/wording">${CONTROL_WORDS.wording}</a>
-<div class="block"><h1>${CONTROL_WORDS.textKinds[kind]}</h1><p class="meta">${firm.name}</p>${view.fromDraft ? html`<p class="problem">${CONTROL_WORDS.startsFromDraft}</p>` : null}</div>
+<div class="block"><h1>${CONTROL_WORDS.textKinds[kind]}</h1><p class="meta">${firm.name}</p>${
+  !view.fromDraft
+    ? null
+    : html`<p class="problem">${firm.trade === null || TRADE_PACKS[firm.trade].wording[kind] === undefined ? CONTROL_WORDS.startsFromDraft : words(CONTROL_WORDS.startsFromPack, { trade: CONTROL_WORDS.trades[firm.trade] })}</p>`
+}</div>
 ${section(
   CONTROL_WORDS.gapsItCanUse,
   list(

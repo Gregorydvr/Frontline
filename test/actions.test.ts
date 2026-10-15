@@ -70,6 +70,7 @@ describe('the named actions', () => {
       set_firm_number: ['staff'],
       set_urgent_list: ['staff'],
       set_diary_rules: ['staff'],
+      choose_trade: ['staff'],
       agree_wording: ['staff'],
       set_agent: ['staff'],
       check_agent: ['staff'],

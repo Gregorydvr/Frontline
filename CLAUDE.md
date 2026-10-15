@@ -145,6 +145,7 @@ src/                 the Worker
   agent-settings.ts  a firm's voice agent as the record says it should be: vapi/agent-template.json filled in, and comparing settings
   agent-push.ts      pushAgent(): the one way the Worker changes an agent in Vapi: read, check it is the firm's, send only what differs,
                      read back, never over a change made in Vapi without staff. Switched off while a copy has no VAPI_API_KEY
+  trade-packs.ts     the trade starter packs: each trade's urgent list, diary rules and drafts, which fill in only what a firm has none of
   set-up.ts          setting up a firm: the checks on its name, wording, urgent list and diary rules, each with its reason, which the
                      record refuses on and the control room shows; what a firm still needs before Calls & bookings; a wording preview's facts
   due.ts             the clock: every minute due rows go on the queue; the worker that claims, acts and marks them done

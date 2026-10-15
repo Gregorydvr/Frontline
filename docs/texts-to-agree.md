@@ -6,6 +6,38 @@ Nothing here goes to anyone yet. The three texts that are built are switched off
 
 Texts use straight quotes and no emoji (rule 4). Each draft below stays within two texts (segments), even with the longest names a call gives; a test checks that.
 
+## Trade starter packs [to agree]
+
+Task 2 of queue 2. Choosing a firm's trade in the control room fills in its urgent list and diary rules, where it has none yet, and starts its wording pages from these drafts. Nothing is agreed or sent by a pack: each owner still agrees their own words (rule 2). The packs are in `src/trade-packs.ts`.
+
+### What counts as urgent [to agree]
+
+The owner reads these in Your rules, and the voice agent marks a call urgent, and alerts the owner, when it matches one.
+
+- **Plumbing & heating:** a leak; a burst pipe; a smell of gas; a carbon monoxide alarm
+- **Drainage:** sewage coming up; a drain overflowing; the only toilet blocked
+- **Electrical:** no power; a burning smell; sparks from a socket or switch; water near electrics; an electric shock
+
+### The reminder [to agree]
+
+Each trade's reminder adds one line about what the visit needs. The other texts start from the drafts every firm starts from.
+
+> Plumbing & heating: Reminder: {owner}'s visit is tomorrow, {weekday}, at {time}. Please make sure we can get to the boiler and the pipes. See you then.
+
+> Drainage: Reminder: {owner}'s visit is tomorrow, {weekday}, at {time}. Please make sure we can get to the drain covers. See you then.
+
+> Electrical: Reminder: {owner}'s visit is tomorrow, {weekday}, at {time}. Please make sure we can get to the fuse box. See you then.
+
+### Hours and visit lengths (the build's starting points, for Greg to check)
+
+- **Plumbing & heating:** Monday to Friday, 8am to 5pm, on the hour; quote visit 60 minutes, service 60 minutes; up to 14 days ahead; on the next working day, nothing before noon.
+- **Drainage:** Monday to Saturday, 8am to 6pm, on the hour; quote visit 45 minutes; up to 7 days ahead; on the next working day, from 8am.
+- **Electrical:** Monday to Friday, 8am to 5pm, on the hour; quote visit 60 minutes; up to 14 days ahead; on the next working day, nothing before noon.
+
+### Staff's words (control room only)
+
+"Trade", "Choose its trade", "Plumbing & heating", "Drainage", "Electrical", the hint on the trade page, "Every pack's urgent list and words are drafts, [to agree] with Greg.", "Reminder draft", "Not chosen", "Kept as it is: the firm has its own list.", "Kept as they are: the firm has its own rules.", "Choose a trade." and, on a wording page, "Not agreed yet. These are the draft words from the {trade} starter pack, [to agree] with Greg."
+
 ## Built, switched off
 
 ### When a visit moves: `visit_moved_notice` [to agree]
