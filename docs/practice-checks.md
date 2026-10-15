@@ -148,6 +148,20 @@ No name, number, address or words from the call are printed, unless you add `--t
 
 It changes nothing. It asks Vapi and the control room with GET only, and a test fails if it tries anything else; it does not reach Twilio at all, whose delivery reports are already in the record. Opening the report is a view in the control room, so the staff log records it, naming you (rule 15). That is the one row it adds.
 
+## Checking the gates in one go
+
+One command checks the gates in front of practice as someone with no Cloudflare Access login sees them:
+
+```sh
+npm run practice:gates
+```
+
+It needs no key and no login. It asks three addresses with GET: a customer's link on `practice-links`, with a token nobody was ever given, so no customer's page is opened; and the front page of the owner's app and of the control room. It passes when the link reaches Front-line itself (its "This link has expired" page, not Access's login) with search engines told to keep out, and when the app and the control room both send the request to Access's login page. It ends with a failure when any check does not pass. Run it after each deploy to practice.
+
+### What happened
+
+15 Oct 2026, from Greg's machine, against practice as deployed that day: all four passed. The link answered 404 with "This link has expired" and `X-Robots-Tag: noindex, nofollow`, and the app and the control room each answered 302 to `front-line.cloudflareaccess.com`. This is the check the autopilot brief's first task asks for (`docs/autopilot.md`).
+
 ## What happened: the first booking call
 
 What it shows: the agent booking a quote visit on a real call to the practice number for the first time, and the confirmation held by quiet hours.
