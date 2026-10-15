@@ -176,7 +176,7 @@ export default defineConfig(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['eslint.config.js', 'vitest.config.ts', 'scripts/vapi-settings.d.ts', 'scripts/call-report-text.d.ts'] },
+        projectService: { allowDefaultProject: ['eslint.config.js', 'vitest.config.ts', 'scripts/vapi-settings.d.ts', 'scripts/call-report-text.d.ts', 'scripts/gates.d.ts'] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -236,7 +236,7 @@ export default defineConfig(
     // npm run check:screens, a tool for this machine that reports what it
     // found. It is not the system, which logs only through src/log.ts.
     files: ['scripts/**'],
-    languageOptions: { globals: { console: 'readonly', process: 'readonly', fetch: 'readonly', setTimeout: 'readonly' } },
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', fetch: 'readonly', setTimeout: 'readonly', URL: 'readonly' } },
     rules: { 'no-console': 'off' },
   },
 );
