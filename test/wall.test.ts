@@ -32,6 +32,7 @@ import type {
   Message,
   NewCall,
   OwnerId,
+  ProvisioningId,
   TextIn,
   VisitId,
   WordingId,
@@ -97,6 +98,8 @@ let ofA: {
   /** The first firm's call with a recording kept, and its export, made. */
   recorded: CallId;
   export: FirmExportId;
+  /** The first firm's request to Vapi for an agent, still waiting. */
+  provisioning: ProvisioningId;
   /** Every id of the first firm's, to look for in what the second firm is given. */
   ids: string[];
 };
@@ -123,6 +126,7 @@ beforeAll(async () => {
   const linkBy = new Map<FirmId, LinkToken>();
   const loginBy = new Map<FirmId, { login: LoginToken; cookie: SessionToken }>();
   const recordedBy = new Map<FirmId, CallId>();
+  const provisioningBy = new Map<FirmId, ProvisioningId>();
   for (const firm of [a, b]) {
     const [clarke] = (await record.findCustomersByMobile(db, firm, ukMobile('07700 900005')));
     const [clarkesJob] = clarke === undefined ? [] : await record.listJobsForCustomer(db, firm, clarke.id);
@@ -185,6 +189,10 @@ beforeAll(async () => {
     const assistant = firm === a ? A_AGENT : B_AGENT;
     expect(await record.setAgent(db, firm, assistant, staff.id)).toBe('set');
     await record.recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'frontline' }, due: null, outcome: 'in_step', settings: [], state: 'in_step', differing: [] });
+    // And a request to Vapi for an agent, still waiting for its answer.
+    const asked = await record.askProvisioning(db, firm, 'agent', staff.id);
+    if (asked === null) throw new Error('Not asked');
+    provisioningBy.set(firm, asked);
   }
   // The exports made by their rows in the due list, as the clock runs them.
   for (const { firm, due } of await record.findDue(db)) {
@@ -235,6 +243,8 @@ beforeAll(async () => {
   const states = await Promise.all([...new Set(dues)].map(async (due) => (await record.getDue(db, a, due))?.state));
   expect(states).toEqual(expect.arrayContaining(['waiting', 'claimed', 'done', 'cancelled']));
   expect(messages.map((message) => message.state)).toEqual(expect.arrayContaining(['sent', 'sending']));
+  const provisioningOfA = provisioningBy.get(a);
+  if (provisioningOfA === undefined) throw new Error('No request');
   ofA = {
     owners,
     customers,
@@ -253,7 +263,9 @@ beforeAll(async () => {
     cookie: loginOfA.cookie,
     recorded: recordedOfA,
     export: exportOfA.id,
+    provisioning: provisioningOfA,
     ids: [
+      provisioningOfA,
       a,
       exportOfA.id,
       holdOfA,
@@ -451,6 +463,31 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     for (const owner of ofA.owners) {
       await refused(record.setTrade(db, b, 'drainage', { kind: 'owner', owner }));
     }
+  },
+  async setServicesChosen() {
+    await record.setServicesChosen(db, b, ['calls'], frontline);
+    expect((await record.getFirm(db, b))?.servicesChosen).toEqual(['calls']);
+    for (const owner of ofA.owners) {
+      await refused(record.setServicesChosen(db, b, ['quotes'], { kind: 'owner', owner }));
+    }
+  },
+  // Asking a provider for the second firm's number or agent: the request is
+  // the second firm's, and the first firm's request is never found or
+  // finished under it.
+  async askProvisioning() {
+    const staff = (await record.findOrAddStaff(db, 'staff@example.com')).id;
+    expect(await record.askProvisioning(db, b, 'number', staff)).not.toBeNull();
+    // The second firm already has its own request for an agent waiting.
+    expect(await record.askProvisioning(db, b, 'agent', staff)).toBeNull();
+  },
+  async finishProvisioning() {
+    await refused(record.finishProvisioning(db, b, ofA.provisioning, { state: 'failed' }));
+    await refused(record.finishProvisioning(db, b, ofA.provisioning, { state: 'done', made: '+447700900003' }));
+  },
+  async listProvisioning() {
+    const listed = await record.listProvisioning(db, b);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.map((one) => one.id)).not.toContain(ofA.provisioning);
   },
   async setStopButton() {
     await record.setStopButton(db, b, true, frontline);

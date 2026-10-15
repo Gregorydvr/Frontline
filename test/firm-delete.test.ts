@@ -21,6 +21,7 @@ import {
   holdTime,
   recordAgentPush,
   setAgent,
+  askProvisioning,
   linkForDue,
   listCustomers,
   listJobsForCustomer,
@@ -109,6 +110,8 @@ async function everyKindOfRow(firm: FirmId): Promise<void> {
   const assistant = `00000000-0000-4000-8000-${String(agentsMade).padStart(12, '0')}`;
   expect(await setAgent(db, firm, assistant, staff)).toBe('set');
   await recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'staff', staff }, due: null, outcome: 'not_connected', settings: [], state: 'stuck', differing: [] });
+  // A request to Twilio for its number (task 3 of queue 2).
+  expect(await askProvisioning(db, firm, 'number', staff)).not.toBeNull();
   await optOut(db, firm, customer.id, 'visit_reminder', { kind: 'frontline' });
   await optOutNumber(db, firm, ukMobile('07700 900399'));
   await recordTextIn(db, firm, { provider: 'fake', providerId: `every-${firm}`, from: '+447700900399', words: 'Hello.', consent: null });

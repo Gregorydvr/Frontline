@@ -215,6 +215,21 @@ export async function setTrade(db: RecordDb, firm: FirmId, trade: Trade, by: Act
   return filled;
 }
 
+/**
+ * Sets which services the firm chose at set-up, and records who did it.
+ * Choosing switches nothing on: each service stays as it is.
+ */
+export async function setServicesChosen(db: RecordDb, firm: FirmId, services: readonly Service[], by: Actor): Promise<void> {
+  if (!services.every((service) => SERVICES.includes(service)) || new Set(services).size !== services.length) {
+    throw new Refused();
+  }
+  const ordered = SERVICES.filter((service) => services.includes(service));
+  await changeFirm(db, [
+    db.d1.prepare('UPDATE firms SET services_chosen = ? WHERE id = ?').bind(JSON.stringify(ordered), firm),
+    ...recorded(db, firm, 'services_chosen', by, 'chose_services'),
+  ]);
+}
+
 /** Whether something is diary rules that make sense, since types can be got round. */
 function areDiaryRules(rules: unknown): rules is DiaryRules {
   return diaryRulesProblems(rules).length === 0;
@@ -245,7 +260,7 @@ function diaryRulesOf(rules: DiaryRules): DiaryRules {
 function recorded(
   db: RecordDb,
   firm: FirmId,
-  kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set' | 'trade_set',
+  kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set' | 'trade_set' | 'services_chosen',
   by: Actor,
   action: StaffAction,
 ): D1PreparedStatement[] {
@@ -296,7 +311,7 @@ async function changeFirm(db: RecordDb, statements: D1PreparedStatement[], follo
 
 /** The columns a firm is read from, for firmFromRow(). */
 export const FIRM_COLUMNS = `id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-  stopped, phone_number, urgent_list, diary_rules, trade, clock_ahead, left_at, left_by, created_at`;
+  stopped, phone_number, urgent_list, diary_rules, trade, services_chosen, clock_ahead, left_at, left_by, created_at`;
 
 export interface FirmRow {
   id: string;
@@ -312,6 +327,7 @@ export interface FirmRow {
   urgent_list: string;
   diary_rules: string | null;
   trade: string | null;
+  services_chosen: string;
   clock_ahead: number;
   left_at: number | null;
   left_by: string | null;
@@ -335,6 +351,7 @@ export function firmFromRow(row: FirmRow): Firm {
     urgentList: urgentListFrom(row.urgent_list),
     diaryRules: diaryRulesFrom(row.diary_rules),
     trade: TRADES.find((trade) => trade === row.trade) ?? null,
+    servicesChosen: servicesFrom(row.services_chosen),
     clockAhead: row.clock_ahead,
     leaving: row.left_at === null || row.left_by === null ? null : { at: instant(row.left_at), by: row.left_by as StaffId },
     createdAt: instant(row.created_at),
@@ -345,6 +362,12 @@ export function firmFromRow(row: FirmRow): Firm {
 function urgentListFrom(stored: string): string[] {
   const list: unknown = JSON.parse(stored);
   return Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** Reads the stored services back, keeping only names on the list, in its order. */
+function servicesFrom(stored: string): Service[] {
+  const list: unknown = JSON.parse(stored);
+  return Array.isArray(list) ? SERVICES.filter((service) => list.includes(service)) : [];
 }
 
 /** Reads the stored rules back, keeping them only if setDiaryRules() could have written them. */

@@ -170,6 +170,8 @@ const localDeps = (env: Env): Deps => ({
   vapiCredential: null,
   // Task 5's texts, switched off here as on every copy.
   textsOn: [],
+  // Buying numbers is switched off here as on every copy.
+  numbers: null,
 });
 const app = createLocalApp(localDeps);
 

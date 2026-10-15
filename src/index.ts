@@ -9,6 +9,7 @@ import { everyMinute, onQueue } from './due';
 import { CLOSED_GATE, type StaffGate } from './providers/access';
 import { CloudflareAccess } from './providers/access/cloudflare';
 import { TwilioTexts } from './providers/texts/twilio';
+import { numbersSettingsWhole, TwilioNumbers } from './providers/numbers/twilio';
 import { VapiApi } from './providers/vapi/api';
 
 /** Cloudflare Access's check, once both its settings are given for this copy; until then the control room is shut. */
@@ -34,6 +35,22 @@ function vapiAgents(env: Env): VapiApi | null {
   return key === '' ? null : new VapiApi(key);
 }
 
+/**
+ * Buying numbers in Twilio, only when the copy's NUMBERS_ON setting is "yes"
+ * and its bundle, address and Twilio account are all set: every number
+ * bought costs money. Null on every copy today.
+ */
+export function phoneNumbers(env: Env): TwilioNumbers | null {
+  const settings = {
+    // A secret that was never set is missing at run time, whatever the types say.
+    accountSid: ((env.TWILIO_ACCOUNT_SID as string | undefined) ?? '').trim(),
+    authToken: ((env.TWILIO_AUTH_TOKEN as string | undefined) ?? '').trim(),
+    bundleSid: env.TWILIO_BUNDLE_SID.trim(),
+    addressSid: env.TWILIO_ADDRESS_SID.trim(),
+  };
+  return env.NUMBERS_ON.trim() === 'yes' && numbersSettingsWhole(settings) ? new TwilioNumbers(settings) : null;
+}
+
 function realDeps(env: Env): Deps {
   const address = env.PUBLIC_ADDRESS.replace(/\/+$/, '');
   return {
@@ -53,6 +70,7 @@ function realDeps(env: Env): Deps {
     agents: vapiAgents(env),
     vapiCredential: vapiCredentialFrom(env.VAPI_CREDENTIAL_ID),
     textsOn: textsOnFrom(env.TEXTS_ON),
+    numbers: phoneNumbers(env),
   };
 }
 

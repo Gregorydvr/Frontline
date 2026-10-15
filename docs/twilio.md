@@ -29,6 +29,10 @@ Each firm has an 07 number bought for it in the account, and the same number is 
 
 Front-line answers a text that comes in with an empty reply, so Twilio sends nothing back. Nothing answers a customer automatically in Release 1.
 
+### Buying a number from the control room (switched off)
+
+The control room's guided set-up can buy a firm's number (task 3 of queue 2), but only on a copy whose `NUMBERS_ON` setting is "yes", with `TWILIO_BUNDLE_SID` and `TWILIO_ADDRESS_SID` set to Twilio's ids for the regulatory bundle and address a UK number is bought under. All three are empty on every copy (`wrangler.jsonc`), because a number costs money and Greg has not switched it on (open question 18 in `docs/decisions.md`). When it is on, it lists one free UK mobile (`AvailablePhoneNumbers/GB/Mobile.json`, texts and calls), buys it (`IncomingPhoneNumbers.json`) with the messaging webhook above already set, names it in Twilio's console by the firm's id, and sets it on the firm. Bringing it into Vapi is still `scripts/vapi-import-number.js` (`docs/vapi.md`).
+
 ## Delivery reports
 
 Each text Front-line sends asks Twilio to report on its delivery to `<PUBLIC_ADDRESS>/twilio/status`. `PUBLIC_ADDRESS` is set in `wrangler.jsonc` for each copy, with no slash at the end. It is empty until open question 9 (the web address) is answered; while it is empty, texts go without delivery reports and stay as "sent".

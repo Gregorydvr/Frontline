@@ -4,7 +4,7 @@
 // in Vapi's dashboard would, or make the next request fail.
 
 import type { AgentSettings } from '../../agent-settings';
-import type { AgentAnswer, VapiAgents } from '.';
+import type { AgentAnswer, CreateAnswer, VapiAgents } from '.';
 
 export class FakeVapi implements VapiAgents {
   /** The agents it holds, by id. */
@@ -37,6 +37,22 @@ export class FakeVapi implements VapiAgents {
       this.agents.set(assistant, structuredClone({ ...held, ...settings }));
     }
     return Promise.resolve(this.held(assistant));
+  }
+
+  /** Agents made, by id, in the order they were made. */
+  readonly created: string[] = [];
+  /** What the next request to make an agent gets, in place of one. */
+  willNotCreate: 'refused' | 'unclear' | null = null;
+
+  create(settings: AgentSettings): Promise<CreateAnswer> {
+    const why = this.willNotCreate;
+    this.willNotCreate = null;
+    if (why !== null) return Promise.resolve({ ok: false, why });
+    // Invented ids in Vapi's form, counting up.
+    const assistant = `00000000-0000-4000-8000-${String(900000000000 + this.created.length + 1)}`;
+    this.created.push(assistant);
+    this.agents.set(assistant, structuredClone(settings));
+    return Promise.resolve({ ok: true, assistant });
   }
 
   private held(assistant: string): AgentAnswer {

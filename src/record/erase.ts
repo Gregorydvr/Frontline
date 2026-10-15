@@ -202,6 +202,7 @@ export const FIRM_TABLES = [
   'owners',
   'agent_pushes',
   'agents',
+  'provisioning',
 ] as const;
 
 /**

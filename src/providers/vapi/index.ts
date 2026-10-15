@@ -23,7 +23,16 @@ export interface VapiAgents {
   read(assistant: string): Promise<AgentAnswer>;
   /** Replaces each of the settings given, whole, and leaves the rest. Gives the agent as Vapi then holds it. */
   change(assistant: string, settings: AgentSettings): Promise<AgentAnswer>;
+  /**
+   * Makes a new agent with these settings (task 3 of queue 2): only from the
+   * control room's guided set-up, once per firm. Unclear: Vapi's answer did
+   * not say whether it was made, so staff check Vapi by hand.
+   */
+  create(settings: AgentSettings): Promise<CreateAnswer>;
 }
+
+/** What came of making an agent: its id, or certain it was not made, or not clear. */
+export type CreateAnswer = { ok: true; assistant: string } | { ok: false; why: 'refused' | 'unclear' };
 
 /** Vapi's ids for agents and credentials. */
 export const VAPI_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

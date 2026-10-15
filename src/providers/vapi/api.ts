@@ -4,11 +4,12 @@
 // of this file use a pretend network.
 //
 // GET /assistant/{id} and PATCH /assistant/{id}, as scripts/vapi-assistant.js
-// has used them on practice since 12 Oct 2026. The key is sent to Vapi and
+// has used them on practice since 12 Oct 2026. POST /assistant makes one,
+// answering 201 with its `id`, from Vapi's documentation read on 15 Oct 2026. The key is sent to Vapi and
 // nowhere else, and never logged.
 
 import type { AgentSettings } from '../../agent-settings';
-import { VAPI_ID, type AgentAnswer, type VapiAgents } from '.';
+import { VAPI_ID, type AgentAnswer, type CreateAnswer, type VapiAgents } from '.';
 
 const VAPI_API = 'https://api.vapi.ai';
 
@@ -28,6 +29,24 @@ export class VapiApi implements VapiAgents {
 
   change(assistant: string, settings: AgentSettings): Promise<AgentAnswer> {
     return this.ask(assistant, 'PATCH', settings);
+  }
+
+  async create(settings: AgentSettings): Promise<CreateAnswer> {
+    let answer: Response;
+    try {
+      answer = await this.send(`${VAPI_API}/assistant`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+    } catch {
+      return { ok: false, why: 'unclear' };
+    }
+    // A refusal of the request itself is certain; anything else may have made one.
+    if (answer.status >= 400 && answer.status < 500 && answer.status !== 408 && answer.status !== 429) return { ok: false, why: 'refused' };
+    const made = (await answer.json().catch(() => null)) as { id?: unknown } | null;
+    if (!answer.ok || typeof made?.id !== 'string' || !VAPI_ID.test(made.id)) return { ok: false, why: 'unclear' };
+    return { ok: true, assistant: made.id };
   }
 
   private async ask(assistant: string, method: 'GET' | 'PATCH', body?: AgentSettings): Promise<AgentAnswer> {

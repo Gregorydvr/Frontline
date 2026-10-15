@@ -3,6 +3,7 @@ import type { DueQueue } from './due';
 import type { StaffGate } from './providers/access';
 import type { FileStores } from './record/files';
 import type { Texts } from './providers/texts';
+import type { PhoneNumbers } from './providers/numbers';
 import type { VapiAgents } from './providers/vapi';
 import { MESSAGE_KINDS, type MessageKind } from './record/types';
 
@@ -71,6 +72,12 @@ export interface Deps {
    * kinds marked switchable can be named; the texts of Release 1 always go.
    */
   textsOn: readonly MessageKind[];
+  /**
+   * Buying a firm's number in Twilio, from the control room's guided set-up.
+   * Null on every copy until its NUMBERS_ON setting is "yes" (it costs
+   * money): then the step says it is switched off, and nothing reaches Twilio.
+   */
+  numbers: PhoneNumbers | null;
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */

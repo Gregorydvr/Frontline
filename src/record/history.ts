@@ -117,6 +117,7 @@ export function firmEntry(
     | 'owner_mobile_set'
     | 'diary_rules_set'
     | 'trade_set'
+    | 'services_chosen'
     | 'firm_added'
     | 'owner_added'
     | 'wording_agreed'

@@ -309,6 +309,14 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   // first firm is unchanged (controlAsB checks it).
   'GET /control/firms/:firm/trade': () => controlAsB((b) => `/control/firms/${b}/trade`),
   'POST /control/firms/:firm/trade': () => controlAsB((b) => `/control/firms/${b}/trade`, () => controlForm({ trade: 'plumbing_heating' }), [303]),
+  // The guided set-up (task 3 of queue 2): the second firm's own page and
+  // requests. Its number and agent are already set, so nothing is asked of
+  // a provider; the first firm is unchanged (controlAsB checks it).
+  'GET /control/firms/:firm/onboard': () => controlAsB((b) => `/control/firms/${b}/onboard`),
+  'POST /control/firms/:firm/onboard/number': () => controlAsB((b) => `/control/firms/${b}/onboard/number`, () => controlForm({}), [303]),
+  'POST /control/firms/:firm/onboard/agent': () => controlAsB((b) => `/control/firms/${b}/onboard/agent`, () => controlForm({}), [303]),
+  'GET /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`),
+  'POST /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`, () => controlForm({ service: 'calls' }), [303]),
   'GET /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`),
   'POST /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`, () => controlForm({ agent: '00000000-0000-4000-8000-0000000000b2' }), [303]),
   'POST /control/firms/:firm/agent/check': () => controlAsB((b) => `/control/firms/${b}/agent/check`, () => controlForm({}), [303]),
@@ -659,6 +667,11 @@ describe('every route', () => {
       'POST /control/firms/:firm/urgent',
       'GET /control/firms/:firm/trade',
       'POST /control/firms/:firm/trade',
+      'GET /control/firms/:firm/onboard',
+      'POST /control/firms/:firm/onboard/number',
+      'POST /control/firms/:firm/onboard/agent',
+      'GET /control/firms/:firm/services',
+      'POST /control/firms/:firm/services',
       'GET /control/firms/:firm/agent',
       'POST /control/firms/:firm/agent',
       'POST /control/firms/:firm/agent/check',

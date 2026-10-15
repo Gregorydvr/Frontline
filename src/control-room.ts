@@ -25,13 +25,14 @@ import { historyLine } from './history-lines';
 import { isId } from './ids';
 import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
-import { act, type ActionContext } from './actions';
+import { act, type ActionContext, type Provisioned } from './actions';
 import { VAPI_ID } from './providers/vapi';
 import { makeWords } from './messages';
 import { draftFor } from './trade-packs';
 import { segments } from './gsm';
 import { callerNumber, nationalNumber } from './phone';
 import {
+  CALLS_WORDING,
   callsSetUpGaps,
   diaryRulesProblems,
   NAME_LIMITS,
@@ -68,6 +69,7 @@ import {
   getAgent,
   listAgentPushes,
   listWording,
+  listProvisioning,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
 import {
@@ -106,6 +108,8 @@ import {
   urgentProblemWords,
   urgentScreen,
   tradeScreen,
+  servicesScreen,
+  onboardScreen,
   agentScreen,
   type SetUpView,
   wordingListScreen,
@@ -450,7 +454,8 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         return drawn(c, CONTROL_WORDS.addFirm, addFirmScreen(name, nameProblemWords(problems)), 400);
       }
       const firm = await act(asTaken(c, who), 'add_firm', { name });
-      return c.redirect(`/control/firms/${firm}`, 303);
+      // Adding a firm starts its guided set-up.
+      return c.redirect(`/control/firms/${firm}/onboard`, 303);
     }),
   );
 
@@ -458,7 +463,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'view', async (at) => {
       if ((await listOwners(at.firmDb, at.firm.id)).length > 0) return c.redirect(`/control/firms/${at.firm.id}`, 303);
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner');
-      return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, { name: '', mobile: '' }, []));
+      return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, { name: '', mobile: '' }, [], inFlow(c)));
     }),
   );
 
@@ -474,10 +479,10 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       else if (mobile.number === at.firm.phoneNumber) problems.push(CONTROL_WORDS.mobileIsFirmsNumber);
       if (problems.length > 0 || mobile.kind !== 'mobile') {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner');
-        return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, typed, problems), 400);
+        return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, typed, problems, inFlow(c)), 400);
       }
       await act(asTaken(c, at), 'add_owner', { firm: at.firm.id, name: typed.name, mobile: mobile.number });
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      return saved(c, at);
     }),
   );
 
@@ -507,7 +512,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_number');
       const typed = at.firm.phoneNumber === null ? '' : nationalNumber(at.firm.phoneNumber);
-      return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, []));
+      return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, [], inFlow(c)));
     }),
   );
 
@@ -518,9 +523,9 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const done = number.kind === 'mobile' ? await act(asTaken(c, at), 'set_firm_number', { firm: at.firm.id, number: number.number }) : 'not_mobile';
       if (done !== 'set') {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_number');
-        return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, [CONTROL_WORDS.numberProblems[done]]), 400);
+        return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, [CONTROL_WORDS.numberProblems[done]], inFlow(c)), 400);
       }
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      return saved(c, at);
     }),
   );
 
@@ -553,7 +558,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.get('/control/firms/:firm/trade', (c) =>
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_trade');
-      return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, []));
+      return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, [], inFlow(c)));
     }),
   );
 
@@ -563,10 +568,67 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const trade = TRADES.find((one) => one === typed);
       if (trade === undefined) {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_trade');
-        return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, [CONTROL_WORDS.tradeChoose]), 400);
+        return drawn(c, CONTROL_WORDS.chooseTrade, tradeScreen(at.firm, [CONTROL_WORDS.tradeChoose], inFlow(c)), 400);
       }
       await act(asTaken(c, at), 'choose_trade', { firm: at.firm.id, trade });
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      return saved(c, at);
+    }),
+  );
+
+  // The guided set-up (task 3 of queue 2): each step in order, with what is
+  // done, the next to do, and buying the number and making the agent, each
+  // switched off unless this copy allows it.
+  app.get('/control/firms/:firm/onboard', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_onboarding');
+      const deps = c.get('deps');
+      const setUp = await setUpOf(at);
+      const missing = setUp.gaps.find((gap) => gap.kind === 'wording');
+      const told = c.req.query('made') ?? '';
+      return drawn(
+        c,
+        words(CONTROL_WORDS.setUpFirm, { firm: at.firm.name }),
+        onboardScreen({
+          firm: at.firm,
+          setUp,
+          provisioning: await listProvisioning(at.firmDb, at.firm.id),
+          canBuyNumber: deps.numbers !== null,
+          canCreateAgent: deps.agents !== null,
+          outcome: Object.hasOwn(CONTROL_WORDS.provisioned, told) ? (told as Provisioned['done']) : null,
+          wording: { all: CALLS_WORDING.length, agreed: CALLS_WORDING.length - (missing?.kind === 'wording' ? missing.missing.length : 0) },
+        }),
+      );
+    }),
+  );
+
+  app.post('/control/firms/:firm/onboard/number', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const { done } = await act(asTaken(c, at), 'buy_number', { firm: at.firm.id });
+      return c.redirect(`/control/firms/${at.firm.id}/onboard?made=${done}`, 303);
+    }),
+  );
+
+  app.post('/control/firms/:firm/onboard/agent', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const { done } = await act(asTaken(c, at), 'create_agent', { firm: at.firm.id });
+      return c.redirect(`/control/firms/${at.firm.id}/onboard?made=${done}`, 303);
+    }),
+  );
+
+  app.get('/control/firms/:firm/services', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_services');
+      return drawn(c, CONTROL_WORDS.servicesChosen, servicesScreen(at.firm, inFlow(c)));
+    }),
+  );
+
+  // Anything that is not one of the five services is left out.
+  app.post('/control/firms/:firm/services', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const ticked = (await readForm(c.req.raw)).getAll('service');
+      const services = SERVICES.filter((service) => ticked.includes(service));
+      await act(asTaken(c, at), 'choose_services', { firm: at.firm.id, services });
+      return saved(c, at);
     }),
   );
 
@@ -574,7 +636,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
       const agent = await getAgent(at.firmDb, at.firm.id);
-      return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, agent?.assistantId ?? '', []));
+      return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, agent?.assistantId ?? '', [], inFlow(c)));
     }),
   );
 
@@ -590,9 +652,9 @@ export function controlRoutes(app: Hono<AppEnv>): void {
           : null;
       if (problem !== null) {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
-        return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, typed, [problem]), 400);
+        return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, typed, [problem], inFlow(c)), 400);
       }
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      return saved(c, at);
     }),
   );
 
@@ -617,7 +679,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.get('/control/firms/:firm/diary', (c) =>
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
-      return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, diaryFormOf(at.firm.diaryRules), []));
+      return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, diaryFormOf(at.firm.diaryRules), [], inFlow(c)));
     }),
   );
 
@@ -629,10 +691,10 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const problems = diaryRulesProblems(rules);
       if (problems.length > 0) {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
-        return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, typed, diaryProblemWords(problems)), 400);
+        return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, typed, diaryProblemWords(problems), inFlow(c)), 400);
       }
       await act(asTaken(c, at), 'set_diary_rules', { firm: at.firm.id, rules });
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      return saved(c, at);
     }),
   );
 
@@ -721,6 +783,21 @@ export function controlRoutes(app: Hono<AppEnv>): void {
 }
 
 /** What an action taken by the member of staff looking is given (src/actions.ts). */
+/** Whether a set-up page is a step of the guided set-up. */
+function inFlow(c: Context<AppEnv>): boolean {
+  return c.req.query('flow') === 'onboard';
+}
+
+/** Where a set-up page goes once saved: back to the guided set-up if it came from there, or to the firm's page. */
+function saved(c: Context<AppEnv>, at: AtFirm): Response {
+  return c.redirect(`/control/firms/${at.firm.id}${inFlow(c) ? '/onboard' : ''}`, 303);
+}
+
+/** Fills the gaps in some words for staff, such as {firm}. */
+function words(template: string, gaps: Readonly<Record<string, string>>): string {
+  return template.replace(/\{(\w+)\}/g, (gap, name: string) => gaps[name] ?? gap);
+}
+
 function asTaken(c: Context<AppEnv>, who: Looking): ActionContext {
   return { db: who.db, d1: c.env.DB, deps: c.get('deps'), by: { kind: 'staff', staff: who.staff } };
 }

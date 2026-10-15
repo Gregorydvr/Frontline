@@ -8,6 +8,7 @@ import type { Deps } from '../../src/deps';
 import type { DueMessage, DueQueue } from '../../src/due';
 import { StandInStaff } from '../../src/providers/access/fake';
 import { FakeTexts } from '../../src/providers/texts/fake';
+import { FakeNumbers } from '../../src/providers/numbers/fake';
 import { FakeVapi } from '../../src/providers/vapi/fake';
 
 /** A queue that keeps what the clock puts on it, for a test to run by hand. */
@@ -38,6 +39,7 @@ export interface TestDeps extends Deps {
   texts: FakeTexts;
   queue: PretendQueue;
   agents: FakeVapi;
+  numbers: FakeNumbers;
 }
 
 export function testDeps(clock: Clock): TestDeps {
@@ -56,5 +58,9 @@ export function testDeps(clock: Clock): TestDeps {
     vapiCredential: VAPI_CREDENTIAL,
     // Task 5's texts, switched off as on every copy. A test switches one on.
     textsOn: [],
+    // The stand-in for buying numbers, which reaches nothing. Every real copy
+    // has none, until its NUMBERS_ON is "yes"; a test sets this to null to
+    // see the step switched off.
+    numbers: new FakeNumbers(),
   };
 }

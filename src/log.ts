@@ -116,7 +116,15 @@ export type LogEvent =
   // Task 5's texts to customers (src/due.ts): a row that ran after the copy
   // switched its text off, and one whose visit changed.
   | 'text_switched_off'
-  | 'visit_text_visit_changed';
+  | 'visit_text_visit_changed'
+  // The guided set-up (task 3 of queue 2): a number or an agent asked for,
+  // made, or not made.
+  | 'number_asked'
+  | 'number_bought'
+  | 'number_not_bought'
+  | 'agent_asked'
+  | 'agent_made'
+  | 'agent_not_made';
 
 const ERROR_NAMES = [
   'Error',

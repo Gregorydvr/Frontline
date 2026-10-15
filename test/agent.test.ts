@@ -325,4 +325,24 @@ describe('Vapi’s own API', () => {
     // An id that is not Vapi's is never sent anywhere.
     expect(await answering(200).read('../keys')).toEqual({ ok: false, why: 'not_found', status: null });
   });
+
+  it('makes an agent with POST /assistant, and reads its id from the answer (task 3 of queue 2)', async () => {
+    const asked: { url: string; method: string; body: unknown }[] = [];
+    const network = ((url: string, init: RequestInit) => {
+      asked.push({ url, method: init.method ?? 'GET', body: typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : null });
+      return Promise.resolve(Response.json({ id: ID, name: 'Invented' }, { status: 201 }));
+    }) as unknown as typeof fetch;
+    expect(await new VapiApi('k', network).create({ name: 'Invented' })).toEqual({ ok: true, assistant: ID });
+    expect(asked).toEqual([{ url: 'https://api.vapi.ai/assistant', method: 'POST', body: { name: 'Invented' } }]);
+  });
+
+  it('reads a refusal as certain, and anything else that is not an agent as unclear', async () => {
+    const answering = (status: number, body: unknown = {}) => new VapiApi('k', () => Promise.resolve(Response.json(body, { status })));
+    expect(await answering(400).create({})).toEqual({ ok: false, why: 'refused' });
+    expect(await answering(401).create({})).toEqual({ ok: false, why: 'refused' });
+    expect(await answering(500).create({})).toEqual({ ok: false, why: 'unclear' });
+    expect(await answering(429).create({})).toEqual({ ok: false, why: 'unclear' });
+    expect(await answering(201, { id: 'not-an-id' }).create({})).toEqual({ ok: false, why: 'unclear' });
+    expect(await new VapiApi('k', () => Promise.reject(new Error('down'))).create({})).toEqual({ ok: false, why: 'unclear' });
+  });
 });

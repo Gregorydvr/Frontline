@@ -74,9 +74,9 @@ Updated 15 Oct 2026. Each task's branch is made from `slice-i-practice` after th
 
 | Task | Branch | State | Waiting on Greg |
 |---|---|---|---|
-| 1. Flaky contrast check | `slice-i-flaky-contrast` | Flaky, not a real contrast problem. The "message sent" panel rises with a fade (60% to full opacity over 0.18 seconds), and the check sometimes measured it part way through. The check now waits for the page to load and for every animation that ends to end. Shown with the fade slowed to 3 seconds: the old check fails on both panels, the new one passes. `npm run check:screens` now also runs on Windows | Nothing |
-| 2. Trade starter packs | `slice-i-trade-packs` | Built: three packs in `src/trade-packs.ts`; staff choose a firm's trade at `/control/firms/:firm/trade`, which fills in only what the firm has none of yet, as the action `choose_trade`. Migration 0012 adds the firm's trade | The packs' urgent lists and drafts, in `docs/texts-to-agree.md` [to agree]; the hours and visit lengths |
-| 3. Onboarding flow | | Not started | |
+| 1. Flaky contrast check | `slice-i-flaky-contrast` | Merged as #21. Flaky, not a real contrast problem. The "message sent" panel rises with a fade (60% to full opacity over 0.18 seconds), and the check sometimes measured it part way through. The check now waits for the page to load and for every animation that ends to end. Shown with the fade slowed to 3 seconds: the old check fails on both panels, the new one passes. `npm run check:screens` now also runs on Windows | Nothing |
+| 2. Trade starter packs | `slice-i-trade-packs` | Merged as #22 and deployed to practice (version 6f297773, with migration 0012). Built: three packs in `src/trade-packs.ts`; staff choose a firm's trade at `/control/firms/:firm/trade`, which fills in only what the firm has none of yet, as the action `choose_trade`. Migration 0012 adds the firm's trade | The packs' urgent lists and drafts, in `docs/texts-to-agree.md` [to agree]; the hours and visit lengths |
+| 3. Onboarding flow | `slice-i-onboarding` | Built: adding a firm opens its guided set-up (`/control/firms/:firm/onboard`), eight steps in order, each saving back to it. New actions `choose_services`, `buy_number`, `create_agent`. Buying a number and making an agent are built and switched off on every copy (no `NUMBERS_ON`, no Vapi key), and each can happen at most once per firm. Migration 0013 | Open question 18: switching on buying numbers and making agents from the Worker; the new staff words |
 | 4. Go-live gate | | Not started | |
 
 ## Where the first queue stands

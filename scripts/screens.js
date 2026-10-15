@@ -265,8 +265,13 @@ async function main() {
       await check(page, `${size.name}-control-add-firm`);
       await page.fill('#cr-firm-name', own.name);
       await page.click('button:has-text("Add")');
+      // Adding a firm starts its guided set-up (task 3 of queue 2), with
+      // buying a number and making an agent switched off on this machine.
+      await page.waitForURL(/\/onboard$/);
+      await check(page, `${size.name}-control-onboard`);
+      const setUpAddress = page.url().replace(/\/onboard$/, '');
+      await page.goto(setUpAddress);
       await check(page, `${size.name}-control-set-up-firm`);
-      const setUpAddress = page.url();
       await page.click('a:has-text("Add its owner")');
       await check(page, `${size.name}-control-set-up-owner`);
       await page.fill('#cr-owner-name', 'Example Owner');
@@ -278,6 +283,13 @@ async function main() {
       await check(page, `${size.name}-control-set-up-trade`);
       await page.check('input[name=trade][value=plumbing_heating]');
       await page.click('button:has-text("Save")');
+      // The services it chose, as a step of the guided set-up, back to it.
+      await page.goto(`${setUpAddress}/services?flow=onboard`);
+      await check(page, `${size.name}-control-set-up-services`);
+      await page.check('input[name=service][value=calls]');
+      await page.click('button:has-text("Save")');
+      await page.waitForURL(/\/onboard$/);
+      await check(page, `${size.name}-control-onboard-later`);
       await page.goto(`${setUpAddress}/number`);
       await page.fill('#cr-number', '07700 900100');
       await page.click('button:has-text("Save")');
