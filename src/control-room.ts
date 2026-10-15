@@ -18,17 +18,14 @@
 
 import type { Context, Hono } from 'hono';
 import type { AppEnv } from './app';
-import { instant, instantFromIso, type Instant } from './clock';
+import { instant, type Instant } from './clock';
 import { callReportForStaff } from './call-report';
 import { DEFAULT_NEXT_DAY_FROM } from './diary/times';
-import { everyMinute } from './due';
-import { loadExample } from './example/load';
-import { EXAMPLE_NOW } from './example/tidewell';
 import { historyLine } from './history-lines';
 import { isId } from './ids';
 import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
-import { pushAgent } from './agent-push';
+import { act, type ActionContext } from './actions';
 import { VAPI_ID } from './providers/vapi';
 import { DRAFT_WORDING, makeWords } from './messages';
 import { segments } from './gsm';
@@ -43,22 +40,12 @@ import {
   wordingProblems,
 } from './set-up';
 import {
-  askFirmExport,
-  cancelLeaving,
-  customerFile,
   customerFileCounts,
-  deleteCustomer,
-  deleteExampleFirm,
-  deleteFirm,
   downloadFirmExport,
   ledgerSince,
   listFirmExports,
   logStaffAcrossFirms,
-  markLeaving,
-  markMissingRecordings,
   readCallRecording,
-  redoCustomerDelete,
-  redoFirmDelete,
   exampleFirms,
   findCustomers,
   findOrAddStaff,
@@ -75,22 +62,11 @@ import {
   listTextsInBetween,
   logStaff,
   needsALook,
-  setExampleClock,
-  setService,
-  setStopButton,
-  createFirm,
-  createOwner,
   getOwner,
   listOwners,
   getAgent,
   listAgentPushes,
-  setAgent,
   listWording,
-  setDiaryRules,
-  setFirmNumber,
-  setOwnerMobile,
-  setUrgentList,
-  setWording,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
 import {
@@ -201,12 +177,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.post('/control/example', (c) =>
     asStaff(c, 'form', async (who) => {
       if (!practiceTools(c)) return c.notFound();
-      const [already] = await exampleFirms(who.db);
-      const firm = already ?? (await loadExample(c.env.DB));
-      if (already === undefined) {
-        await setExampleClock(who.db, firm, instantFromIso(EXAMPLE_NOW), who.staff, 'start');
-        log('example_loaded', { firm, staff: who.staff });
-      }
+      const firm = await act(asTaken(c, who), 'load_example', undefined);
       return c.redirect(`/control/firms/${firm}`, 303);
     }),
   );
@@ -242,9 +213,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       if (service === null || !SERVICES.includes(service) || (on !== '1' && on !== '0')) {
         return c.body(null, 400);
       }
-      await setService(at.firmDb, at.firm.id, service, on === '1', { kind: 'staff', staff: at.staff });
-      await logStaff(at.firmDb, at.firm.id, at.staff, on === '1' ? 'service_on' : 'service_off', { service });
-      log('staff_changed_firm', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'switch_service', { firm: at.firm.id, service, on: on === '1' });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -255,9 +224,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       if (on !== '1' && on !== '0') {
         return c.body(null, 400);
       }
-      await setStopButton(at.firmDb, at.firm.id, on === '1', { kind: 'staff', staff: at.staff });
-      await logStaff(at.firmDb, at.firm.id, at.staff, on === '1' ? 'stop_on' : 'stop_off');
-      log('staff_changed_firm', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'set_stop_button', { firm: at.firm.id, on: on === '1' });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -287,7 +254,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   // keeps no copy.
   app.post('/control/firms/:firm/customers/:customer/export', (c) =>
     atCustomer(c, 'form', async (at, customer) => {
-      const file = await customerFile(at.firmDb, at.firm.id, customer);
+      const file = await act(asTaken(c, at), 'export_customer', { firm: at.firm.id, customer });
       if (file === null) return notFound(c);
       const wording = await firmWording(at.firmDb, at.firm.id);
       const lines = (await historyForCustomer(at.firmDb, at.firm.id, customer)).map((entry) => ({
@@ -295,7 +262,6 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         line: historyLine(entry, 'job', wording) ?? historyLine(entry, 'feed', wording),
       }));
       const kept = (file.tables.calls ?? []).filter((row) => row.recording_state === 'kept').map((row) => String(row.id) as CallId);
-      await logStaff(at.firmDb, at.firm.id, at.staff, 'exported_customer', { customer });
       const zip = await zipInMemory(at.firmDb.clock.now(), async (writer) => {
         const missing: CallId[] = [];
         for (const call of kept) {
@@ -305,7 +271,6 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         }
         await writer.text('customer.json', JSON.stringify({ ...file, historyAsTheOwnerReadsIt: lines, recordingsMissing: missing }, null, 2));
       });
-      log('customer_exported', { firm: at.firm.id, customer, staff: at.staff });
       return c.body(zip, 200, {
         ...CONTROL_HEADERS,
         'Content-Type': 'application/zip',
@@ -347,15 +312,12 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 60);
       let deleted;
       try {
-        deleted = await deleteCustomer(at.firmDb, at.firm.id, customer, at.staff, typed);
+        deleted = await act(asTaken(c, at), 'delete_customer', { firm: at.firm.id, customer, typedName: typed });
       } catch (thrown) {
         if (!(thrown instanceof Refused)) throw thrown;
         // Not their name as held: nothing was deleted.
         const shown = await deletePage(at, customer, true);
         return shown === null ? notFound(c) : drawn(c, CONTROL_WORDS.delete, shown, 400);
-      }
-      if (deleted !== null) {
-        log('customer_deleted', { firm: at.firm.id, customer, staff: at.staff });
       }
       return drawn(c, CONTROL_WORDS.deletedTitle, deletedScreen(at.firm, deleted?.removed ?? null));
     }),
@@ -365,8 +327,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   // downloading one once it is made.
   app.post('/control/firms/:firm/export', (c) =>
     atFirm(c, 'form', async (at) => {
-      await askFirmExport(at.firmDb, at.firm.id, at.staff);
-      log('firm_export_asked', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'ask_firm_export', { firm: at.firm.id });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -399,7 +360,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'form', async (at) => {
       const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 120);
       try {
-        await markLeaving(at.firmDb, at.firm.id, at.staff, typed);
+        await act(asTaken(c, at), 'mark_leaving', { firm: at.firm.id, typedName: typed });
       } catch (thrown) {
         if (!(thrown instanceof Refused)) throw thrown;
         // Not its name as held, or already leaving: nothing changed.
@@ -407,7 +368,6 @@ export function controlRoutes(app: Hono<AppEnv>): void {
           ? drawn(c, CONTROL_WORDS.markLeaving, leavingScreen(at.firm, true), 400)
           : c.redirect(`/control/firms/${at.firm.id}`, 303);
       }
-      log('firm_leaving', { firm: at.firm.id, staff: at.staff });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -415,8 +375,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.post('/control/firms/:firm/leaving/cancel', (c) =>
     atFirm(c, 'form', async (at) => {
       try {
-        await cancelLeaving(at.firmDb, at.firm.id, at.staff);
-        log('firm_leaving_cancelled', { firm: at.firm.id, staff: at.staff });
+        await act(asTaken(c, at), 'cancel_leaving', { firm: at.firm.id });
       } catch (thrown) {
         if (!(thrown instanceof Refused)) throw thrown;
       }
@@ -437,13 +396,12 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'form', async (at) => {
       const typed = ((await readForm(c.req.raw)).get('name') ?? '').slice(0, 120);
       try {
-        await deleteFirm(at.firmDb, at.firm.id, at.staff, typed);
+        await act(asTaken(c, at), 'delete_firm', { firm: at.firm.id, typedName: typed });
       } catch (thrown) {
         if (!(thrown instanceof Refused)) throw thrown;
         if (at.firm.leaving === null) return c.redirect(`/control/firms/${at.firm.id}`, 303);
         return drawn(c, CONTROL_WORDS.deleteFirm, firmDeleteScreen(at.firm, await exportMade(at), true), 400);
       }
-      log('firm_deleted', { firm: at.firm.id, staff: at.staff });
       return drawn(c, CONTROL_WORDS.firmDeletedTitle, firmDeletedScreen());
     }),
   );
@@ -465,8 +423,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const typed = ((await readForm(c.req.raw)).get('since') ?? '').slice(0, 20);
       const since = ukTime(typed);
       if (since === null) return c.redirect('/control/after-restore', 303);
-      const done = await replayDeletions(who, since);
-      log('deletions_replayed', { staff: who.staff, ...done });
+      const done = await act(asTaken(c, who), 'replay_deletions', { since });
       return drawn(c, CONTROL_WORDS.afterRestore, afterRestoreScreen({ typed, since: null, done }));
     }),
   );
@@ -489,8 +446,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaffAcrossFirms(who.db, who.staff, 'viewed_add_firm');
         return drawn(c, CONTROL_WORDS.addFirm, addFirmScreen(name, nameProblemWords(problems)), 400);
       }
-      const firm = await createFirm(who.db, { name, isExample: false }, { kind: 'staff', staff: who.staff });
-      log('firm_added', { firm, staff: who.staff });
+      const firm = await act(asTaken(c, who), 'add_firm', { name });
       return c.redirect(`/control/firms/${firm}`, 303);
     }),
   );
@@ -517,8 +473,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner');
         return drawn(c, CONTROL_WORDS.addOwner, ownerScreen(at.firm, typed, problems), 400);
       }
-      await createOwner(at.firmDb, at.firm.id, { name: typed.name, mobile: mobile.number }, { kind: 'staff', staff: at.staff });
-      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'add_owner', { firm: at.firm.id, name: typed.name, mobile: mobile.number });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -540,8 +495,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_owner', { owner: owner.id });
         return drawn(c, CONTROL_WORDS.changeMobile, ownerMobileScreen(at.firm, owner, typed, problem === null ? [] : [problem]), 400);
       }
-      await setOwnerMobile(at.firmDb, at.firm.id, owner.id, mobile.number, { kind: 'staff', staff: at.staff });
-      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'change_owner_mobile', { firm: at.firm.id, owner: owner.id, mobile: mobile.number });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -558,12 +512,11 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     atFirm(c, 'form', async (at) => {
       const typed = ((await readForm(c.req.raw)).get('number') ?? '').slice(0, 30);
       const number = callerNumber(typed);
-      const done = number.kind === 'mobile' ? await setFirmNumber(at.firmDb, at.firm.id, number.number, { kind: 'staff', staff: at.staff }) : 'not_mobile';
+      const done = number.kind === 'mobile' ? await act(asTaken(c, at), 'set_firm_number', { firm: at.firm.id, number: number.number }) : 'not_mobile';
       if (done !== 'set') {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_number');
         return drawn(c, CONTROL_WORDS.number, numberScreen(at.firm, typed, [CONTROL_WORDS.numberProblems[done]]), 400);
       }
-      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -587,8 +540,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_urgent');
         return drawn(c, CONTROL_WORDS.urgent, urgentScreen(at.firm, typed, urgentProblemWords(problems)), 400);
       }
-      await setUrgentList(at.firmDb, at.firm.id, items, { kind: 'staff', staff: at.staff });
-      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'set_urgent_list', { firm: at.firm.id, items });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -606,12 +558,15 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.post('/control/firms/:firm/agent', (c) =>
     atFirm(c, 'form', async (at) => {
       const typed = ((await readForm(c.req.raw)).get('agent') ?? '').trim().toLowerCase().slice(0, 60);
-      const problem = !VAPI_ID.test(typed) ? CONTROL_WORDS.agentNotAnId : (await setAgent(at.firmDb, at.firm.id, typed, at.staff)) === 'taken' ? CONTROL_WORDS.agentTaken : null;
+      const problem = !VAPI_ID.test(typed)
+        ? CONTROL_WORDS.agentNotAnId
+        : (await act(asTaken(c, at), 'set_agent', { firm: at.firm.id, assistantId: typed })) === 'taken'
+          ? CONTROL_WORDS.agentTaken
+          : null;
       if (problem !== null) {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
         return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, typed, [problem]), 400);
       }
-      log('agent_set', { firm: at.firm.id, staff: at.staff });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -620,8 +575,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   // nothing was changed in Vapi since Front-line last did.
   app.post('/control/firms/:firm/agent/check', (c) =>
     atFirm(c, 'form', async (at) => {
-      await logStaff(at.firmDb, at.firm.id, at.staff, 'checked_agent');
-      await pushAgent(at.firmDb, c.get('deps'), at.firm.id, { by: { kind: 'staff', staff: at.staff }, due: null, overwrite: false });
+      await act(asTaken(c, at), 'check_agent', { firm: at.firm.id });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -630,8 +584,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   // settings. Never on an agent that is not this firm's own.
   app.post('/control/firms/:firm/agent/overwrite', (c) =>
     atFirm(c, 'form', async (at) => {
-      await logStaff(at.firmDb, at.firm.id, at.staff, 'overwrote_agent');
-      await pushAgent(at.firmDb, c.get('deps'), at.firm.id, { by: { kind: 'staff', staff: at.staff }, due: null, overwrite: true });
+      await act(asTaken(c, at), 'overwrite_agent', { firm: at.firm.id });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -653,8 +606,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
         return drawn(c, CONTROL_WORDS.diary, diaryScreen(at.firm, typed, diaryProblemWords(problems)), 400);
       }
-      await setDiaryRules(at.firmDb, at.firm.id, rules, { kind: 'staff', staff: at.staff });
-      log('firm_set_up_changed', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'set_diary_rules', { firm: at.firm.id, rules });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -705,8 +657,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         await logStaff(at.firmDb, at.firm.id, at.staff, 'checked_wording', { messageKind: kind });
         return drawn(c, CONTROL_WORDS.textKinds[kind], wordingScreen(await wordingView(c, at, kind, words, versions, problems, chosen)), 400);
       }
-      await setWording(at.firmDb, at.firm.id, `text:${kind}`, words, { kind: 'staff', staff: at.staff }, { owner: owner.id, how });
-      log('wording_agreed', { firm: at.firm.id, staff: at.staff });
+      await act(asTaken(c, at), 'agree_wording', { firm: at.firm.id, kind, words, owner: owner.id, how });
       return c.redirect(`/control/firms/${at.firm.id}/wording/${kind}`, 303);
     }),
   );
@@ -723,9 +674,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       if (to === null || to <= now) {
         return c.redirect(`/control/firms/${at.firm.id}`, 303);
       }
-      await setExampleClock(at.db, at.firm.id, to, at.staff, 'move_on');
-      log('example_clock_moved', { firm: at.firm.id, staff: at.staff });
-      await everyMinute(c.env.DB, c.get('deps'));
+      await act(asTaken(c, at), 'move_example_clock', { firm: at.firm.id, to });
       return c.redirect(`/control/firms/${at.firm.id}`, 303);
     }),
   );
@@ -740,13 +689,15 @@ export function controlRoutes(app: Hono<AppEnv>): void {
   app.post('/control/firms/:firm/reset', (c) =>
     atFirm(c, 'form', async (at) => {
       if (!practiceTools(c) || !at.firm.isExample) return c.notFound();
-      await deleteExampleFirm(at.db, at.firm.id, at.staff);
-      const firm = await loadExample(c.env.DB);
-      await setExampleClock(at.db, firm, instantFromIso(EXAMPLE_NOW), at.staff, 'start');
-      log('example_reset', { firm, staff: at.staff });
+      const firm = await act(asTaken(c, at), 'reset_example', { firm: at.firm.id });
       return c.redirect(`/control/firms/${firm}`, 303);
     }),
   );
+}
+
+/** What an action taken by the member of staff looking is given (src/actions.ts). */
+function asTaken(c: Context<AppEnv>, who: Looking): ActionContext {
+  return { db: who.db, d1: c.env.DB, deps: c.get('deps'), by: { kind: 'staff', staff: who.staff } };
 }
 
 /** Whether this copy has the demo firm's tools: this machine and practice, never live. */
@@ -971,26 +922,3 @@ function recordingEnding(key: string): string {
   return ending === undefined ? '' : `.${ending}`;
 }
 
-/**
- * Does again every delete the restore ledger noted since an instant, for
- * customers and firms the database holds again after a restore, then marks
- * every call whose recording file is gone. Each delete is recorded in the
- * staff log as done again, by the member of staff who asked.
- */
-async function replayDeletions(who: Looking, since: Instant): Promise<{ customers: number; firms: number; recordings: number }> {
-  const done = { customers: 0, firms: 0, recordings: 0 };
-  for (const entry of await ledgerSince(who.db, since)) {
-    const firm = await getFirm(who.db, entry.firm);
-    if (firm === null) continue;
-    const firmDb = withFirmClock(who.db, firm);
-    if (entry.kind === 'customer') {
-      if ((await redoCustomerDelete(firmDb, firm.id, entry.customer, who.staff)) !== null) done.customers += 1;
-    } else if ((await redoFirmDelete(firmDb, firm.id, who.staff)) === 'deleted') {
-      done.firms += 1;
-    }
-  }
-  for (const firm of await listFirms(who.db, who.staff)) {
-    done.recordings += await markMissingRecordings(withFirmClock(who.db, firm), firm.id);
-  }
-  return done;
-}

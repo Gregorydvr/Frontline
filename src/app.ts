@@ -1,25 +1,20 @@
 import { Hono, type Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { version } from '../package.json';
-import { answerBook, answerFreeTimes } from './booking';
+import { act, type ActionContext } from './actions';
+import { answerFreeTimes } from './booking';
 import type { Deps } from './deps';
 import { ownDiary } from './diary/own';
-import { runDue } from './due';
-import { landCall } from './land-call';
 import { errorName, log } from './log';
-import { stopOrStart } from './messages';
 import { isUkMobile } from './phone';
 import { formField, isFromTwilio, readTwilioForm } from './providers/texts/twilio';
 import {
-  confirmCustomerDetails,
   findFirmByNumber,
   findLink,
   getCustomer,
   getFirm,
   getJob,
   listVisitsForJob,
-  recordDelivery,
-  recordTextIn,
 } from './record';
 import { controlRoutes } from './control-room';
 import { ownerRoutes } from './owner-app';
@@ -72,19 +67,8 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
         log('call_report_unreadable');
         return c.json({}, 400);
       case 'report': {
-        const deps = c.get('deps');
-        const db = openRecord(c.env.DB, deps.clock);
-        const landed = await landCall(db, message.report);
-        if (landed.result === 'stored' && landed.alert !== null) {
-          // An urgent call: the owner is alerted at once, before Vapi gets
-          // its answer. If this fails, the clock runs the row again shortly,
-          // and the alert still cannot go twice. The call is kept either way.
-          try {
-            await runDue(db, deps, landed.firm, landed.alert);
-          } catch (thrown) {
-            log('due_failed', { firm: landed.firm, due: landed.alert, error: errorName(thrown) });
-          }
-        }
+        // An urgent call alerts the owner at once, before Vapi gets its answer.
+        const landed = await act(bySystem(c), 'land_call', { report: message.report });
         return c.json({}, landed.result === 'unknown_number' ? 404 : 200);
       }
     }
@@ -121,12 +105,12 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
       log('details_refused', { firm: found.firm, customer: found.customer.id });
       return c.html(detailsPage(found.firmName, found.visit, form), 400, DETAILS_HEADERS);
     }
-    const kind = await confirmCustomerDetails(db, found.firm, found.customer.id, found.job, {
-      name: form.name,
-      address: form.address,
-      email: form.email === '' ? null : form.email,
+    await act({ ...bySystem(c), db, by: { kind: 'customer' } }, 'confirm_details', {
+      firm: found.firm,
+      customer: found.customer.id,
+      job: found.job,
+      details: { name: form.name, address: form.address, email: form.email === '' ? null : form.email },
     });
-    log('details_saved', { firm: found.firm, customer: found.customer.id, corrected: kind === 'details_corrected' });
     return c.html(detailsSavedPage(found.firmName), 200, DETAILS_HEADERS);
   });
 
@@ -158,17 +142,7 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
       log('text_in_for_unknown_number');
       return c.body(null, 404);
     }
-    const stored = await recordTextIn(db, firm, {
-      provider: 'twilio',
-      providerId,
-      from: formField(form, 'From'),
-      words,
-      consent: stopOrStart(words),
-    });
-    log(stored.result === 'stored' ? 'text_in_stored' : 'text_in_repeated', { firm, text: stored.text });
-    if (stored.result === 'stored' && stored.consented.length > 0) {
-      log('text_in_consent', { firm, text: stored.text, customers: stored.consented.length });
-    }
+    await act({ ...bySystem(c), db }, 'take_text_in', { firm, provider: 'twilio', providerId, from: formField(form, 'From'), words });
     return c.body(NO_REPLY, 200, { 'Content-Type': 'text/xml' });
   });
 
@@ -205,12 +179,7 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
     if (firm === null || report === null) {
       return c.body(null, 200);
     }
-    const message = await recordDelivery(db, firm, 'twilio', providerId, report);
-    if (message === null) {
-      log('delivery_for_unknown_text', { firm });
-    } else {
-      log('delivery_recorded', { firm, message });
-    }
+    await act({ ...bySystem(c), db }, 'record_delivery', { firm, provider: 'twilio', providerId, report });
     return c.body(null, 200);
   });
 
@@ -286,10 +255,16 @@ async function toolRoute(c: Context<AppEnv>, tool: (typeof TOOL_NAMES)[keyof typ
     const answer =
       tool === TOOL_NAMES.freeTimes
         ? await answerFreeTimes(diary, firm, call, toolCall.args)
-        : await answerBook(diary, firm, call, toolCall.args, { db: withFirmClock(db, firm), from: message.from, linkAddress: c.get('deps').linkAddress });
+        : await act({ ...bySystem(c), db }, 'book_on_call', { diary, firm, call, args: toolCall.args, from: message.from });
     results.push({ name: toolCall.name, toolCallId: toolCall.id, result: answer });
   }
   return c.json({ results });
+}
+
+/** What an action the system takes for a request from Vapi, Twilio or a customer's link is given (src/actions.ts). */
+function bySystem(c: Context<AppEnv>): ActionContext {
+  const deps = c.get('deps');
+  return { db: openRecord(c.env.DB, deps.clock), d1: c.env.DB, deps, by: { kind: 'frontline' } };
 }
 
 /** What a customer's link is for, with what its page shows, or null for a link that has expired or never was. */

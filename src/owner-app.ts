@@ -13,27 +13,19 @@
 
 import type { Context, Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { act, type ActionContext } from './actions';
 import type { AppEnv } from './app';
-import { instant } from './clock';
-import { runDue } from './due';
 import { isId } from './ids';
-import { errorName, log } from './log';
+import { log } from './log';
 import { ukMobile, type UkMobile } from './phone';
 import {
-  countLoginLinks,
-  createLoginLink,
-  endSession,
   findLoginLink,
-  findOwnersByMobile,
   findSession,
   getFirm,
-  getJob,
   getOwner,
-  logInWithLink,
-  recordOwnerMessage,
 } from './record';
 import { openRecord, withFirmClock, type RecordDb } from './record/db';
-import { LOGIN_LASTS, LOGIN_LINK_LIMITS, type SessionToken } from './record/logins';
+import { LOGIN_LASTS, type SessionToken } from './record/logins';
 import { OWNER_MESSAGE_LIMIT } from './record/owner-messages';
 import type { Firm, JobId, OwnerId } from './record/types';
 import { APP_SCRIPT } from './screens/app-script';
@@ -91,30 +83,7 @@ export function ownerRoutes(app: Hono<AppEnv>): void {
     } catch {
       return c.html(loginPage({ mobile: typed, job, badMobile: true }), 400, OWNER_HEADERS);
     }
-    const deps = c.get('deps');
-    const db = openRecord(c.env.DB, deps.clock);
-    const now = db.clock.now();
-    log('login_asked');
-    for (const { firm, owner } of await findOwnersByMobile(db, mobile)) {
-      if (
-        (await countLoginLinks(db, firm, owner, instant(now - 60 * 60_000))) >= LOGIN_LINK_LIMITS.hour ||
-        (await countLoginLinks(db, firm, owner, instant(now - 24 * 60 * 60_000))) >= LOGIN_LINK_LIMITS.day
-      ) {
-        log('login_link_limit', { firm, owner });
-        continue;
-      }
-      // A job to land on only if it is this firm's.
-      const landOn = job === null ? null : ((await getJob(db, firm, job))?.id ?? null);
-      const { due } = await createLoginLink(db, firm, { owner, job: landOn });
-      log('login_link_made', { firm, due });
-      // Sent at once. If this fails, the clock runs the row again shortly,
-      // and the text still cannot go twice.
-      try {
-        await runDue(db, deps, firm, due);
-      } catch (thrown) {
-        log('due_failed', { firm, due, error: errorName(thrown) });
-      }
-    }
+    await act(bySystem(c), 'send_login_link', { mobile, job });
     return c.html(loginSentPage(), 200, OWNER_HEADERS);
   });
 
@@ -134,10 +103,8 @@ export function ownerRoutes(app: Hono<AppEnv>): void {
   app.post('/in/:token', async (c) => {
     if (!onAppAddress(c)) return c.notFound();
     if (!fromTheApp(c)) return refused(c);
-    const db = openRecord(c.env.DB, c.get('deps').clock);
-    const login = await logInWithLink(db, c.req.param('token'));
+    const login = await act(bySystem(c), 'log_in', { token: c.req.param('token') });
     if (login === null) {
-      log('login_link_not_found');
       return c.html(loginExpiredPage(), 404, OWNER_HEADERS);
     }
     const secure = isHttps(c);
@@ -148,7 +115,6 @@ export function ownerRoutes(app: Hono<AppEnv>): void {
       sameSite: 'Lax',
       maxAge: LOGIN_LASTS.longest / 1000,
     });
-    log('logged_in', { firm: login.firm, owner: login.owner });
     return c.redirect(login.job === null ? '/' : `/jobs/${login.job}`, 303);
   });
 
@@ -157,8 +123,7 @@ export function ownerRoutes(app: Hono<AppEnv>): void {
     if (!fromTheApp(c)) return refused(c);
     const who = await loggedIn(c);
     if (!(who instanceof Response)) {
-      await endSession(who.db, who.firm.id, who.cookie);
-      log('logged_out', { firm: who.firm.id, owner: who.owner });
+      await act(byOwner(c, who), 'log_out', { firm: who.firm.id, session: who.cookie });
     }
     deleteCookie(c, cookieName(isHttps(c)), { path: '/', secure: isHttps(c) });
     return c.redirect('/login', 303);
@@ -212,10 +177,20 @@ export function ownerRoutes(app: Hono<AppEnv>): void {
     if (words === '') {
       return withSheet(c, from, () => messageSheet(from, '', true), 400);
     }
-    const message = await recordOwnerMessage(who.db, who.firm.id, who.owner, words);
-    log('owner_message_stored', { firm: who.firm.id, message });
+    await act(byOwner(c, who), 'message_frontline', { firm: who.firm.id, words });
     return withSheet(c, from, () => messageSentSheet(from), 200);
   });
+}
+
+/** What an action taken by the system for a request from someone not yet logged in is given (src/actions.ts). */
+function bySystem(c: Context<AppEnv>): ActionContext {
+  const deps = c.get('deps');
+  return { db: openRecord(c.env.DB, deps.clock), d1: c.env.DB, deps, by: { kind: 'frontline' } };
+}
+
+/** What an action taken by the owner logged in is given. */
+function byOwner(c: Context<AppEnv>, who: Owner): ActionContext {
+  return { db: who.db, d1: c.env.DB, deps: c.get('deps'), by: { kind: 'owner', owner: who.owner } };
 }
 
 /** What a screen shows, or null for "not found". */

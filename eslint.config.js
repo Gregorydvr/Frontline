@@ -58,6 +58,31 @@ const PROVIDER_ADDRESS = /api\.twilio\.com/i;
 // works.
 const VAPI_ADDRESS = /api\.vapi\.ai/i;
 
+// Task 4 of docs/autopilot.md: every action goes through act() in
+// src/actions.ts, which names it, says who may take it, and records who did.
+// So the routes may read the record, and log a view, but not change it:
+// these are the record functions and other steps that change something.
+// test/fixtures/lint/ holds deliberate mistakes that show it works.
+const CHANGES_THE_RECORD = [
+  'createFirm', 'setDiaryRules', 'setFirmNumber', 'setService', 'setStopButton', 'setUrgentList', 'createOwner', 'setOwnerMobile',
+  'confirmCustomerDetails', 'createCustomer', 'createJob', 'cancelVisit', 'createVisit', 'moveVisit', 'holdTime', 'releaseHold',
+  'linkForDue', 'markCallBooked', 'recordCall', 'addHistory', 'setWording', 'optIn', 'optOut', 'optOutNumber', 'addDue', 'cancelDue',
+  'claimDue', 'finishDue', 'releaseDue', 'claimMessage', 'markMessageFailed', 'markMessageSent', 'recordDelivery', 'recordTextIn',
+  'createLoginLink', 'endSession', 'logInWithLink', 'recordOwnerMessage', 'deleteCustomer', 'redoCustomerDelete', 'deleteExampleFirm',
+  'setExampleClock', 'setAgent', 'recordAgentPush', 'addMissingSweeps', 'deleteRecording', 'emptyBin', 'giveUpRecording',
+  'markMissingRecordings', 'moveRecording', 'sweepFirm', 'askFirmExport', 'cancelLeaving', 'deleteFirm', 'deleteLeftFirm',
+  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox',
+];
+const actionsMessage = 'Every action goes through act() in src/actions.ts, which names it and records who did it. Routes only read.';
+const changesOutsideActions = [
+  { group: ['**/record', '**/record/*'], importNames: CHANGES_THE_RECORD, message: actionsMessage },
+  { group: ['**/land-call'], importNames: ['landCall'], message: actionsMessage },
+  { group: ['**/booking'], importNames: ['answerBook'], message: actionsMessage },
+  { group: ['**/agent-push'], importNames: ['pushAgent'], message: actionsMessage },
+  { group: ['**/due'], importNames: ['runDue', 'everyMinute'], message: actionsMessage },
+  { group: ['**/example/load'], importNames: ['loadExample'], message: actionsMessage },
+];
+
 const frontline = {
   rules: {
     'vapi-outside-provider': {
@@ -220,6 +245,14 @@ export default defineConfig(
       'frontline/text-outside-send': 'error',
       'frontline/vapi-outside-provider': 'error',
     },
+  },
+  {
+    // The routes: what people and providers reach. They take actions through
+    // act(), and only read the record themselves. src/local.ts, the version
+    // for this machine, is never deployed, and its shortcuts for the demo
+    // firm are its own.
+    files: ['src/app.ts', 'src/control-room.ts', 'src/owner-app.ts', 'test/fixtures/lint/change-outside-action.ts'],
+    rules: { 'no-restricted-imports': ['error', { patterns: changesOutsideActions }] },
   },
   {
     // The provider that reaches Vapi, the scripts run on Greg's machine, and
