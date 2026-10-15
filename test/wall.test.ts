@@ -547,6 +547,12 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(found?.id).not.toBe(ofA.hold.id);
     nothingOfA(found);
   },
+  async listHoldsForCall() {
+    // Each firm holds a time on the same call id: the second firm finds only its own.
+    const found = await record.listHoldsForCall(db, b, 'vapi', ofA.hold.providerCallId);
+    for (const hold of found) expect(hold.id).not.toBe(ofA.hold.id);
+    nothingOfA(found);
+  },
   async releaseHold() {
     expect(await record.releaseHold(db, b, ofA.hold.id)).toBe(false);
   },
