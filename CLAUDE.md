@@ -6,6 +6,8 @@ It sends messages in other firms' names and holds their customers' details. Gett
 
 Before any task, read `docs/build-brief.md` (what to build and in what order) and `docs/decisions.md` (what is settled, what is assumed, what is open). The agreed design is in `reference/example-app/`.
 
+Then read `docs/autopilot.md` and follow it. It is Greg's standing brief for building without him: the queue of tasks, when to merge into `slice-i-practice` and deploy to practice without waiting, and the only points at which to stop and ask him. Where it and this file differ, it says how.
+
 ## Words
 
 - **Firm**: a trade business that is Front-line's client.
@@ -101,6 +103,7 @@ Slice A creates these. Keep the names.
 - `npm run types`: rewrites `worker-configuration.d.ts` after a change to `wrangler.jsonc`.
 - `npm run check:screens`: the owner's screens in a real browser at 390 by 844 and 1280 by 800: no sideways scroll, nothing under 44px, nothing cut off, no accessibility failures (axe-core). Saves screenshots in `screens/`, beside the example's. GitHub runs it after `npm run check`.
 - `npm run practice:last-call`: on Greg's machine, the newest practice call in one go: what Vapi holds about it, what Front-line kept, and whether the two agree. Read only. `-- --call <Vapi id>` for another call, `-- --transcript` for the conversation on screen. See `docs/practice-checks.md`.
+- `npm run practice:gates`: from any machine, the gates in front of practice as someone with no Access login sees them: a customer's link opens, with search engines told to keep out, and the owner's app and the control room send them to Access's login. Read only, with a link token nobody was given. Run it after each deploy to practice.
 
 To add or update a package, use `npx npm@11 install`. npm 10 crashes on one of Vite's optional add-ons. `npm ci` works with either. `.npmrc` makes npm record exact versions.
 
@@ -183,6 +186,7 @@ scripts/vapi-settings.js    its check that a settings file holds no key or secre
 scripts/vapi-import-number.js   brings a firm's Twilio number into Vapi with a Twilio API key, on Greg's machine (docs/vapi.md)
 scripts/last-call.js        npm run practice:last-call, on Greg's machine: Vapi's record of a call beside the control room's report on it
 scripts/call-report-text.js its report and checks, tested in test/last-call.test.ts
+scripts/practice-gates.js   npm run practice:gates; what passes is in scripts/gates.js, tested in test/practice-gates.test.ts
 vapi/                each voice agent's settings, as the script puts them on Vapi, and agent-template.json, every firm's agent with
                      gaps for the record to fill. No keys or secrets
 docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
