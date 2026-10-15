@@ -653,3 +653,102 @@ describe('the firm’s rules for its diary', () => {
     expect((await getFirm(db, firm))?.diaryRules).toEqual(EXAMPLE_DIARY_RULES);
   });
 });
+
+describe('the notice, the weekend and the clocks, through the agent’s tools', () => {
+  const MIDDAY_MONDAY = ['Monday 5 October at midday', 'Tuesday 6 October at 8am', 'Wednesday 7 October at 8am'];
+
+  it.each([
+    // When the call is (UK time), what is offered with no day named, a time refused, and the first time that books.
+    ['a weekday, late in the evening', '2026-09-29T22:45:00+01:00', ['Wednesday 30 September at midday', 'Thursday 1 October at 8am', 'Friday 2 October at 8am'], '2026-09-30T11:00', '2026-09-30T12:00'],
+    ['a Friday morning', '2026-10-02T09:00:00+01:00', MIDDAY_MONDAY, '2026-10-05T11:00', '2026-10-05T12:00'],
+    ['a Friday, for the Saturday', '2026-10-02T09:00:00+01:00', MIDDAY_MONDAY, '2026-10-03T12:00', '2026-10-05T12:00'],
+    ['a Saturday', '2026-10-03T10:00:00+01:00', MIDDAY_MONDAY, '2026-10-05T08:00', '2026-10-05T12:00'],
+    ['a Sunday evening', '2026-10-04T21:00:00+01:00', MIDDAY_MONDAY, '2026-10-05T11:00', '2026-10-05T12:00'],
+  ])('offers and books nothing before noon on the next working day, on %s', async (_, now, offered, refused, first) => {
+    clock.set(instantFromIso(now));
+    expect((await freeTimes()).map((time) => time.say)).toEqual(offered);
+    expect(await book(refused)).toEqual({ booked: false, why: 'not_offered' });
+    expect(await book(first)).toMatchObject({ booked: true, start: first });
+  });
+
+  it('offers UK times either side of the clocks going back on Sunday 25 October 2026, and keeps each visit at its right instant', async () => {
+    clock.set(instantFromIso('2026-10-21T10:00:00+01:00'));
+    expect(await freeTimes({ day: '2026-10-23' }, callId('friday'))).toEqual([
+      { start: '2026-10-23T08:00', say: 'Friday 23 October at 8am' },
+      { start: '2026-10-23T12:00', say: 'Friday 23 October at midday' },
+      { start: '2026-10-23T15:00', say: 'Friday 23 October at 3pm' },
+    ]);
+    expect(await freeTimes({ day: '2026-10-26' }, callId('monday'))).toEqual([
+      { start: '2026-10-26T08:00', say: 'Monday 26 October at 8am' },
+      { start: '2026-10-26T12:00', say: 'Monday 26 October at midday' },
+      { start: '2026-10-26T15:00', say: 'Monday 26 October at 3pm' },
+    ]);
+    expect(await book('2026-10-23T08:00', callId('friday'))).toMatchObject({ booked: true });
+    expect(await book('2026-10-26T08:00', callId('monday'))).toMatchObject({ booked: true });
+    for (const call of [callId('friday'), callId('monday')]) {
+      clock.set(instant(clock.now() + 60_000));
+      expect((await send(app, mrsAhmedsReport(call))).status).toBe(200);
+    }
+
+    const visits = [];
+    for (const job of await listJobs(db, firm)) visits.push(...(await listVisitsForJob(db, firm, job.id)));
+    visits.sort((one, other) => one.startsAt - other.startsAt);
+    const [friday, monday] = visits;
+    if (friday === undefined || monday === undefined) throw new Error('Not filed');
+    // 8am on Friday 23 October is 7am UTC (summer time); 8am on Monday 26 October is 8am UTC.
+    expect(friday.startsAt).toBe(instantFromIso('2026-10-23T07:00:00Z'));
+    expect(monday.startsAt).toBe(instantFromIso('2026-10-26T08:00:00Z'));
+    const reminder = async (visit: typeof friday) => (await listDueForVisit(db, firm, visit.id)).find((due) => due.action === 'send_reminder');
+    // Each reminder at 1pm UK time the day before, until midnight UK time.
+    expect(await reminder(friday)).toMatchObject({ runAt: instantFromIso('2026-10-22T12:00:00Z'), latestAt: instantFromIso('2026-10-22T23:00:00Z') });
+    expect(await reminder(monday)).toMatchObject({ runAt: instantFromIso('2026-10-25T13:00:00Z'), latestAt: instantFromIso('2026-10-26T00:00:00Z') });
+  });
+});
+
+describe('the owner’s booking text either side of quiet hours', () => {
+  /** Books a time on Mrs Ahmed's call at this UK time, files the call, and gives the owner's row. */
+  async function bookedAt(now: string, start: string) {
+    clock.set(instantFromIso(now));
+    expect(await book(start)).toMatchObject({ booked: true });
+    expect((await send(app, mrsAhmedsReport())).status).toBe(200);
+    const [job] = await listJobs(db, firm);
+    const [visit] = job === undefined ? [] : await listVisitsForJob(db, firm, job.id);
+    const row = visit === undefined ? undefined : (await listDueForVisit(db, firm, visit.id)).find((due) => due.action === 'tell_owner_booked');
+    if (visit === undefined || row === undefined) throw new Error('Not booked');
+    return { visit, row };
+  }
+
+  const textsToTom = () => deps.texts.sent.filter((text) => text.to === TOMS_MOBILE).map((text) => text.body);
+  const waiting = async (visit: { id: Parameters<typeof listDueForVisit>[2] }, row: { id: string }) =>
+    (await listDueForVisit(db, firm, visit.id)).find((due) => due.id === row.id);
+
+  it('goes at once at 7:59pm', async () => {
+    const before = textsToTom().length;
+    const { row } = await bookedAt('2026-09-28T19:59:00+01:00', '2026-10-01T15:00');
+    expect(await runDue(db, deps, firm, row.id)).toEqual({ ran: 'done', outcome: 'sent' });
+    expect(textsToTom().slice(before)).toHaveLength(1);
+  });
+
+  it('waits from 8pm, and still at 7:59am, then goes at 8am', async () => {
+    const before = textsToTom().length;
+    const { visit, row } = await bookedAt('2026-09-28T20:00:00+01:00', '2026-10-01T15:00');
+    expect(await runDue(db, deps, firm, row.id)).toEqual({ ran: 'held' });
+    expect(await waiting(visit, row)).toMatchObject({ state: 'waiting', runAt: instantFromIso('2026-09-29T08:00:00+01:00') });
+    clock.set(instantFromIso('2026-09-29T07:59:00+01:00'));
+    await runDue(db, deps, firm, row.id);
+    expect(textsToTom().slice(before)).toEqual([]);
+    clock.set(instantFromIso('2026-09-29T08:00:00+01:00'));
+    expect(await runDue(db, deps, firm, row.id)).toEqual({ ran: 'done', outcome: 'sent' });
+    expect(textsToTom().slice(before)).toHaveLength(1);
+  });
+
+  it('waits on the night the clocks go back until 8am UK time, which is 8am UTC', async () => {
+    const before = textsToTom().length;
+    const { visit, row } = await bookedAt('2026-10-24T23:30:00+01:00', '2026-10-26T12:00');
+    expect(await runDue(db, deps, firm, row.id)).toEqual({ ran: 'held' });
+    expect(await waiting(visit, row)).toMatchObject({ state: 'waiting', runAt: instantFromIso('2026-10-25T08:00:00Z') });
+    clock.set(instantFromIso('2026-10-25T08:00:00Z'));
+    expect(await runDue(db, deps, firm, row.id)).toEqual({ ran: 'done', outcome: 'sent' });
+    expect(textsToTom().slice(before)).toEqual([expect.stringMatching(/^Front-line: Mrs Ahmed booked a quote visit for Monday 26 October at midday, /)]);
+  });
+});
