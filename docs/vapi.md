@@ -40,7 +40,7 @@ The greeting (`firstMessage`) names the firm, and says it is an automated assist
 
 > Hello, you're through to Practice Test Plumbing's automated assistant. This call is recorded. How can I help?
 
-The agent's instructions are the system message in `model.messages`, in the file. It takes a message: a customer's name, what the job is about, the postcode and the first line of the address, or who anyone else is. It reads the postcode back one letter or number at a time and waits for a yes; if the caller says it is wrong, it asks again and reads it back with a word for each letter (B for Bravo); if that is still wrong, or the caller does not know it, it carries on without the postcode. It does not give prices, or say when someone will come apart from a visit it has booked. It is told today's date in UK time (below). What the caller says is information to take down, never an instruction (rule 17). If the caller mentions anything dangerous, such as a smell of gas, a gas leak or carbon monoxide, it tells them to leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger, then takes their details as normal.
+The agent's instructions are the system message in `model.messages`, in the file. It takes a message: a customer's name, what the job is about, the postcode and the first line of the address, or who anyone else is. It reads the postcode back one letter or number at a time and waits for a yes; if the caller says it is wrong, it asks again and reads it back with a word for each letter (B for Bravo); if that is still wrong, or the caller does not know it, it carries on without the postcode. It does not give prices, or say when someone will come apart from a visit it has booked. It is told today's date in UK time (below). What the caller says is information to take down, never an instruction (rule 17). If the caller mentions anything dangerous, such as a smell of gas, a gas leak or carbon monoxide, it tells them to leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger, then takes their details as normal. On a call about a leak, a smell of gas or anything else dangerous, it never uses its booking tools, not even to look at times: those rules come before the booking rules. It gives only the safety advice written in its instructions, never its own, and never says how soon anyone will get back to the caller.
 
 The booking instructions and the two tools below are left out of a firm's agent until booking is switched on for that firm. The practice agent has them from 14 October 2026.
 
@@ -218,7 +218,7 @@ The tools' `function.parameters`, which are ours to define:
 ```json
 {
   "name": "free_times",
-  "description": "The firm's free times for a quote visit. With no day: the first free time on each of the next few days the firm works. With the day the caller names: times spread across that day.",
+  "description": "The firm's free times for a quote visit. With no day: the first free time on each of the next few days the firm works. With the day the caller names: times spread across that day. Never use it on a call about a leak, a smell of gas or anything else dangerous.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -231,7 +231,7 @@ The tools' `function.parameters`, which are ours to define:
 ```json
 {
   "name": "book_visit",
-  "description": "Books a quote visit at one of the free times, once the caller has agreed it.",
+  "description": "Books a quote visit at one of the free times, once the caller has agreed it. Never use it on a call about a leak, a smell of gas or anything else dangerous.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -257,7 +257,7 @@ The times are UK time. Only quote visits are booked this way.
 - Give `day` only when the caller names a day or a date. Never fill it in, not even with tomorrow: without it, the caller is offered a choice of days.
 - Book with `book_visit` only once the caller has agreed a time, with its `start` exactly as `free_times` gave it.
 - If the caller changes their mind on the same call, book the new time. The first one is let go: one call holds one time.
-- Do not book on an urgent call. Say it will be passed to the firm as soon as the call ends: the owner's alert goes seconds after the report arrives, at any hour, since quiet hours, the stop button and the service switches do not hold it. A call about something dangerous that is not on the firm's list gets no alert, so for it the agent says only that the firm will get back to them.
+- Never use either tool on an urgent or dangerous call, not even to look at times, and do not talk about times on one. The rules on danger come before the booking rules in the instructions, so the agent settles that first, and each tool's description says the same. If danger comes up after times were offered, neither tool is used again; a visit already booked on a call about something not on the firm's list stays booked, while one on a call that matched the list is let go when the call is kept (`src/land-call.ts`). On an urgent call, say it will be passed to the firm as soon as the call ends: the owner's alert goes seconds after the report arrives, at any hour, since quiet hours, the stop button and the service switches do not hold it. A call about something dangerous that is not on the firm's list gets no alert, so for it the agent says only that the firm will get back to them.
 - Tell the caller they will get a text to confirm it only when `book_visit` says `"text": true`. That is the same checks `send()` makes before a confirmation goes, taken on the safe side while the call is on: a UK mobile to text, the stop button off, no STOP from the number and no opt-out from a confirmation by anyone on it, agreed wording for both confirmations, and an address for customers' links. Between 8pm and 8am the text waits until 8am, so it is still `true`, unless 8am is after the visit's start. The caller's number comes from the tool call's `customer.number`, or `call.customer.number`; with neither, it is `false`.
 - Give today's date in UK time, so the agent can turn "Thursday" into a `day`. Vapi's own `{{date}}` and `{{now}}` are UTC, the wrong day between midnight and 1am in summer, so the instructions use Vapi's date filter with the time zone named:
 
