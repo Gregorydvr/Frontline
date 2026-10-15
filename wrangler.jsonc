@@ -68,11 +68,20 @@
   // COPY: which copy this is. Only "practice" turns on the demo firm's clock
   // and reset in the control room; anything else, or none, counts as live.
   // This machine runs src/local.ts, which is always "local".
+  //
+  // VAPI_CREDENTIAL_ID: Vapi's id for the credential that carries this copy's
+  // VAPI_SECRET, which each firm's agent presents to Front-line. An id, not a
+  // secret. The control room needs it to make a firm's agent settings
+  // (src/agent-settings.ts). Empty here and on live. The control room puts
+  // settings on an agent only once Greg sets the secret VAPI_API_KEY for a
+  // copy (docs/vapi.md); it is not listed with the secrets above, since a
+  // copy runs without it.
   "vars": {
     "PUBLIC_ADDRESS": "http://localhost:8787",
     "LINK_ADDRESS": "http://localhost:8787",
     "CONTROL_ADDRESS": "http://localhost:8787",
-    "COPY": "local"
+    "COPY": "local",
+    "VAPI_CREDENTIAL_ID": ""
   },
 
   // The clock: every minute, the due list's rows whose time has come go on
@@ -123,7 +132,10 @@
         "PUBLIC_ADDRESS": "https://practice-app.vanrooyenenterprises.com",
         "LINK_ADDRESS": "https://practice-links.vanrooyenenterprises.com",
         "CONTROL_ADDRESS": "https://practice-control.vanrooyenenterprises.com",
-        "COPY": "practice"
+        "COPY": "practice",
+        // Vapi's id for practice's server credential, which carries VAPI_SECRET,
+        // as vapi/practice-assistant.json names it. An id, not a secret.
+        "VAPI_CREDENTIAL_ID": "ecd964a5-42ff-4fca-952a-95ca211d84a5"
       },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
@@ -169,7 +181,7 @@
       // A placeholder until open question 9 is answered. Greg puts the
       // address of the live copy here, the address for customers' links,
       // and the control room's.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live" },
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {

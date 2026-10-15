@@ -20,6 +20,8 @@ import {
   SERVICES,
   VISIT_KINDS,
   type AgreedHow,
+  type Agent,
+  type AgentPush,
   type Call,
   type Customer,
   type DueAction,
@@ -97,6 +99,7 @@ export const CONTROL_WORDS = {
     tell_owner_booked: 'text to the owner about a booking',
     make_firm_export: 'firm export',
     delete_firm: 'delete of the firm',
+    push_agent: 'update of its agent in Vapi',
   } satisfies Record<DueAction, string>,
   reasons: {
     refused: 'refused by the provider',
@@ -265,7 +268,43 @@ export const CONTROL_WORDS = {
     calls_on: 'The number can be changed only while Calls & bookings is off: customers reply to the number they have.',
   },
   urgent: 'What counts as urgent',
-  urgentHint: 'One per line, such as: a leak. Its agent in Vapi must have the same list.',
+  urgentHint: 'One per line, such as: a leak. Its agent in Vapi must have the same list. Once its agent is set on the firm’s page, saving puts the list on it.',
+  // The firm's voice agent in Vapi, kept in step (task 3 of docs/autopilot.md).
+  agent: 'Its agent in Vapi',
+  agentId: 'Agent id in Vapi',
+  agentNone: 'Not set. Until it is, its agent is changed only by hand (docs/vapi.md).',
+  setAgent: 'Set its agent',
+  changeAgent: 'Change its agent',
+  agentHint: 'The agent’s id, from Vapi’s dashboard. Front-line puts this firm’s settings on it whenever they change, and changes nothing on an agent whose recording path is not this firm’s.',
+  agentNotAnId: 'That is not one of Vapi’s ids, such as 3f2a…-…',
+  agentTaken: 'Another firm already has that agent.',
+  agentStanding: 'Where it stands',
+  agentStates: {
+    unchecked: 'Not checked yet',
+    in_step: 'In step with the record',
+    behind: 'Behind: a change waits to go',
+    differs: 'Different from the record',
+    stuck: 'Not updated',
+  },
+  agentChecked: 'Last checked',
+  agentDiffering: 'Settings that differ',
+  agentCheck: 'Check and update now',
+  agentOverwrite: 'Put the record’s settings on it',
+  agentOverwriteHint: 'Vapi holds something other than what Front-line last put on it, such as a change made in Vapi’s dashboard. Putting the record’s settings on it replaces that change.',
+  agentPushes: 'Latest updates',
+  agentByStaff: 'staff',
+  agentByFrontline: 'Front-line, after a change',
+  agentOutcomes: {
+    in_step: 'Already in step',
+    changed: 'Updated: {settings}',
+    differs: 'Different, not changed: {settings}',
+    unreachable: 'Vapi could not be reached. Trying again.',
+    not_connected: 'Not connected: this copy has no Vapi key',
+    not_ready: 'Not ready: no urgent list, or this copy has no address or credential for its agent',
+    not_found: 'Vapi has no agent with that id',
+    refused: 'Vapi refused the settings',
+    not_this_firms: 'Not this firm’s agent: its recording path is not this firm’s. Nothing was changed.',
+  },
   urgentProblems: {
     too_many: 'At most 20.',
     item: 'Empty, or longer than 60 characters: {item}',
@@ -481,6 +520,8 @@ export interface FirmView {
 export interface SetUpView {
   gaps: readonly SetUpGap[];
   owners: readonly Owner[];
+  agent: Agent | null;
+  pushes: readonly AgentPush[];
 }
 
 export function firmScreen(view: FirmView): Html {
@@ -802,7 +843,8 @@ function setUpSection(firm: Firm, setUp: SetUpView): Html {
 <dt>${CONTROL_WORDS.firmId}</dt><dd class="cr-mono">${firm.id}</dd>
 <dt>${CONTROL_WORDS.recordingPath}</dt><dd class="cr-mono">/firms/${firm.id}</dd>
 <dt>${CONTROL_WORDS.urgentForAgent}</dt><dd class="cr-mono">${firm.urgentList.length === 0 ? CONTROL_WORDS.noneYet : `${firm.name}'s urgent list: ${firm.urgentList.join(', ')}.`}</dd>
-</dl>`,
+</dl>
+${agentSection(firm, setUp.agent, setUp.pushes)}`,
   );
 }
 
@@ -821,6 +863,43 @@ function diaryInWords(firm: Firm): string {
 export function minutesToTime(minutes: number): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/** The firm's agent in Vapi: which, where it stands, what differs, and its latest updates, with the buttons to check it and to put the record's settings on it. */
+function agentSection(firm: Firm, agent: Agent | null, pushes: readonly AgentPush[]): Html {
+  const base = `/control/firms/${firm.id}/agent`;
+  if (agent === null) {
+    return html`<h3>${CONTROL_WORDS.agent}</h3><p class="meta">${CONTROL_WORDS.agentNone} · <a class="link" href="${base}">${CONTROL_WORDS.setAgent}</a></p>`;
+  }
+  const lines = pushes.map(
+    (push) =>
+      html`${when(push.at)} · ${push.by.kind === 'staff' ? CONTROL_WORDS.agentByStaff : CONTROL_WORDS.agentByFrontline} · ${words(CONTROL_WORDS.agentOutcomes[push.outcome], { settings: push.settings.join(', ') })}`,
+  );
+  return html`<h3>${CONTROL_WORDS.agent}</h3>
+<dl class="card cr-dl">
+<dt>${CONTROL_WORDS.agentId}</dt><dd class="cr-mono">${agent.assistantId} · <a class="link" href="${base}">${CONTROL_WORDS.changeAgent}</a></dd>
+<dt>${CONTROL_WORDS.agentStanding}</dt><dd>${CONTROL_WORDS.agentStates[agent.state]}</dd>
+<dt>${CONTROL_WORDS.agentChecked}</dt><dd>${agent.checkedAt === null ? CONTROL_WORDS.noneYet : when(agent.checkedAt)}</dd>
+${agent.differing.length === 0 ? null : html`<dt>${CONTROL_WORDS.agentDiffering}</dt><dd class="cr-mono">${agent.differing.join(', ')}</dd>`}
+</dl>
+<form method="post" action="${base}/check"><button class="btn" type="submit">${CONTROL_WORDS.agentCheck}</button></form>
+${
+  agent.state === 'differs'
+    ? html`<p class="meta">${CONTROL_WORDS.agentOverwriteHint}</p><form method="post" action="${base}/overwrite"><button class="btn cr-danger" type="submit">${CONTROL_WORDS.agentOverwrite}</button></form>`
+    : null
+}
+<h3>${CONTROL_WORDS.agentPushes}</h3>${list(lines, CONTROL_WORDS.noneYet)}`;
+}
+
+/** Setting which agent in Vapi is the firm's. */
+export function agentScreen(firm: Firm, typed: string, problems: readonly string[]): Html {
+  return html`${back(firm)}
+<div class="block"><h1>${CONTROL_WORDS.agent}</h1><p class="meta">${CONTROL_WORDS.agentHint}</p></div>
+<form method="post" action="/control/firms/${firm.id}/agent" class="stack">
+${problemList(problems)}
+<div class="field cr-field"><label for="cr-agent">${CONTROL_WORDS.agentId}</label><input id="cr-agent" name="agent" class="cr-mono" maxlength="36" autocomplete="off" value="${typed}"></div>
+<button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
+</form>`;
 }
 
 function back(firm: Firm): Html {

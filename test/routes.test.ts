@@ -305,6 +305,10 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   },
   'GET /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`),
   'POST /control/firms/:firm/urgent': () => controlAsB((b) => `/control/firms/${b}/urgent`, () => controlForm({ items: 'a leak' }), [303]),
+  'GET /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`),
+  'POST /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`, () => controlForm({ agent: '00000000-0000-4000-8000-0000000000b2' }), [303]),
+  'POST /control/firms/:firm/agent/check': () => controlAsB((b) => `/control/firms/${b}/agent/check`, () => controlForm({}), [303]),
+  'POST /control/firms/:firm/agent/overwrite': () => controlAsB((b) => `/control/firms/${b}/agent/overwrite`, () => controlForm({}), [303]),
   'GET /control/firms/:firm/diary': () => controlAsB((b) => `/control/firms/${b}/diary`),
   'POST /control/firms/:firm/diary': () =>
     controlAsB(
@@ -649,6 +653,10 @@ describe('every route', () => {
       'POST /control/firms/:firm/number',
       'GET /control/firms/:firm/urgent',
       'POST /control/firms/:firm/urgent',
+      'GET /control/firms/:firm/agent',
+      'POST /control/firms/:firm/agent',
+      'POST /control/firms/:firm/agent/check',
+      'POST /control/firms/:firm/agent/overwrite',
       'GET /control/firms/:firm/diary',
       'POST /control/firms/:firm/diary',
       'GET /control/firms/:firm/wording',

@@ -23,6 +23,7 @@ declare const loginBrand: unique symbol;
 declare const ownerMessageBrand: unique symbol;
 declare const staffLogBrand: unique symbol;
 declare const firmExportBrand: unique symbol;
+declare const agentPushBrand: unique symbol;
 
 // Each kind of id is its own type, so one cannot be passed for another.
 export type FirmId = Id & { readonly [firmBrand]: true };
@@ -37,6 +38,7 @@ export type DueId = Id & { readonly [dueBrand]: true };
 export type MessageId = Id & { readonly [messageBrand]: true };
 export type TextInId = Id & { readonly [textInBrand]: true };
 export type WordingId = Id & { readonly [wordingBrand]: true };
+export type AgentPushId = Id & { readonly [agentPushBrand]: true };
 export type HoldId = Id & { readonly [holdBrand]: true };
 /** The token in a link a customer opens. It cannot be guessed (rule 13). */
 export type LinkToken = Id & { readonly [linkBrand]: true };
@@ -585,6 +587,9 @@ export const DUE_ACTIONS = [
   'sweep',
   'make_firm_export',
   'delete_firm',
+  // The firm's voice agent in Vapi: put the record's settings on it after a
+  // change was saved (src/agent-push.ts).
+  'push_agent',
 ] as const;
 export type DueAction = (typeof DUE_ACTIONS)[number];
 
@@ -611,6 +616,10 @@ export const DUE_OUTCOMES = [
   'swept',
   'made',
   'nothing_to_do',
+  // The firm's agent: in step with the record after the row, or not, for
+  // the reason its push says (agent_pushes).
+  'pushed',
+  'not_pushed',
 ] as const;
 export type DueOutcome = (typeof DUE_OUTCOMES)[number];
 
@@ -750,6 +759,11 @@ export const STAFF_ACTIONS = [
   'set_urgent_list',
   'set_diary_rules',
   'agreed_wording',
+  // The firm's voice agent in Vapi (task 3 of docs/autopilot.md).
+  'viewed_set_up_agent',
+  'set_agent',
+  'checked_agent',
+  'overwrote_agent',
   // Practice and this machine only: the demo firm.
   'loaded_example',
   'moved_clock',
@@ -770,4 +784,59 @@ export interface StaffLogEntry {
   owner: OwnerId | null;
   /** The kind of text whose wording was viewed or agreed (slice H2). */
   messageKind: MessageKind | null;
+}
+
+/**
+ * Where a firm's voice agent in Vapi stands against the record:
+ * - unchecked: set, and not yet read from Vapi
+ * - in_step: the last read-back matched the record
+ * - behind: a change waits to go, or Vapi could not be reached
+ * - differs: Vapi holds something other than what Front-line last confirmed,
+ *   such as a change made in Vapi's dashboard, or the first check found it
+ *   different; staff choose whether to put the record's settings on it
+ * - stuck: it cannot be pushed as things are: no Vapi key for this copy, the
+ *   firm not ready, the agent not found, refused, or not this firm's own
+ */
+export const AGENT_STATES = ['unchecked', 'in_step', 'behind', 'differs', 'stuck'] as const;
+export type AgentState = (typeof AGENT_STATES)[number];
+
+/**
+ * What one push or check came to:
+ * - in_step: nothing needed sending
+ * - changed: the settings that differed were sent, and the read-back matched
+ * - differs: not sent, because Vapi was changed since Front-line last
+ *   confirmed it, or the read-back did not match
+ * - unreachable: Vapi could not be reached; the row tries again
+ * - not_connected: this copy has no Vapi key
+ * - not_ready: the firm has no urgent list, or the copy no address or
+ *   credential for the agent
+ * - not_found: Vapi has no agent with that id
+ * - refused: Vapi refused the settings
+ * - not_this_firms: the agent's recording path is not this firm's own, so
+ *   nothing is changed on it
+ */
+export const AGENT_OUTCOMES = ['in_step', 'changed', 'differs', 'unreachable', 'not_connected', 'not_ready', 'not_found', 'refused', 'not_this_firms'] as const;
+export type AgentOutcome = (typeof AGENT_OUTCOMES)[number];
+
+/** A firm's voice agent in Vapi, as the record holds it. */
+export interface Agent {
+  assistantId: string;
+  state: AgentState;
+  /** A fingerprint of the settings last confirmed on Vapi, or null if none yet. */
+  confirmed: string | null;
+  checkedAt: Instant | null;
+  /** The settings that differ, by name, when it is not in step. */
+  differing: string[];
+  setAt: Instant;
+}
+
+/** One push or check of a firm's agent, as the log of them holds it. Never edited. */
+export interface AgentPush {
+  id: AgentPushId;
+  assistantId: string;
+  at: Instant;
+  by: { kind: 'frontline' } | { kind: 'staff'; staff: StaffId };
+  due: DueId | null;
+  outcome: AgentOutcome;
+  settings: string[];
 }

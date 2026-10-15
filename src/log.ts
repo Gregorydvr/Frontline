@@ -103,7 +103,16 @@ export type LogEvent =
   // up, and wording agreed.
   | 'firm_added'
   | 'firm_set_up_changed'
-  | 'wording_agreed';
+  | 'wording_agreed'
+  // The firm's voice agent in Vapi (src/agent-push.ts): in step, changed,
+  // different from what Front-line last confirmed, Vapi not reached, or stuck
+  // for a reason the firm's log of pushes gives.
+  | 'agent_in_step'
+  | 'agent_changed'
+  | 'agent_differs'
+  | 'agent_unreachable'
+  | 'agent_stuck'
+  | 'agent_set';
 
 const ERROR_NAMES = [
   'Error',

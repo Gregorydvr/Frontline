@@ -8,6 +8,7 @@ import type { Deps } from '../../src/deps';
 import type { DueMessage, DueQueue } from '../../src/due';
 import { StandInStaff } from '../../src/providers/access/fake';
 import { FakeTexts } from '../../src/providers/texts/fake';
+import { FakeVapi } from '../../src/providers/vapi/fake';
 
 /** A queue that keeps what the clock puts on it, for a test to run by hand. */
 export class PretendQueue implements DueQueue {
@@ -30,9 +31,13 @@ export const APP_ADDRESS = 'https://app.example';
 /** Where the control room is in tests. */
 export const CONTROL_ADDRESS = 'https://control.example';
 
+/** Vapi's id for the credential in tests: invented. */
+export const VAPI_CREDENTIAL = '00000000-0000-4000-8000-0000000000c1';
+
 export interface TestDeps extends Deps {
   texts: FakeTexts;
   queue: PretendQueue;
+  agents: FakeVapi;
 }
 
 export function testDeps(clock: Clock): TestDeps {
@@ -47,5 +52,7 @@ export function testDeps(clock: Clock): TestDeps {
     controlAddress: CONTROL_ADDRESS,
     // The local file stores the tests run against, kept apart between test files.
     files: { kept: env.FILES, inbox: env.CALLS_IN },
+    agents: new FakeVapi(),
+    vapiCredential: VAPI_CREDENTIAL,
   };
 }

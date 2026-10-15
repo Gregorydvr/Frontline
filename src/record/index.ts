@@ -78,6 +78,7 @@ export {
   needsALook,
 } from './control';
 export { deleteExampleFirm, setExampleClock } from './example';
+export { getAgent, listAgentPushes, recordAgentPush, setAgent } from './agents';
 export {
   addMissingSweeps,
   deleteRecording,

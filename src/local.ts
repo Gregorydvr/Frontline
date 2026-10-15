@@ -164,6 +164,10 @@ const localDeps = (env: Env): Deps => ({
   staff: new StandInStaff(),
   controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
   files: { kept: env.FILES, inbox: env.CALLS_IN },
+  // Nothing reaches Vapi from this machine: a firm's agent says it is not
+  // connected.
+  agents: null,
+  vapiCredential: null,
 });
 const app = createLocalApp(localDeps);
 

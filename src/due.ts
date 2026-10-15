@@ -25,6 +25,9 @@
 // - make_firm_export: make the file of a firm's records staff asked for
 // - delete_firm: delete a leaving firm at the end of its 30 days. The row
 //   goes with the firm, so it is not marked done
+// - push_agent: put the record's settings on the firm's voice agent in Vapi
+//   after a change the agent is made from was saved (src/agent-push.ts); it
+//   tries again while Vapi cannot be reached, for a day
 //
 // A row that deletes is never too late: its latest time is the end of time.
 
@@ -62,13 +65,15 @@ import { openRecord, withFirmClock, type RecordDb } from './record/db';
 import type { ClaimedDue, DueId, DueOutcome, FirmId } from './record/types';
 import { send, type SendResult } from './send';
 import { makeFirmExport } from './firm-export';
+import { pushAgent } from './agent-push';
 
 /**
- * What running a row needs from outside: the texts provider, and where
- * customers' links and the owner's app are. The file stores come with the
+ * What running a row needs from outside: the texts provider, where
+ * customers' links and the owner's app are, and Vapi's agents with this
+ * copy's credential for them. The file stores come with the
  * record it is given.
  */
-export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress'>>;
+export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress' | 'agents' | 'vapiCredential'>>;
 
 /** What goes on the queue for each row: ids only. */
 export interface DueMessage {
@@ -201,6 +206,8 @@ async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): 
       return exportTheFirm(db, firm);
     case 'delete_firm':
       return deleteLeftFirm(db, firm);
+    case 'push_agent':
+      return pushTheAgent(db, deps, firm, row);
   }
 }
 
@@ -229,6 +236,14 @@ async function sweep(db: RecordDb, firm: FirmId): Promise<DueOutcome | Held> {
   const swept = await sweepFirm(db, firm);
   log('swept', { firm, ...swept.counts });
   return swept.more ? { until: null } : 'swept';
+}
+
+/** Puts the record's settings on the firm's agent. While Vapi cannot be reached, it waits and tries again. */
+async function pushTheAgent(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
+  const pushed = await pushAgent(db, deps, firm, { by: { kind: 'frontline' }, due: row.id, overwrite: false });
+  if (pushed === null) return 'nothing_to_do';
+  if (pushed.tryAgain) return { until: null };
+  return pushed.outcome === 'in_step' || pushed.outcome === 'changed' ? 'pushed' : 'not_pushed';
 }
 
 /** Makes the firm's export that staff asked for. */
