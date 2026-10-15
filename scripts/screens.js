@@ -323,6 +323,17 @@ async function main() {
       await check(page, `${size.name}-control-set-up-firm-later`);
       await page.click('a:has-text("Change their mobile")');
       await check(page, `${size.name}-control-set-up-mobile`);
+      // Its go-live checklist (task 4 of queue 2), with a data-protection
+      // item ticked, and the test call refused for an id that is not one of
+      // its calls.
+      await page.goto(`${setUpAddress}/go-live`);
+      await check(page, `${size.name}-control-go-live`);
+      await page.check('input[name=ticked][value=dp_agreement]');
+      await page.click('button:has-text("Save the ticks")');
+      await page.fill('#cr-test-call', 'not-a-call');
+      await page.check('input[name=passed]');
+      await page.click('button:has-text("Record the test call")');
+      await check(page, `${size.name}-control-go-live-test-call-not-found`);
       await context.close();
 
       // The example app at the same size: Home, and Calls & bookings.

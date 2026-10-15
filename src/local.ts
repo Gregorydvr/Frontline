@@ -172,6 +172,9 @@ const localDeps = (env: Env): Deps => ({
   textsOn: [],
   // Buying numbers is switched off here as on every copy.
   numbers: null,
+  // The stand-in member of staff may switch a firm to live here, so the
+  // go-live gate can be seen working with invented firms.
+  goLiveBy: 'staff@example.com',
 });
 const app = createLocalApp(localDeps);
 

@@ -28,6 +28,7 @@ export {
 } from './firms';
 export { createOwner, getOwner, listOwners, setOwnerMobile } from './owners';
 export { askProvisioning, finishProvisioning, listProvisioning } from './provisioning';
+export { goLiveState, markLive, recordTestCall, tickGoLive } from './go-live';
 export {
   confirmCustomerDetails,
   createCustomer,

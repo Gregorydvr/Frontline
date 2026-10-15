@@ -124,7 +124,12 @@ export type LogEvent =
   | 'number_not_bought'
   | 'agent_asked'
   | 'agent_made'
-  | 'agent_not_made';
+  | 'agent_not_made'
+  // The go-live gate (task 4 of queue 2): an item ticked, and a firm
+  // switched to live, or not.
+  | 'go_live_ticked'
+  | 'firm_went_live'
+  | 'firm_not_live';
 
 const ERROR_NAMES = [
   'Error',

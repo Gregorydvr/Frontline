@@ -51,6 +51,12 @@ export function phoneNumbers(env: Env): TwilioNumbers | null {
   return env.NUMBERS_ON.trim() === 'yes' && numbersSettingsWhole(settings) ? new TwilioNumbers(settings) : null;
 }
 
+/** Who may switch a firm to live: the email in the secret GO_LIVE_BY, or nobody while it is not set. */
+function goLiveBy(env: Env): string | null {
+  const email = ((env as unknown as { GO_LIVE_BY?: string }).GO_LIVE_BY ?? '').trim().toLowerCase();
+  return email === '' ? null : email;
+}
+
 function realDeps(env: Env): Deps {
   const address = env.PUBLIC_ADDRESS.replace(/\/+$/, '');
   return {
@@ -71,6 +77,7 @@ function realDeps(env: Env): Deps {
     vapiCredential: vapiCredentialFrom(env.VAPI_CREDENTIAL_ID),
     textsOn: textsOnFrom(env.TEXTS_ON),
     numbers: phoneNumbers(env),
+    goLiveBy: goLiveBy(env),
   };
 }
 

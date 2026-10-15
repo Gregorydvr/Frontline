@@ -315,6 +315,17 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
   'GET /control/firms/:firm/onboard': () => controlAsB((b) => `/control/firms/${b}/onboard`),
   'POST /control/firms/:firm/onboard/number': () => controlAsB((b) => `/control/firms/${b}/onboard/number`, () => controlForm({}), [303]),
   'POST /control/firms/:firm/onboard/agent': () => controlAsB((b) => `/control/firms/${b}/onboard/agent`, () => controlForm({}), [303]),
+  // The go-live gate (task 4 of queue 2): the second firm's own checklist.
+  // The first firm's calls are not found as its test call; nothing is met,
+  // so it does not go live.
+  'GET /control/firms/:firm/go-live': () => controlAsB((b) => `/control/firms/${b}/go-live`),
+  'POST /control/firms/:firm/go-live/ticks': () => controlAsB((b) => `/control/firms/${b}/go-live/ticks`, () => controlForm({ ticked: 'dp_ico' }), [303]),
+  'POST /control/firms/:firm/go-live/test-call': async () => {
+    const { a } = await twoFirms();
+    const [callOfA] = await listCallsBetween(db, a, ...allTime);
+    await controlAsB((b) => `/control/firms/${b}/go-live/test-call`, () => controlForm({ vapiId: callOfA?.providerCallId ?? 'none', passed: '1' }), [400]);
+  },
+  'POST /control/firms/:firm/go-live': () => controlAsB((b) => `/control/firms/${b}/go-live`, () => controlForm({}), [303]),
   'GET /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`),
   'POST /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`, () => controlForm({ service: 'calls' }), [303]),
   'GET /control/firms/:firm/agent': () => controlAsB((b) => `/control/firms/${b}/agent`),
@@ -667,6 +678,10 @@ describe('every route', () => {
       'POST /control/firms/:firm/urgent',
       'GET /control/firms/:firm/trade',
       'POST /control/firms/:firm/trade',
+      'GET /control/firms/:firm/go-live',
+      'POST /control/firms/:firm/go-live/ticks',
+      'POST /control/firms/:firm/go-live/test-call',
+      'POST /control/firms/:firm/go-live',
       'GET /control/firms/:firm/onboard',
       'POST /control/firms/:firm/onboard/number',
       'POST /control/firms/:firm/onboard/agent',

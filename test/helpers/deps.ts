@@ -62,5 +62,8 @@ export function testDeps(clock: Clock): TestDeps {
     // has none, until its NUMBERS_ON is "yes"; a test sets this to null to
     // see the step switched off.
     numbers: new FakeNumbers(),
+    // The stand-in member of staff may switch a firm to live; a test adds
+    // another member of staff to see anyone else refused.
+    goLiveBy: 'staff@example.com',
   };
 }

@@ -9,7 +9,7 @@ import { diaryRulesProblems, NAME_LIMITS, nameProblems, urgentListProblems } fro
 import { TRADE_PACKS } from '../trade-packs';
 import { pushAgentStatements } from './agents';
 import { bit, Refused, runTogether, type RecordDb } from './db';
-import { firmEntry } from './history';
+import { firmEntry, type OnlyIf } from './history';
 import { staffLogStatement } from './staff';
 import {
   SERVICES,
@@ -28,7 +28,7 @@ import {
 
 export { DIARY_LIMITS, URGENT_LIST_LIMITS } from '../set-up';
 
-const SERVICE_COLUMNS = {
+export const SERVICE_COLUMNS = {
   calls: 'calls_on',
   quotes: 'quotes_on',
   followups: 'followups_on',
@@ -188,30 +188,40 @@ export async function setTrade(db: RecordDb, firm: FirmId, trade: Trade, by: Act
   const found = await getFirm(db, firm);
   if (found === null) throw new Refused();
   const pack = TRADE_PACKS[trade];
-  const filled: TradeSet = { urgentList: found.urgentList.length === 0, diaryRules: found.diaryRules === null };
-  // Each fill holds only if the firm still has nothing there; should staff
-  // save one in between, the database changes no row and the whole step is
-  // refused, so nothing they saved is replaced.
-  await changeFirm(
-    db,
-    [
-      db.d1.prepare('UPDATE firms SET trade = ? WHERE id = ?').bind(trade, firm),
-      ...recorded(db, firm, 'trade_set', by, 'set_trade'),
-      ...(filled.urgentList
-        ? [
-            db.d1.prepare("UPDATE firms SET urgent_list = ? WHERE id = ? AND urgent_list = '[]'").bind(JSON.stringify(pack.urgentList), firm),
-            ...recorded(db, firm, 'urgent_list_set', by, 'set_urgent_list'),
-          ]
-        : []),
-      ...(filled.diaryRules
-        ? [
-            db.d1.prepare('UPDATE firms SET diary_rules = ? WHERE id = ? AND diary_rules IS NULL').bind(JSON.stringify(diaryRulesOf(pack.diaryRules)), firm),
-            ...recorded(db, firm, 'diary_rules_set', by, 'set_diary_rules'),
-          ]
-        : []),
-    ],
-    filled.urgentList ? pushAgentStatements(db, firm) : [],
-  );
+  const fillUrgent = found.urgentList.length === 0;
+  const fillDiary = found.diaryRules === null;
+  const urgentList = JSON.stringify(pack.urgentList);
+  const diaryRules = JSON.stringify(diaryRulesOf(pack.diaryRules));
+  // Each fill holds only if the firm still has nothing there, and its
+  // history entry and staff log row are written only if the fill was made:
+  // should staff save a list or rules in between, theirs is kept, and the
+  // record says only what happened.
+  const statements = [
+    db.d1.prepare('UPDATE firms SET trade = ? WHERE id = ?').bind(trade, firm),
+    ...recorded(db, firm, 'trade_set', by, 'set_trade'),
+  ];
+  const urgentAt = statements.length;
+  if (fillUrgent) {
+    statements.push(
+      db.d1.prepare("UPDATE firms SET urgent_list = ? WHERE id = ? AND urgent_list = '[]'").bind(urgentList, firm),
+      ...recorded(db, firm, 'urgent_list_set', by, 'set_urgent_list', { where: 'EXISTS (SELECT 1 FROM firms WHERE id = ? AND urgent_list = ?)', binds: [firm, urgentList] }),
+    );
+  }
+  const diaryAt = statements.length;
+  if (fillDiary) {
+    statements.push(
+      db.d1.prepare('UPDATE firms SET diary_rules = ? WHERE id = ? AND diary_rules IS NULL').bind(diaryRules, firm),
+      ...recorded(db, firm, 'diary_rules_set', by, 'set_diary_rules', { where: 'EXISTS (SELECT 1 FROM firms WHERE id = ? AND diary_rules = ?)', binds: [firm, diaryRules] }),
+    );
+  }
+  // A firm that does not exist changes nothing, and its history entry is
+  // refused by the database, which undoes the whole step.
+  const results = await runTogether(db.d1, [...statements, ...(fillUrgent ? pushAgentStatements(db, firm) : [])]);
+  if (results[0]?.meta.changes !== 1) throw new Refused();
+  const filled: TradeSet = {
+    urgentList: fillUrgent && results[urgentAt]?.meta.changes === 1,
+    diaryRules: fillDiary && results[diaryAt]?.meta.changes === 1,
+  };
   return filled;
 }
 
@@ -263,8 +273,12 @@ function recorded(
   kind: 'firm_added' | 'number_set' | 'urgent_list_set' | 'diary_rules_set' | 'trade_set' | 'services_chosen',
   by: Actor,
   action: StaffAction,
+  onlyIf: OnlyIf | null = null,
 ): D1PreparedStatement[] {
-  return [firmEntry(db, firm, kind, by, null), ...(by.kind === 'staff' ? [staffLogStatement(db, firm, by.staff, action)[1]] : [])];
+  return [
+    firmEntry(db, firm, kind, by, null, onlyIf),
+    ...(by.kind === 'staff' ? [staffLogStatement(db, firm, by.staff, action, {}, onlyIf)[1]] : []),
+  ];
 }
 
 /** Switches one of the firm's services on or off, and records who did it. */
@@ -311,7 +325,7 @@ async function changeFirm(db: RecordDb, statements: D1PreparedStatement[], follo
 
 /** The columns a firm is read from, for firmFromRow(). */
 export const FIRM_COLUMNS = `id, name, is_example, calls_on, quotes_on, followups_on, paperwork_on, invoices_on,
-  stopped, phone_number, urgent_list, diary_rules, trade, services_chosen, clock_ahead, left_at, left_by, created_at`;
+  stopped, phone_number, urgent_list, diary_rules, trade, services_chosen, live_at, live_by, clock_ahead, left_at, left_by, created_at`;
 
 export interface FirmRow {
   id: string;
@@ -328,6 +342,8 @@ export interface FirmRow {
   diary_rules: string | null;
   trade: string | null;
   services_chosen: string;
+  live_at: number | null;
+  live_by: string | null;
   clock_ahead: number;
   left_at: number | null;
   left_by: string | null;
@@ -352,6 +368,7 @@ export function firmFromRow(row: FirmRow): Firm {
     diaryRules: diaryRulesFrom(row.diary_rules),
     trade: TRADES.find((trade) => trade === row.trade) ?? null,
     servicesChosen: servicesFrom(row.services_chosen),
+    live: row.live_at === null || row.live_by === null ? null : { at: instant(row.live_at), by: row.live_by as StaffId },
     clockAhead: row.clock_ahead,
     leaving: row.left_at === null || row.left_by === null ? null : { at: instant(row.left_at), by: row.left_by as StaffId },
     createdAt: instant(row.created_at),

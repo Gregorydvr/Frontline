@@ -270,3 +270,18 @@ export async function putBackAsARestore(db: D1Database, snapshot: Record<string,
       .run();
   }
 }
+
+/**
+ * The database, with something else done just before each step it runs as
+ * one: for a test of what a record function does when someone else changes
+ * the record between its reading and its writing.
+ */
+export function withStepBefore(db: D1Database, before: () => Promise<void>): D1Database {
+  return Object.assign(Object.create(db) as D1Database, {
+    prepare: (query: string) => db.prepare(query),
+    batch: async (statements: D1PreparedStatement[]) => {
+      await before();
+      return db.batch(statements);
+    },
+  });
+}

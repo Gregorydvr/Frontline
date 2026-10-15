@@ -100,6 +100,8 @@ export interface Firm {
   trade: Trade | null;
   /** The services the firm chose at set-up. Choosing switches nothing on. */
   servicesChosen: readonly Service[];
+  /** When the firm went live, and who switched it (task 4 of queue 2). Null until then. */
+  live: { at: Instant; by: StaffId } | null;
   /**
    * How far ahead of the real time the firm's clock runs, in milliseconds:
    * 0 for every real firm. Only an example firm's clock is ever moved.
@@ -267,6 +269,7 @@ export const HISTORY_KINDS = {
   diary_rules_set: 'firm',
   trade_set: 'firm',
   services_chosen: 'firm',
+  went_live: 'firm',
   firm_added: 'firm',
   owner_added: 'firm',
   wording_agreed: 'firm',
@@ -862,6 +865,13 @@ export const STAFF_ACTIONS = [
   // its number bought in Twilio, its voice agent made in Vapi.
   'asked_for_number',
   'asked_for_agent',
+  // The go-live gate (task 4 of queue 2): its checklist viewed, an item
+  // ticked or unticked, the test call recorded, and the firm switched to live.
+  'viewed_go_live',
+  'ticked_go_live',
+  'unticked_go_live',
+  'recorded_test_call',
+  'went_live',
   'agreed_wording',
   // The firm's voice agent in Vapi (task 3 of docs/autopilot.md).
   'viewed_set_up_agent',

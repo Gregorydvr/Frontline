@@ -489,6 +489,29 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
     expect(listed.length).toBeGreaterThan(0);
     expect(listed.map((one) => one.id)).not.toContain(ofA.provisioning);
   },
+  // The go-live gate (task 4 of queue 2): the second firm's own checklist,
+  // ticks and test call. The first firm's call is never its test call, and
+  // the first firm never goes live under the second firm's name.
+  async goLiveState() {
+    const state = await record.goLiveState(db, b);
+    expect(state?.firm.id).toBe(b);
+    expect(JSON.stringify(state)).not.toContain(a);
+  },
+  async tickGoLive() {
+    await record.tickGoLive(db, b, 'dp_agreement', true, (await record.findOrAddStaff(db, 'staff@example.com')).id);
+    expect((await record.goLiveState(db, b))?.evidence.ticks.dp_agreement?.ticked).toBe(true);
+  },
+  async recordTestCall() {
+    const staff = (await record.findOrAddStaff(db, 'staff@example.com')).id;
+    for (const call of ofA.calls) {
+      await refused(record.recordTestCall(db, b, call.id, staff));
+    }
+    expect((await record.goLiveState(db, b))?.evidence.testCall).toBeNull();
+  },
+  async markLive() {
+    // Not met, so not live, and the first firm is untouched.
+    expect(await record.markLive(db, b, (await record.findOrAddStaff(db, 'staff@example.com')).id, 'staff@example.com')).toBe('not_ready');
+  },
   async setStopButton() {
     await record.setStopButton(db, b, true, frontline);
     expect((await record.getFirm(db, b))?.stopped).toBe(true);
