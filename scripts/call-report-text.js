@@ -73,6 +73,105 @@ export function summariseVapiCall(call) {
   };
 }
 
+/**
+ * The booking on a call, from what Vapi holds: each time the agent asked for
+ * free times, with the day it gave (null for none) and the times it was
+ * given (null when the answer could not be read, such as when Front-line did
+ * not answer in time), and each time it booked, with the start it gave and
+ * what it was told: booked, or why not (taken, not_offered, unreadable, or
+ * no_answer), and whether a text was promised (null when not told).
+ */
+export function bookingSummary(vapi) {
+  const freeTimes = vapi.tools
+    .filter((tool) => tool.name === 'free_times')
+    .map((tool) => ({
+      secondsIn: tool.secondsIn,
+      day: typeof tool.arguments?.day === 'string' ? tool.arguments.day : null,
+      times: Array.isArray(tool.answer?.times) ? tool.answer.times.map((time) => ({ start: String(time?.start), say: String(time?.say) })) : null,
+    }));
+  const bookVisit = vapi.tools
+    .filter((tool) => tool.name === 'book_visit')
+    .map((tool) => ({
+      secondsIn: tool.secondsIn,
+      start: typeof tool.arguments?.start === 'string' ? tool.arguments.start : null,
+      result: tool.answer?.booked === true ? 'booked' : typeof tool.answer?.why === 'string' ? tool.answer.why : 'no_answer',
+      say: typeof tool.answer?.say === 'string' ? tool.answer.say : null,
+      text: typeof tool.answer?.text === 'boolean' ? tool.answer.text : null,
+    }));
+  return { freeTimes, bookVisit };
+}
+
+/** The booking's lines in the report: what the agent asked and was told, and where the two texts stand in Front-line. */
+export function bookingLines(vapi, frontline) {
+  const { freeTimes, bookVisit } = bookingSummary(vapi);
+  const lines = ['Booking'];
+  if (freeTimes.length === 0) lines.push('  free_times: not called.');
+  for (const asked of freeTimes) {
+    const day = asked.day === null ? 'no day' : `day ${asked.day}`;
+    const times =
+      asked.times === null
+        ? 'no answer it could read'
+        : asked.times.length === 0
+          ? 'no times'
+          : asked.times.map((time) => `${time.say} (${time.start})`).join('; ');
+    lines.push(`  free_times ${at(asked.secondsIn)}with ${day}: ${times}.`);
+  }
+  if (bookVisit.length === 0) lines.push('  book_visit: not called.');
+  for (const booking of bookVisit) {
+    const start = booking.start === null ? 'no start' : booking.start;
+    const told =
+      booking.result === 'booked'
+        ? `booked${booking.say === null ? '' : ` for ${booking.say}`}, ${booking.text === true ? 'text promised' : booking.text === false ? 'no text promised' : 'not told about a text'}`
+        : `not booked: ${BOOK_REFUSALS[booking.result] ?? String(booking.result)}`;
+    lines.push(`  book_visit ${at(booking.secondsIn)}with ${start}: ${told}.`);
+  }
+  if (frontline !== null) {
+    lines.push(`  Customer's confirmation: ${bookingTextWords(frontline.booking.customerText)}.`);
+    lines.push(`  Owner's text: ${bookingTextWords(frontline.booking.ownerText)}.`);
+  }
+  return lines;
+}
+
+/** What book_visit says when it does not book, in words for staff. */
+const BOOK_REFUSALS = {
+  taken: 'the time was taken',
+  not_offered: 'the time is not one the firm offers',
+  unreadable: 'the start could not be read',
+  no_answer: 'no answer it could read',
+};
+
+/** Where one of a booking's texts stands (BookingText in src/call-report.ts), in words for staff. */
+function bookingTextWords(text) {
+  if (text === null) return 'none due';
+  const why = text.reasons.length === 0 ? '' : ` (${text.reasons.join(', ')})`;
+  switch (text.state) {
+    case 'sent':
+      return 'sent';
+    case 'quiet_hours':
+      return `held for quiet hours, goes ${uk(text.until)}`;
+    case 'waiting':
+      return 'waiting to go';
+    case 'not_sent':
+      return `not sent${why}`;
+    case 'failed':
+      return `failed${why}`;
+    case 'too_late':
+      return 'not sent: too late';
+    case 'cancelled':
+      return 'cancelled';
+    case 'visit_changed':
+      return 'not sent: the visit changed';
+    case 'nobody_to_tell':
+      return 'not sent: no owner to tell';
+    default:
+      return String(text.state);
+  }
+}
+
+function at(secondsIn) {
+  return secondsIn === null ? '' : `at ${secondsIn.toFixed(1)}s `;
+}
+
 /** The conversation, with each tool call in its place. Shown only with --transcript. */
 export function conversation(call) {
   const lines = [];
@@ -169,6 +268,8 @@ export function reportLines(vapi, frontline, problems) {
       lines.push(`    ${text.kind} to the ${text.to}: ${text.state}${text.reason === null ? '' : ` (${text.reason})`}${text.segments === null ? '' : `, ${String(text.segments)} segment(s)`}${text.sentAt === null ? '' : `, sent ${uk(text.sentAt)}`}.`);
     }
   }
+  lines.push('');
+  lines.push(...bookingLines(vapi, frontline));
   lines.push('');
   if (problems.length === 0) {
     lines.push('Checks: Vapi and Front-line agree.');

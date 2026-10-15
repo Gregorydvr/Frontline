@@ -1,12 +1,14 @@
 // The report on one call, for staff checking what happened on it
 // (scripts/last-call.js): the call, its customer and job, the visit and the
 // time held for it, every row in the due list that came with it, and every
-// text it led to, the owner's urgent alert among them. Ids, states, kinds and
-// times only: never a name, a number, an address or words from the call
+// text it led to, the owner's urgent alert among them, and, for a booking,
+// whether the customer's confirmation and the owners' text went or wait for
+// quiet hours to end. Ids, states, kinds and times only: never a name, a number, an address or words from the call
 // (rule 11), so the report can be shown in a terminal. Read only: it changes
 // nothing in the record.
 
 import { instant, type Instant } from './clock';
+import { quietUntil } from './messages';
 import { isUkLandline, isUkMobile } from './phone';
 import {
   getCall,
@@ -21,7 +23,38 @@ import {
   listMessagesForJob,
 } from './record';
 import type { RecordDb } from './record/db';
-import type { CallId, CustomerId, Due, FirmId, Message } from './record/types';
+import type { CallId, CustomerId, Due, DueAction, FirmId, Message } from './record/types';
+
+/**
+ * Where one of a booking's texts stands. Sent: on its way or gone, to at
+ * least one person. Quiet hours: held until 8am. Waiting: not tried yet, or
+ * held by the stop button or a service switch, to be tried again. Otherwise
+ * how its row in the due list ended without a text going.
+ */
+export const BOOKING_TEXT_STATES = [
+  'sent',
+  'quiet_hours',
+  'waiting',
+  'not_sent',
+  'failed',
+  'too_late',
+  'cancelled',
+  'visit_changed',
+  'nobody_to_tell',
+] as const;
+export type BookingTextState = (typeof BOOKING_TEXT_STATES)[number];
+
+export interface BookingText {
+  due: string;
+  state: BookingTextState;
+  /** When it goes, while it is held for quiet hours. */
+  until: string | null;
+  /** Why each of its texts that did not go did not, such as opted_out. */
+  reasons: string[];
+}
+
+/** A text's states while it is going or has gone. */
+const GOING: readonly Message['state'][] = ['sending', 'sent', 'delivered'];
 
 export interface CallReportForStaff {
   call: {
@@ -42,6 +75,12 @@ export interface CallReportForStaff {
   visit: { id: string; kind: string; state: string; startsAt: string; endsAt: string | null } | null;
   holds: { id: string; state: string; startsAt: string; visit: string | null; heldAt: string; changedAt: string }[];
   due: { id: string; action: string; state: string; outcome: string | null; runAt: string; latestAt: string; finishedAt: string | null }[];
+  /**
+   * The two texts a visit booked on the call leads to: the customer's
+   * confirmation, and the text telling the firm's owners. Each is null when
+   * the call booked no visit, or the visit has no such row in the due list.
+   */
+  booking: { customerText: BookingText | null; ownerText: BookingText | null };
   texts: {
     id: string;
     kind: string;
@@ -129,6 +168,10 @@ export async function callReportForStaff(db: RecordDb, firm: FirmId, call: CallI
         latestAt: iso(row.latestAt),
         finishedAt: row.finishedAt === null ? null : iso(row.finishedAt),
       })),
+    booking: {
+      customerText: bookingText(visit === null ? [] : [...due.values()], 'send_confirmation', [...texts.values()]),
+      ownerText: bookingText(visit === null ? [] : [...due.values()], 'tell_owner_booked', [...texts.values()]),
+    },
     texts: [...texts.values()].map((text) => ({
       id: text.id,
       kind: text.kind,
@@ -141,6 +184,35 @@ export async function callReportForStaff(db: RecordDb, firm: FirmId, call: CallI
       sentAt: text.sentAt === null ? null : iso(text.sentAt),
     })),
   };
+}
+
+/** Where the booking's text sent by the row with this action stands, or null when there is no such row. */
+function bookingText(rows: readonly Due[], action: DueAction, texts: readonly Message[]): BookingText | null {
+  const row = rows.find((candidate) => candidate.action === action);
+  if (row === undefined) {
+    return null;
+  }
+  const its = texts.filter((text) => text.due === row.id);
+  const reasons = its.flatMap((text) => (text.reason === null ? [] : [text.reason]));
+  const answer = (state: BookingTextState, until: Instant | null = null): BookingText => ({
+    due: row.id,
+    state,
+    until: until === null ? null : iso(until),
+    reasons,
+  });
+  if (its.some((text) => GOING.includes(text.state))) {
+    return answer('sent');
+  }
+  if (row.state === 'waiting' || row.state === 'claimed') {
+    // A row held for quiet hours waits with its time moved on to 8am
+    // (src/due.ts); one held by the stop button or a switch keeps its time.
+    const heldForQuietHours = row.runAt > row.createdAt && quietUntil(instant(row.runAt - 1)) === row.runAt;
+    return heldForQuietHours ? answer('quiet_hours', row.runAt) : answer('waiting');
+  }
+  if (row.state === 'cancelled') {
+    return answer('cancelled');
+  }
+  return answer(BOOKING_TEXT_STATES.find((state) => state === row.outcome) ?? 'not_sent');
 }
 
 function iso(at: Instant): string {

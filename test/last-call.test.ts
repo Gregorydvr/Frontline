@@ -8,6 +8,8 @@
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  bookingLines,
+  bookingSummary,
   conversation,
   crossCheck,
   firmFromSettings,
@@ -17,7 +19,7 @@ import {
   summariseVapiCall,
   uk,
 } from '../scripts/call-report-text.js';
-import type { CallReportForStaff } from '../src/call-report';
+import type { BookingText, CallReportForStaff } from '../src/call-report';
 import { createApp } from '../src/app';
 import { instantFromIso, pretendClock } from '../src/clock';
 import { runDue } from '../src/due';
@@ -141,6 +143,92 @@ describe('what Vapi holds about a call', () => {
     const lines = conversation(booked);
     expect(lines).toContain('[  20.1s] -> free_times {"day": "2026-10-01"}');
     expect(lines.some((line) => line.includes('Caller: 3pm please.'))).toBe(true);
+  });
+});
+
+describe('the booking', () => {
+  it('gives the day the agent asked about, the times it was given, and what booking was told', () => {
+    expect(bookingSummary(summariseVapiCall(booked))).toEqual({
+      freeTimes: [
+        {
+          secondsIn: 20.1,
+          day: '2026-10-01',
+          times: [
+            { start: '2026-10-01T08:00', say: 'Thursday 1 October at 8am' },
+            { start: '2026-10-01T09:00', say: 'Thursday 1 October at 9am' },
+            { start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm' },
+          ],
+        },
+      ],
+      bookVisit: [{ secondsIn: 28.3, start: '2026-10-01T15:00', result: 'booked', say: 'Thursday 1 October at 3pm', text: true }],
+    });
+  });
+
+  it('prints what the agent asked and was told, and where the customer’s and owner’s texts stand', async () => {
+    const frontline = await throughTheSystem();
+    const printed = reportLines(summariseVapiCall(booked), frontline, []);
+    expect(printed).toContain('Booking');
+    expect(printed).toContain(
+      '  free_times at 20.1s with day 2026-10-01: Thursday 1 October at 8am (2026-10-01T08:00); Thursday 1 October at 9am (2026-10-01T09:00); Thursday 1 October at 3pm (2026-10-01T15:00).',
+    );
+    expect(printed).toContain('  book_visit at 28.3s with 2026-10-01T15:00: booked for Thursday 1 October at 3pm, text promised.');
+    expect(printed).toContain("  Customer's confirmation: sent.");
+    expect(printed).toContain("  Owner's text: waiting to go.");
+  });
+
+  it('says when the agent gave no day, was given no times, or was not booked, and why', () => {
+    const [freeTimes, book] = summariseVapiCall(booked).tools;
+    if (freeTimes === undefined || book === undefined) throw new Error('No tools');
+    const vapi = {
+      ...summariseVapiCall(booked),
+      tools: [
+        { ...freeTimes, arguments: {}, answer: { times: [] } },
+        { ...freeTimes, secondsIn: 22, arguments: {}, answer: 'Request timed out' },
+        { ...book, answer: { booked: false, why: 'taken' } },
+        { ...book, secondsIn: 30, answer: { booked: false, why: 'not_offered' } },
+        { ...book, secondsIn: 31, answer: null },
+        { ...book, secondsIn: 32, answer: { booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm', text: false } },
+      ],
+    };
+    expect(bookingLines(vapi, null)).toEqual([
+      'Booking',
+      '  free_times at 20.1s with no day: no times.',
+      '  free_times at 22.0s with no day: no answer it could read.',
+      '  book_visit at 28.3s with 2026-10-01T15:00: not booked: the time was taken.',
+      '  book_visit at 30.0s with 2026-10-01T15:00: not booked: the time is not one the firm offers.',
+      '  book_visit at 31.0s with 2026-10-01T15:00: not booked: no answer it could read.',
+      '  book_visit at 32.0s with 2026-10-01T15:00: booked for Thursday 1 October at 3pm, no text promised.',
+    ]);
+  });
+
+  it('says when the agent used neither tool, and that no booking text is due', async () => {
+    const frontline = await throughTheSystem();
+    if (frontline === null) throw new Error('No call');
+    const vapi = { ...summariseVapiCall(booked), tools: [] };
+    const unbooked = { ...frontline, booking: { customerText: null, ownerText: null } };
+    expect(bookingLines(vapi, unbooked)).toEqual([
+      'Booking',
+      '  free_times: not called.',
+      '  book_visit: not called.',
+      "  Customer's confirmation: none due.",
+      "  Owner's text: none due.",
+    ]);
+  });
+
+  it('says a text is held for quiet hours, with when it goes in UK time', async () => {
+    const frontline = await throughTheSystem();
+    if (frontline === null) throw new Error('No call');
+    const held: BookingText = { due: 'x', state: 'quiet_hours', until: '2026-10-02T07:00:00.000Z', reasons: [] };
+    const atNight = { ...frontline, booking: { customerText: held, ownerText: held } };
+    expect(bookingLines(summariseVapiCall(booked), atNight).slice(-2)).toEqual([
+      "  Customer's confirmation: held for quiet hours, goes Fri 2 Oct, 08:00:00.",
+      "  Owner's text: held for quiet hours, goes Fri 2 Oct, 08:00:00.",
+    ]);
+  });
+
+  it('says why a confirmation did not go', async () => {
+    const frontline = await throughTheSystem({ beforeTheReport: () => optOutNumber(db, firm, ukMobile('07700 900003')) });
+    expect(bookingLines(summariseVapiCall(booked), frontline)).toContain("  Customer's confirmation: not sent (opted_out).");
   });
 });
 

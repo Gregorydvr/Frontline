@@ -21,10 +21,23 @@ export interface VapiCallSummary {
   urgentMatch: string | null;
 }
 
+export interface BookingSummary {
+  freeTimes: { secondsIn: number | null; day: string | null; times: { start: string; say: string }[] | null }[];
+  bookVisit: {
+    secondsIn: number | null;
+    start: string | null;
+    result: 'booked' | 'taken' | 'not_offered' | 'unreadable' | 'no_answer' | (string & {});
+    say: string | null;
+    text: boolean | null;
+  }[];
+}
+
 export declare function readOnly(method: string): 'GET';
 export declare function firmFromSettings(settings: unknown): string | null;
 export declare function numberKind(number: unknown): 'mobile' | 'landline' | 'withheld';
 export declare function summariseVapiCall(call: unknown): VapiCallSummary;
+export declare function bookingSummary(vapi: VapiCallSummary): BookingSummary;
+export declare function bookingLines(vapi: VapiCallSummary, frontline: CallReportForStaff | null): string[];
 export declare function conversation(call: unknown): string[];
 export declare function crossCheck(vapi: VapiCallSummary, frontline: CallReportForStaff | null): string[];
 export declare function reportLines(vapi: VapiCallSummary, frontline: CallReportForStaff | null, problems: readonly string[]): string[];
