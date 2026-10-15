@@ -2,6 +2,8 @@
 
 Greg's standing brief for building without him, given on 15 Oct 2026. `CLAUDE.md` tells every session to follow it. The brief is kept below as Greg wrote it. "Where the queue stands" after it is updated as tasks finish.
 
+The first queue is done. The second, "Queue 2" below, was given the same evening and is worked the same way: how to work, what never to do and when to stop are as the first brief says.
+
 ---
 
 Greg isn't a developer. You're doing the build; he only steps in at the stop points below. Save this brief as docs/autopilot.md and add a line to CLAUDE.md telling every future session to follow it.
@@ -43,7 +45,41 @@ When task 5 is done, stop and give Greg a summary of all five.
 - Every other rule in `CLAUDE.md` still holds, including the 20 rules, the cross-firm tests and `npm run check` passing before a push.
 - A stop point that a task reaches stops that task only. Tasks after it that do not depend on it carry on, and the questions wait in the pull request and the summary.
 
-## Where the queue stands
+## Queue 2
+
+Given by Greg on 15 Oct 2026, kept as he wrote it.
+
+---
+
+QUEUE
+1. Flaky check: find out why #19's colour-contrast check failed once on the "message sent" panel and passed on re-run. If it's flaky, make it reliable. If it's a real contrast problem, fix the colours.
+
+2. Trade starter packs: when a new firm is set up, choosing its trade pre-fills the urgent list, working hours, diary rules and draft text wording. Make packs for plumbing & heating, drainage, and electrical. All customer- and owner-facing wording is marked [to agree]. Packs only pre-fill; the owner can change everything.
+
+3. Firm onboarding flow in the control room: one guided flow for Front-line staff to set up a new firm: firm details, owner details, trade starter pack, services chosen, diary rules. Build the steps that create a Vapi agent and a Twilio number, but leave both switched off: no Vapi key is set yet, and buying a number costs money.
+
+4. Go-live gate: a firm can't be switched to live until a checklist is complete: owner has agreed all wording, its phone number is approved and connected, its Vapi agent matches the control room, an end-to-end test call is recorded as passed, and Front-line has ticked the data-protection items. The control room shows what's missing. Only Greg can tick the final "go live".
+
+Use named actions (CLAUDE.md rule 21) for everything new. Keep docs/decisions.md and the status table in docs/autopilot.md up to date.
+
+If this session is getting long, update the status table with exactly where you are, so a fresh session can carry on with "Carry on with the autopilot queue".
+
+When task 4 is done, stop and give Greg a summary.
+
+---
+
+## Where queue 2 stands
+
+Updated 15 Oct 2026. Each task's branch is made from `slice-i-practice` after the one before is merged.
+
+| Task | Branch | State | Waiting on Greg |
+|---|---|---|---|
+| 1. Flaky contrast check | `slice-i-flaky-contrast` | Flaky, not a real contrast problem. The "message sent" panel rises with a fade (60% to full opacity over 0.18 seconds), and the check sometimes measured it part way through. The check now waits for the page to load and for every animation that ends to end. Shown with the fade slowed to 3 seconds: the old check fails on both panels, the new one passes. `npm run check:screens` now also runs on Windows | Nothing |
+| 2. Trade starter packs | | Not started | |
+| 3. Onboarding flow | | Not started | |
+| 4. Go-live gate | | Not started | |
+
+## Where the first queue stands
 
 Updated 15 Oct 2026. Each task's branch builds on the one before, so they merge in this order.
 
