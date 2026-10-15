@@ -147,3 +147,46 @@ What it shows, for the newest call to the practice agent, or the one named:
 No name, number, address or words from the call are printed, unless you add `--transcript`, which shows the conversation on screen and saves nothing.
 
 It changes nothing. It asks Vapi and the control room with GET only, and a test fails if it tries anything else; it does not reach Twilio at all, whose delivery reports are already in the record. Opening the report is a view in the control room, so the staff log records it, naming you (rule 15). That is the one row it adds.
+
+## What happened: the first booking call
+
+What it shows: the agent booking a quote visit on a real call to the practice number for the first time, and the confirmation held by quiet hours.
+
+| | |
+|---|---|
+| Date | 14 October 2026, slice I (`slice-i-booking`, pull request 12) |
+| Who ran it | Greg made the call and checked Front-line's side by hand in the control room. Claude Code ran `npm run practice:last-call` from `slice-i-call-report` on 15 October, read only, for Vapi's side |
+| The Worker and the agent | Practice ran `f2b4a3c`, and the agent was set from its file at `4d1dd25`, before the times were spread across days and before the next-day notice (open questions 15 and 16) |
+| The call | Vapi's `01a13bda-fc28-7886-ab7b-3ea369a83fc5`, 19:19:30Z to 19:20:48Z, ended by the caller. The date line read "Wednesday 14 October 2026", as it should |
+| The tools | `free_times` with `day` `2026-10-15`, 43.0s in, given Thursday 15 October at 8am, 9am and 10am. `book_visit` with `2026-10-15T09:00`, 61.6s in: booked, `text` true. The arguments came as text |
+| The visit | **Pass.** Booked for Thursday 15 October at 9am, and filed on the job |
+| The confirmation | **Pass.** Held overnight by quiet hours, and arrived at 8am on 15 October |
+
+## What happened: the booking calls
+
+What it shows: the agent booking a quote visit on a real call to the practice number, with the times spread across days, the notice on the next working day, a day named by the caller, a change of mind on the same call, a visit after the clocks go back, and both texts that follow a booking. Also an urgent call, which books nothing.
+
+| | |
+|---|---|
+| Date | 15 October 2026, slice I (`slice-i-booking`, pull request 12) |
+| Who ran it | Greg made the calls and checked Front-line's side by hand in the control room. Claude Code, on his machine, set the agent from its file with his go-ahead and ran `npm run practice:last-call` from `slice-i-call-report`, read only |
+| The Worker and the agent | Practice runs `2934c9e` (version `b6a8db29-2538-4f4f-9b4b-10c0949c34d9`). The agent was set from `vapi/practice-assistant.json` at the same commit: only `model` changed (the wording on when to give a `day`). Read back, it matched the file, and a second read-only run found nothing to change |
+| Front-line's side of the report | **Missing.** Practice does not yet run `slice-i-call-report`, so the control room's report on a call is not there, and `npm run practice:last-call` says "Front-line: no call with this id" and ends with a failure. Vapi's side was read from the report; Front-line's side (the visit, the texts, the alert) was checked by hand in the control room |
+| 1. No day named | Vapi's `01a13f89-16b8-700f-aa69-1065bc6c57e6`, 12:28:31Z to 12:30:08Z, ended by the caller. `free_times` called once, with no day, and given Friday 16 October at midday, Monday 19 October at 8am and Tuesday 20 October at 8am: the first time on each of the next three working days, with Friday from noon (the next-day notice) and the weekend left out. `book_visit` with `2026-10-19T08:00`: booked, `text` true |
+| What followed | **Pass.** The customer's confirmation and the owner's text about the booking both arrived. The confirmation's link opened without a Cloudflare login. The control room showed the visit on the job |
+| 2. An urgent leak | Vapi's `01a14009-3bf3-7993-aba5-878252a0fb27`, 14:48:29Z to 14:49:59Z, ended by the caller. `urgentMatch` "a leak", `callerType` `customer`. `book_visit` not called |
+| The alert, and nothing booked | **Pass.** Nothing was booked, and the owner's alert arrived |
+| Free times on the urgent call | **Fail: a bug, since fixed.** The agent called `free_times` with `day` `2026-10-16`, 41.7s in, and was given Friday 16 October at midday, at 1pm and at 3pm. Its instructions say not to book a visit when the call is about a leak, so it had no reason to ask. Greg heard no times offered; whether the agent said them is in the conversation, which the report shows only with `--transcript`, and was not looked at. Its rules on danger came after the booking rules and said only "do not book". Fixed on `slice-i-urgent-no-times` (`77ee413`): the rules on danger come first and forbid both tools, and each tool's description says the same. Applied to the practice agent the same day; see call 5 |
+| The end of the urgent call | **Known issue.** The agent did not end the call after its goodbye, as on the postcode call |
+| 3. A day named, then a change of mind | Vapi's `01a1400c-6180-7773-b506-82c890f80b55`, 14:51:56Z to 14:53:27Z, ended by the caller. `free_times` first with no day, given Friday 16 October at midday, Monday 19 October at 9am and Tuesday 20 October at 8am; Monday's 8am was the visit booked on call 1. Then `free_times` with `day` `2026-10-21`, given Wednesday 21 October at 8am, at midday and at 3pm: the earliest, the one nearest midday and the latest. `book_visit` with `2026-10-21T08:00`: booked, `text` true. Then `book_visit` with `2026-10-21T12:00`: booked, `text` true, moving the time held on the call |
+| What followed | **Pass.** Greg checked it all worked as expected |
+| 4. The clocks going back | Vapi's `01a14014-91ca-7993-ac65-0b2156452d6d`, 15:00:52Z to 15:02:18Z, ended by the caller. `free_times` first with no day, given Friday 16 October at midday, Monday 19 October at 9am and Tuesday 20 October at 8am. Then with `day` `2026-10-26`, the first working day after the clocks go back on Sunday 25 October, given Monday 26 October at 8am, at midday and at 3pm. `book_visit` with `2026-10-26T08:00`: booked, `text` true |
+| The visit and its confirmation | **Pass.** The control room and the confirmation both show 8am |
+| The reminder | **Pending, until Greg checks it.** Due on Sunday 25 October at 13:00 UK time, which is 13:00 UTC once the clocks have gone back |
+| 5. An urgent leak, after the fix | Vapi's `01a14032-5634-7550-bc89-0867ba755d3d`, 15:33:23Z to 15:34:40Z, ended by the caller, with the agent set from its file at `77ee413`. `urgentMatch` "a leak", `callerType` `customer`. The caller asked for someone to come tomorrow, and what times there were. Read with `npm run practice:last-call -- --transcript`, on screen only |
+| The tools | **Pass.** Neither `free_times` nor `book_visit` was used and no time was offered. The agent said it could not book a visit as the call was about a leak, and that it would pass the details to the firm as soon as the call ended. The report's new check, a booking tool used on a call marked urgent, found nothing |
+| The safety advice | **Fail.** The agent made up its own: to be careful, and if there were "any signs of electrical issues" or it became unsafe, to leave and call 999 if anyone was in immediate danger. Its instructions give safety advice only for gas and carbon monoxide |
+| How soon | **Fail.** After saying it would pass the details on as soon as the call ended, the agent added "Someone will get back to you as soon as possible", which its instructions do not say for an urgent call |
+| Put right | Two lines added beside the rules on danger, in Greg's wording, for practice only: "Give only the safety advice written in these instructions. Never add your own." and "Don't say how soon anyone will get back to them." Not yet tried on a call |
+| Known issues, again | The agent read the postcode back in one piece, not a letter or number at a time. The caller ended the call straight after the agent's goodbye, so whether the agent would have ended it was not seen |
+| What surprised us | The tools' arguments came as text, as on 14 October. The callers' real details are on practice and in Vapi's record of each call, as the brief allows for Greg's own test calls; they are not written here |

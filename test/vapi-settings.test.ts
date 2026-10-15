@@ -72,7 +72,7 @@ interface AgentTool {
   type: string;
   async?: boolean;
   messages?: { type: string; content?: string; blocking?: boolean }[];
-  function: { name: string; parameters: { properties: Record<string, unknown>; required?: string[] } };
+  function: { name: string; description: string; parameters: { properties: Record<string, unknown>; required?: string[] } };
   server: { url: string; credentialId: string };
 }
 
@@ -143,6 +143,39 @@ describe('the practice agent’s tools', () => {
     const chosen = times[0];
     if (chosen === undefined) throw new Error('No time');
     expect(await use(book, { [start ?? '']: chosen.start })).toEqual({ booked: true, start: chosen.start, say: chosen.say, text: true });
+  });
+
+  it('are never used on a call about a leak, a smell of gas or anything else dangerous, which the instructions settle first', () => {
+    const [system] = practice.model.messages;
+    const instructions = system?.content ?? '';
+    const never = 'Never use it on a call about a leak, a smell of gas or anything else dangerous.';
+    for (const tool of tools) expect(tool.function.description).toContain(never);
+    expect(instructions).toContain('If the call is about a leak or a smell of gas, do not use free_times or book_visit at any point in the call');
+    expect(instructions).toContain('If the call is about anything else dangerous, do the same');
+    expect(instructions).toContain('If something dangerous comes up after you have offered times, do not use either tool again.');
+    // The safety advice and the rule against the tools come before the agent
+    // reads how to book, so it settles whether a call is dangerous first.
+    const booking = instructions.indexOf('you can book a visit once you have');
+    expect(booking).toBeGreaterThan(0);
+    expect(instructions.indexOf('National Gas Emergency Service')).toBeLessThan(booking);
+    expect(instructions.indexOf('do not use free_times or book_visit')).toBeLessThan(booking);
+    expect(instructions.indexOf('free_times')).toBeGreaterThanOrEqual(instructions.indexOf('do not use free_times or book_visit'));
+    expect(instructions.slice(booking - 200, booking)).toContain('and the call is not about a leak, a smell of gas or anything else dangerous');
+  });
+
+  it('allow only the safety advice written in them, and never a promise of how soon anyone will get back, beside the rules on danger', () => {
+    const [system] = practice.model.messages;
+    const instructions = system?.content ?? '';
+    const ownAdviceOnly = 'Give only the safety advice written in these instructions. Never add your own.';
+    const howSoon = "Don't say how soon anyone will get back to them.";
+    expect(instructions).toContain(ownAdviceOnly);
+    expect(instructions).toContain(howSoon);
+    const dangerRules = instructions.indexOf('If something dangerous comes up after you have offered times');
+    const booking = instructions.indexOf('you can book a visit once you have');
+    for (const line of [ownAdviceOnly, howSoon]) {
+      expect(instructions.indexOf(line)).toBeGreaterThan(dangerRules);
+      expect(instructions.indexOf(line)).toBeLessThan(booking);
+    }
   });
 
   it('are named in the instructions, which give today’s date in UK time and never Vapi’s own date, which is UTC', () => {
