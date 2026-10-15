@@ -193,6 +193,14 @@ export function conversation(call) {
  */
 export function crossCheck(vapi, frontline) {
   const problems = [];
+  // From Vapi alone, so it is checked even when Front-line has no report.
+  if (vapi.urgentMatch !== null) {
+    for (const name of ['free_times', 'book_visit']) {
+      if (vapi.tools.some((tool) => tool.name === name)) {
+        problems.push(`The agent used ${name} on a call it marked urgent ("${vapi.urgentMatch}"), though its instructions say never to on a dangerous call.`);
+      }
+    }
+  }
   if (frontline === null) {
     problems.push('Front-line has no call with this id: the report did not arrive, or was for another number.');
     return problems;

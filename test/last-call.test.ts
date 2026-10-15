@@ -249,6 +249,19 @@ describe('the report and its checks', () => {
     }
   });
 
+  it('says so when the agent used a booking tool on a call it marked urgent, even with no report from Front-line', async () => {
+    const urgent = { ...summariseVapiCall(booked), urgentMatch: 'a leak' };
+    const used = [
+      'The agent used free_times on a call it marked urgent ("a leak"), though its instructions say never to on a dangerous call.',
+      'The agent used book_visit on a call it marked urgent ("a leak"), though its instructions say never to on a dangerous call.',
+    ];
+    expect(crossCheck(urgent, null)).toEqual([...used, 'Front-line has no call with this id: the report did not arrive, or was for another number.']);
+    const frontline = await throughTheSystem();
+    expect(crossCheck(urgent, frontline)).toEqual(expect.arrayContaining(used));
+    expect(crossCheck({ ...urgent, tools: [] }, null)).toEqual(['Front-line has no call with this id: the report did not arrive, or was for another number.']);
+    expect(crossCheck(summariseVapiCall(booked), frontline)).toEqual([]);
+  });
+
   it('says so when Front-line has no such call', () => {
     expect(crossCheck(summariseVapiCall(booked), null)).toEqual([
       'Front-line has no call with this id: the report did not arrive, or was for another number.',
