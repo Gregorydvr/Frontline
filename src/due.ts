@@ -9,6 +9,8 @@
 //
 // What a row can do:
 // - alert_owner: text the firm's owner about an urgent call, at once
+// - tell_owner_booked: text the firm's owners that the voice agent booked a
+//   visit, at once, or at 8am after quiet hours
 // - send_confirmation: text the customer the confirmation of a visit just
 //   booked, with their link if it is the first text the firm sends them
 // - send_reminder: text the customer the reminder for a visit tomorrow
@@ -181,6 +183,8 @@ async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): 
   switch (row.action) {
     case 'alert_owner':
       return alertOwner(db, deps, firm, row);
+    case 'tell_owner_booked':
+      return tellOwnerBooked(db, deps, firm, row);
     case 'send_confirmation':
       return sendConfirmation(db, deps, firm, row);
     case 'send_reminder':
@@ -384,13 +388,11 @@ async function sendConfirmation(db: RecordDb, deps: DueDeps, firm: FirmId, row: 
     const token = await linkForDue(db, firm, { due: row.id, customer: customer.id, job: job.id });
     link = `${address}/d/${token}`;
   }
-  const at = inLondon(visit.startsAt);
   const facts = {
     customer: customer.name,
     firm: firmNow.name,
     owner: owner?.name ?? firmNow.name,
-    day: `${WEEKDAYS[at.weekday] ?? ''} ${String(at.day)} ${MONTHS[at.month - 1] ?? ''}`,
-    time: clockWords(at.hour, at.minute),
+    ...visitWhen(visit.startsAt),
     purpose: VISIT_PURPOSES[visit.kind],
   };
   const result = await send(deps.texts, db, firm, {
@@ -404,6 +406,58 @@ async function sendConfirmation(db: RecordDb, deps: DueDeps, firm: FirmId, row: 
     return { until: result.why === 'quiet_hours' ? result.until : null };
   }
   return outcomeOf([result]);
+}
+
+/**
+ * Texts each of the firm's owners that the voice agent booked a visit on a
+ * call (Greg's answer to open question 16, 14 Oct 2026), with a link to the
+ * job once this copy has an address for the app. Between 8pm and 8am it
+ * waits until 8am. Nothing goes if the visit has since been cancelled; one
+ * that has moved is told at its new time.
+ */
+async function tellOwnerBooked(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): Promise<DueOutcome | Held> {
+  const visit = row.visit === null ? null : await getVisit(db, firm, row.visit);
+  const job = visit?.state === 'booked' ? await getJob(db, firm, visit.job) : null;
+  const customer = job === null ? null : await getCustomer(db, firm, job.customer);
+  if (visit === null || job === null || customer === null) {
+    log('booking_text_visit_changed', { firm, due: row.id });
+    return 'visit_changed';
+  }
+  const owners = await listOwners(db, firm);
+  if (owners.length === 0) {
+    log('booking_text_nobody_to_tell', { firm, due: row.id });
+    return 'nobody_to_tell';
+  }
+  const address = deps.appAddress ?? null;
+  const facts = {
+    customer: customer.name,
+    ...visitWhen(visit.startsAt),
+    place: job.place,
+    link: address === null ? null : `${address}/jobs/${job.id}`,
+  };
+  const results: SendResult[] = [];
+  for (const owner of owners) {
+    results.push(
+      await send(deps.texts, db, firm, {
+        due: row.id,
+        kind: 'visit_booked',
+        to: { kind: 'owner', owner: owner.id },
+        about: { job: job.id, visit: visit.id, call: null },
+        facts,
+      }),
+    );
+  }
+  const held = results.find((result) => result.result === 'held');
+  if (held?.result === 'held') {
+    return { until: held.why === 'quiet_hours' ? held.until : null };
+  }
+  return outcomeOf(results);
+}
+
+/** A visit's day and time in the words a text uses, such as "Thursday 1 October" and "3pm". */
+function visitWhen(startsAt: Instant): { day: string; time: string } {
+  const at = inLondon(startsAt);
+  return { day: `${WEEKDAYS[at.weekday] ?? ''} ${String(at.day)} ${MONTHS[at.month - 1] ?? ''}`, time: clockWords(at.hour, at.minute) };
 }
 
 /** How a row's texts came out: sent if any went, failed if any failed, otherwise not sent. */

@@ -133,7 +133,7 @@ describe('the demo firm', () => {
       service_on: 1,
       urgent_list_set: 1,
       visit_booked: 10,
-      wording_agreed: 6,
+      wording_agreed: 7,
     });
   });
 

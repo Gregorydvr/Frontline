@@ -5,12 +5,32 @@
 //
 // Only quote visits are booked by the voice agent. Each answer is JSON the
 // agent reads: the times in the words it says ("Thursday 1 October at 3pm"),
-// and the value to book each one by ("2026-10-01T15:00", UK time).
+// and the value to book each one by ("2026-10-01T15:00", UK time). A booking
+// also says whether a text will confirm it, so the agent promises one only
+// when one will go.
 
 import type { CallRef, Diary } from './diary';
 import { dateFromWords, startFromWords, startInWords, startToSay } from './diary/times';
 import { log } from './log';
-import type { Firm } from './record/types';
+import type { Instant } from './clock';
+import { quietUntil } from './messages';
+import type { CallerNumber } from './phone';
+import { findCustomersByMobile, firmWording, isNumberOptedOut, listOptOuts } from './record';
+import type { RecordDb } from './record/db';
+import type { Firm, MessageKind } from './record/types';
+
+/** What deciding whether a confirmation will go needs, beyond the firm. */
+export interface ConfirmationFacts {
+  /** The record, on the firm's own clock, as its due list runs. */
+  db: RecordDb;
+  /** The number the call came from. */
+  from: CallerNumber;
+  /** Where customers' links are served, which the first text to a new customer must carry. */
+  linkAddress: string | null;
+}
+
+/** The two texts that can confirm a visit: which one goes is known only once the call has its customer. */
+const CONFIRMATIONS: readonly MessageKind[] = ['visit_confirmation', 'visit_confirmation_first'];
 
 /** How many free times one answer gives. */
 export const TIMES_OFFERED = 3;
@@ -35,7 +55,13 @@ export async function answerFreeTimes(diary: Diary, firm: Firm, call: CallRef | 
  * by holding it for the call. Booking again on the same call moves the
  * hold; with the same start, nothing changes.
  */
-export async function answerBook(diary: Diary, firm: Firm, call: CallRef | null, args: Record<string, unknown> | null): Promise<string> {
+export async function answerBook(
+  diary: Diary,
+  firm: Firm,
+  call: CallRef | null,
+  args: Record<string, unknown> | null,
+  confirmation: ConfirmationFacts,
+): Promise<string> {
   const startsAt = typeof args?.start === 'string' ? startFromWords(args.start) : null;
   if (call === null || startsAt === null) {
     log('tool_call_unreadable', { firm: firm.id });
@@ -49,7 +75,12 @@ export async function answerBook(diary: Diary, firm: Firm, call: CallRef | null,
   switch (held.result) {
     case 'held':
       log('time_held', { firm: firm.id, hold: held.hold });
-      return JSON.stringify({ booked: true, start: startInWords(held.startsAt), say: startToSay(held.startsAt) });
+      return JSON.stringify({
+        booked: true,
+        start: startInWords(held.startsAt),
+        say: startToSay(held.startsAt),
+        text: await confirmationWillGo(firm, held.startsAt, confirmation),
+      });
     case 'taken':
       log('time_taken', { firm: firm.id });
       return JSON.stringify({ booked: false, why: 'taken' });
@@ -57,4 +88,39 @@ export async function answerBook(diary: Diary, firm: Firm, call: CallRef | null,
       log('time_not_offered', { firm: firm.id });
       return JSON.stringify({ booked: false, why: 'not_offered' });
   }
+}
+
+/**
+ * Whether a text will confirm a visit booked on this call, as far as can be
+ * known while the call is on: the same checks send() makes before a
+ * confirmation goes (rule 3), taken on the safe side. The customer is found
+ * by number and name only when the call ends, so an opt-out by anyone on the
+ * number counts, and both confirmations must have agreed wording. Between
+ * 8pm and 8am the text waits until 8am, and still goes unless 8am is after
+ * the visit's start, its latest time. What cannot be known yet: the caller's
+ * details not coming through, which lets the time go and sends nothing.
+ */
+export async function confirmationWillGo(firm: Firm, startsAt: Instant, facts: ConfirmationFacts): Promise<boolean> {
+  const { db, from } = facts;
+  if (from.kind !== 'mobile' || firm.stopped || !firm.services.calls || facts.linkAddress === null) {
+    return false;
+  }
+  const until = quietUntil(db.clock.now());
+  if (until !== null && until > startsAt) {
+    return false;
+  }
+  const wording = await firmWording(db, firm.id);
+  if (CONFIRMATIONS.some((kind) => wording[`text:${kind}`] === undefined)) {
+    return false;
+  }
+  if (await isNumberOptedOut(db, firm.id, from.number)) {
+    return false;
+  }
+  for (const customer of await findCustomersByMobile(db, firm.id, from.number)) {
+    const optedOut = await listOptOuts(db, firm.id, customer.id);
+    if (optedOut.some((kind) => kind === 'every' || CONFIRMATIONS.includes(kind))) {
+      return false;
+    }
+  }
+  return true;
 }

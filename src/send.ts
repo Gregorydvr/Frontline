@@ -10,9 +10,10 @@
 //   switch hold the text: it is not claimed, and whoever asked can try again.
 //   An opt-out, or no mobile, means it is not sent, and that is recorded, as
 //   does a text that should carry a link when no link could be made.
-//   An alert to the owner is not held by any of these: they are about texts
-//   to customers. A text that would go to a customer in quiet hours, 8pm to
-//   8am UK time, is held too, until 8am.
+//   A text to the owner is not held by any of these: they are about texts
+//   to customers. A text of a kind that keeps quiet hours (every text to a
+//   customer, and the owner's text about a booking) is held from 8pm to 8am
+//   UK time, until 8am; an urgent alert and the login text go at any hour.
 // - A text this row in the due list already claimed is found first, so a row
 //   run again after its worker stopped finds what happened, whatever the
 //   stop button says now.
@@ -148,7 +149,7 @@ export async function send(texts: Texts, db: RecordDb, firmId: FirmId, out: Outg
   if (words === '' || !isGsm7(words)) {
     return notSent(db, firmId, out, 'not_gsm7');
   }
-  const until = out.to.kind === 'customer' ? quietUntil(db.clock.now()) : null;
+  const until = kind.quietHours ? quietUntil(db.clock.now()) : null;
   if (until !== null) {
     log('text_held', { firm: firmId, due: out.due });
     return { result: 'held', why: 'quiet_hours', until };

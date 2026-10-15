@@ -10,6 +10,7 @@
 //                           "function": { "name", "arguments" } } ],
 //       "call": { "id", ... },              the call it is for
 //       "phoneNumber": { "number" },        the number that was rung
+//       "customer": { "number" },           the number the call came from
 //       ... } }
 //
 // The kit types `arguments` as a string of JSON. It is read as that, and also
@@ -25,7 +26,7 @@
 
 import { CALL_LIMITS } from './record/types';
 import { field, mobileOrNull, string, text } from './vapi-report';
-import type { UkMobile } from './phone';
+import { callerNumber, type CallerNumber, type UkMobile } from './phone';
 
 /** The names of Front-line's tools, as set on the voice agent (docs/vapi.md). */
 export const TOOL_NAMES = { freeTimes: 'free_times', book: 'book_visit' } as const;
@@ -47,6 +48,8 @@ export type VapiToolMessage =
       /** Vapi's id for the call, which ties a booking to the report when the call ends. */
       providerCallId: string | null;
       firmNumber: UkMobile | null;
+      /** The number the call came from, sorted by whether a text can reach it. */
+      from: CallerNumber;
       calls: ToolCall[];
     }
   | { kind: 'unreadable' };
@@ -68,10 +71,12 @@ export function readToolCalls(body: unknown): VapiToolMessage {
   }
   const call = field(message, 'call');
   const rung = string(field(field(message, 'phoneNumber'), 'number')) ?? string(field(field(call, 'phoneNumber'), 'number'));
+  const from = string(field(field(message, 'customer'), 'number')) ?? string(field(field(call, 'customer'), 'number'));
   return {
     kind: 'tool_calls',
     providerCallId: text(field(call, 'id'), CALL_LIMITS.providerCallId),
     firmNumber: rung === null ? null : mobileOrNull(rung),
+    from: callerNumber(from),
     calls,
   };
 }

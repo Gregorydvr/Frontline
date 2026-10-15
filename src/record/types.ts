@@ -97,6 +97,13 @@ export interface DiaryRules {
   lengths: Readonly<Partial<Record<VisitKind, number>>>;
   /** How many days ahead times are offered. */
   daysAhead: number;
+  /**
+   * The notice a booking needs: on the next day the firm works, the first
+   * start offered, such as 720 for noon. Missing means noon
+   * (DEFAULT_NEXT_DAY_FROM in src/diary/times.ts). Nothing is offered on
+   * the day itself.
+   */
+  nextDayFrom?: number;
 }
 
 export interface Owner {
@@ -348,7 +355,7 @@ export interface NewBooking {
   startsAt: Instant;
   endsAt: Instant;
   /** The rows in the due list for the visit, worked out from its time (src/booking.ts). */
-  dues: readonly { action: 'send_confirmation' | 'send_reminder'; runAt: Instant; latestAt: Instant }[];
+  dues: readonly { action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked'; runAt: Instant; latestAt: Instant }[];
 }
 
 export const HOLD_STATES = ['held', 'filed', 'released'] as const;
@@ -395,9 +402,10 @@ export interface DiaryVisit extends Visit {
 /**
  * The kinds of text. Each says who it goes to, the service it belongs to (for
  * a text to a customer, whose service switch must be on), the history entry
- * written when it has gone, if any, the gaps its wording may use, and
- * whether it must carry its link: a text that must, when no link could be
- * made because this copy has no address for it yet, is not sent.
+ * written when it has gone, if any, the gaps its wording may use, whether it
+ * must carry its link (a text that must, when no link could be made because
+ * this copy has no address for it yet, is not sent), and whether quiet hours
+ * hold it until 8am.
  *
  * Every kind here uses wording the firm agreed at set-up (rule 2 in
  * CLAUDE.md). Kinds that need the owner's approval of the exact version, such
@@ -411,6 +419,7 @@ export const MESSAGE_KINDS = {
     history: 'confirmation_sent',
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose'],
     linkRequired: false,
+    quietHours: true,
   },
   /**
    * The confirmation as the first text the firm sends a customer: the same,
@@ -422,9 +431,10 @@ export const MESSAGE_KINDS = {
     history: 'confirmation_sent',
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose', 'link'],
     linkRequired: true,
+    quietHours: true,
   },
   /** The reminder the day before a visit. */
-  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'], linkRequired: false },
+  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'], linkRequired: false, quietHours: true },
   /**
    * The owner's alert about an urgent call, with a link to the job once this
    * copy has an address for the app. It goes without the link otherwise: an
@@ -436,6 +446,7 @@ export const MESSAGE_KINDS = {
     history: 'passed_to_owner',
     gaps: ['customer', 'place', 'summary', 'number', 'link'],
     linkRequired: false,
+    quietHours: false,
   },
   /**
    * The owner's alert about an urgent call whose caller's name, job or
@@ -447,16 +458,31 @@ export const MESSAGE_KINDS = {
     history: 'passed_to_owner',
     gaps: ['summary', 'number'],
     linkRequired: false,
+    quietHours: false,
+  },
+  /**
+   * The owner's text when the voice agent books a visit on a call, with a
+   * link to the job once this copy has an address for the app. Every owner
+   * gets it. Quiet hours hold it until 8am, unlike an urgent alert (Greg,
+   * 14 Oct 2026).
+   */
+  visit_booked: {
+    to: 'owner',
+    service: null,
+    history: null,
+    gaps: ['customer', 'day', 'time', 'place', 'link'],
+    linkRequired: false,
+    quietHours: true,
   },
   /**
    * The link that logs the owner in, sent to the owner's own mobile when they
    * ask for it. The login is recorded when the link is used, so no history
    * entry is written when the text goes; the text itself is kept.
    */
-  login_link: { to: 'owner', service: null, history: null, gaps: ['link'], linkRequired: true },
+  login_link: { to: 'owner', service: null, history: null, gaps: ['link'], linkRequired: true, quietHours: false },
 } as const satisfies Record<
   string,
-  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind | null; gaps: readonly string[]; linkRequired: boolean }
+  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind | null; gaps: readonly string[]; linkRequired: boolean; quietHours: boolean }
 >;
 export type MessageKind = keyof typeof MESSAGE_KINDS;
 
@@ -550,6 +576,7 @@ export interface TextIn {
  */
 export const DUE_ACTIONS = [
   'alert_owner',
+  'tell_owner_booked',
   'send_reminder',
   'send_confirmation',
   'send_login_link',

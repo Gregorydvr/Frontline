@@ -76,8 +76,9 @@ export interface VisitDue {
  * Moves one of the firm's booked visits to a new time, if nothing else takes
  * it, and records who did it. In the same step, its reminder that is still
  * waiting is cancelled and the rows given are written for the new time. A
- * confirmation still waiting is kept, since it reads the visit's time when
- * it goes, and may now go until the new start. Gives false when the visit is
+ * confirmation, or the owner's text about the booking, still waiting is
+ * kept, since it reads the visit's time when it goes, and may now go until
+ * the new start. Gives false when the visit is
  * not booked, the time is taken, or it already starts then.
  */
 export async function moveVisit(
@@ -114,7 +115,7 @@ export async function moveVisit(
     db.d1
       .prepare(
         `UPDATE due SET latest_at = MAX(run_at, ?4)
-         WHERE firm_id = ?1 AND visit_id = ?2 AND action = 'send_confirmation' AND state = 'waiting' AND ${movedHere}`,
+         WHERE firm_id = ?1 AND visit_id = ?2 AND action IN ('send_confirmation', 'tell_owner_booked') AND state = 'waiting' AND ${movedHere}`,
       )
       .bind(firm, visit, startsAt, startsAt),
     ...dues.map((due) => {

@@ -118,7 +118,7 @@ describe('the acceptance story, steps 1 to 4', () => {
   it('1. Monday 28 September, 11:15: Mrs Ahmed’s call ends with a quote visit booked for Thursday 1 October at 3pm', async () => {
     firm = await tidewell(db, number);
     const booked = await bookingCall(number, MRS_AHMED, 'ahmed-28-sep', instantFromIso('2026-09-28T11:14:00+01:00'), '2026-10-01T15:00');
-    expect(booked).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm' });
+    expect(booked).toEqual({ booked: true, start: '2026-10-01T15:00', say: 'Thursday 1 October at 3pm', text: true });
 
     expect(await listCustomers(db, firm)).toHaveLength(1);
     const { customer, job, visit } = await filed(firm, 'Mrs Ahmed');
@@ -248,10 +248,13 @@ describe('the acceptance story, step 8: the stop button', () => {
     expect(textsTo(caller.mobile)).toEqual([]);
 
     const { visit } = await filed(firm, 'Mrs Ahmed');
+    // The stop button holds texts to customers. The owner's text about the
+    // booking is not one, so it went.
     expect((await listDueForVisit(db, firm, visit.id)).map((due) => [due.action, due.state, due.outcome])).toEqual([
       ['send_confirmation', 'skipped', 'too_late'],
       ['send_reminder', 'skipped', 'too_late'],
+      ['tell_owner_booked', 'done', 'sent'],
     ]);
-    expect(await listMessagesBetween(db, firm, ...allTime)).toEqual([]);
+    expect((await listMessagesBetween(db, firm, ...allTime)).map((text) => [text.kind, text.to.kind, text.state])).toEqual([['visit_booked', 'owner', 'sent']]);
   });
 });

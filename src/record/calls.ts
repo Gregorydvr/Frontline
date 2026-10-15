@@ -143,7 +143,7 @@ export async function recordCall(db: RecordDb, firm: FirmId, input: NewCall): Pr
     after.push(historyStatement(db, firm, { kind: 'visit_booked', by: frontline, visit })[1], fileHold(db, firm, booking.hold, visit));
     for (const due of booking.dues) {
       // Only a visit's own rows, since types can be got round.
-      if (!(['send_confirmation', 'send_reminder'] as readonly string[]).includes(due.action)) {
+      if (!(['send_confirmation', 'send_reminder', 'tell_owner_booked'] as readonly string[]).includes(due.action)) {
         throw new Refused();
       }
       const id = newId() as DueId;

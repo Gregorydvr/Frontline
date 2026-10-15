@@ -286,7 +286,7 @@ async function toolRoute(c: Context<AppEnv>, tool: (typeof TOOL_NAMES)[keyof typ
     const answer =
       tool === TOOL_NAMES.freeTimes
         ? await answerFreeTimes(diary, firm, call, toolCall.args)
-        : await answerBook(diary, firm, call, toolCall.args);
+        : await answerBook(diary, firm, call, toolCall.args, { db: withFirmClock(db, firm), from: message.from, linkAddress: c.get('deps').linkAddress });
     results.push({ name: toolCall.name, toolCallId: toolCall.id, result: answer });
   }
   return c.json({ results });

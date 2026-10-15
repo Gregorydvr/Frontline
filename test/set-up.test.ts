@@ -213,7 +213,7 @@ describe('what counts as urgent', () => {
 });
 
 describe('when visits can be booked', () => {
-  const rules = { day: ['1', '2', '3', '4', '5'], opens: '08:00', closes: '16:00', every: '60', daysAhead: '14', length_quote_visit: '60' };
+  const rules = { day: ['1', '2', '3', '4', '5'], opens: '08:00', closes: '16:00', every: '60', daysAhead: '14', nextDayFrom: '12:00', length_quote_visit: '60' };
 
   it('refuses rules that make no sense, with their reasons, and changes nothing', async () => {
     const noDays = await page(`/control/firms/${firm}/diary`, controlForm({ ...rules, day: [] }));
@@ -223,13 +223,16 @@ describe('when visits can be booked', () => {
     expect(backwards.words).toContain(CONTROL_WORDS.diaryProblems.hours);
     const tooLong = await page(`/control/firms/${firm}/diary`, controlForm({ ...rules, length_quote_visit: '600' }));
     expect(tooLong.words).toContain(CONTROL_WORDS.diaryProblems.length);
+    const noNotice = await page(`/control/firms/${firm}/diary`, controlForm({ ...rules, nextDayFrom: '' }));
+    expect(noNotice.status).toBe(400);
+    expect(noNotice.words).toContain(CONTROL_WORDS.diaryProblems.next_day);
     expect((await getFirm(db, firm))?.diaryRules).toBeNull();
   });
 
   it('are set, recorded as done by staff', async () => {
     expect((await page(`/control/firms/${firm}/diary`)).status).toBe(200);
     expect((await open(`/control/firms/${firm}/diary`, controlForm(rules))).status).toBe(303);
-    expect((await getFirm(db, firm))?.diaryRules).toEqual({ days: [1, 2, 3, 4, 5], opens: 480, closes: 960, every: 60, lengths: { quote_visit: 60 }, daysAhead: 14 });
+    expect((await getFirm(db, firm))?.diaryRules).toEqual({ days: [1, 2, 3, 4, 5], opens: 480, closes: 960, every: 60, lengths: { quote_visit: 60 }, daysAhead: 14, nextDayFrom: 720 });
     expect((await firmHistory()).slice(-1)).toEqual([['diary_rules_set', true]]);
     expect((await staffLog(firm)).slice(-1)).toEqual([['set_diary_rules', true, null, null]]);
   });
