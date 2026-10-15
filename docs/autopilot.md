@@ -45,10 +45,12 @@ When task 5 is done, stop and give Greg a summary of all five.
 
 ## Where the queue stands
 
-| Task | State |
-|---|---|
-| 1. Booking tests | PR #12 was already merged into `slice-i-practice` on 15 Oct 2026 (2ee1064), with most of these tests. The missing ones are added on `slice-i-booking-tests`. |
-| 2. Call report onto slice-i-practice | Done before this brief: `slice-i-call-report` was brought up to date (f610aa0) and merged as PR #14 (7e302e1), which practice runs. |
-| 3. Control room puts settings on Vapi | Not started. |
-| 4. Named actions | Not started. |
-| 5. Outgoing texts | Not started. |
+Updated 15 Oct 2026. Each task's branch builds on the one before, so they merge in this order.
+
+| Task | Branch | State | Waiting on Greg |
+|---|---|---|---|
+| 1. Booking tests | `slice-i-booking-tests` | PR #12 was already merged (2ee1064) with most of these tests. The rest added: late-evening, Friday and weekend calls; free times and visits either side of 25 Oct 2026; the owner's booking text at the edges of quiet hours. The unauthenticated check passed, and is now `npm run practice:gates`. | Nothing |
+| 2. Call report onto slice-i-practice | none | Done before this brief: merged as PR #14 (7e302e1), which practice runs. | Nothing |
+| 3. Control room pushes to Vapi | `slice-i-agent-push` | Built and tested against a pretend Vapi, switched off: no copy has a Vapi key. | Open question 17 in `docs/decisions.md`: the key, and the `CLAUDE.md` rule's new wording |
+| 4. Named actions | `slice-i-actions` | Built: `src/actions.ts`, rule 21 in `CLAUDE.md`, and lint. | Nothing; the reading of "owner, Front-line or system" is under Assumed |
+| 5. Outgoing texts | `slice-i-texts` | Three texts built and switched off; their wording and three more drafted. | The wording in `docs/texts-to-agree.md`; the missed-call text is a data protection question |
