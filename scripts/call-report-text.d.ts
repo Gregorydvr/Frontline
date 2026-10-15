@@ -38,6 +38,8 @@ export declare function numberKind(number: unknown): 'mobile' | 'landline' | 'wi
 export declare function summariseVapiCall(call: unknown): VapiCallSummary;
 export declare function bookingSummary(vapi: VapiCallSummary): BookingSummary;
 export declare function bookingLines(vapi: VapiCallSummary, frontline: CallReportForStaff | null): string[];
+export declare function safetyLines(settings: unknown): string[];
+export declare function safetyCheck(call: unknown, lines: readonly string[]): string[];
 export declare function conversation(call: unknown): string[];
 export declare function crossCheck(vapi: VapiCallSummary, frontline: CallReportForStaff | null): string[];
 export declare function reportLines(vapi: VapiCallSummary, frontline: CallReportForStaff | null, problems: readonly string[]): string[];

@@ -172,10 +172,35 @@ describe('the practice agent’s tools', () => {
     expect(instructions).toContain(howSoon);
     const dangerRules = instructions.indexOf('If something dangerous comes up after you have offered times');
     const booking = instructions.indexOf('you can book a visit once you have');
-    for (const line of [ownAdviceOnly, howSoon]) {
-      expect(instructions.indexOf(line)).toBeGreaterThan(dangerRules);
-      expect(instructions.indexOf(line)).toBeLessThan(booking);
-    }
+    expect(instructions.indexOf(howSoon)).toBeGreaterThan(dangerRules);
+    expect(instructions.indexOf(howSoon)).toBeLessThan(booking);
+    // The rule against advice of its own comes straight after the safety lines.
+    const safetyRule = instructions.indexOf('If the caller mentions anything dangerous');
+    expect(instructions.slice(safetyRule).split('\n\n')[1]).toBe(ownAdviceOnly);
+  });
+
+  it('give one safety line for each kind of danger, to be said word for word, before anything about booking', () => {
+    const [system] = practice.model.messages;
+    const instructions = system?.content ?? '';
+    const lines = {
+      gas: 'Please leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger.',
+      water: "Please keep away from any wet electrics, and don't touch switches or sockets near the water. If you can do it safely, turn off the water at the stopcock. If anyone is in danger, leave the property and call 999.",
+      other: 'If anyone is in danger, leave the property and call 999.',
+    };
+    const rule = instructions.slice(instructions.indexOf('If the caller mentions anything dangerous')).split('\n\n')[0] ?? '';
+    expect(rule).toContain('say the one safety line below that fits, word for word');
+    expect(rule).toContain('Say nothing else about safety.');
+    expect(rule.split('\n').slice(1)).toEqual([
+      `- A smell of gas, a gas leak or carbon monoxide: "${lines.gas}"`,
+      `- Water near electrics: "${lines.water}"`,
+      `- Anything else dangerous: "${lines.other}"`,
+    ]);
+    // Each is quoted once. The last is also the water line's last sentence.
+    for (const line of Object.values(lines)) expect(instructions.split(`"${line}"`)).toHaveLength(2);
+    expect(instructions.indexOf(rule)).toBeLessThan(instructions.indexOf('free_times'));
+    // The old wording left the advice for anything else to the agent.
+    expect(instructions).not.toContain('after the safety advice');
+    expect(instructions).not.toContain('tell them to leave the property');
   });
 
   it('are named in the instructions, which give today’s date in UK time and never Vapi’s own date, which is UTC', () => {

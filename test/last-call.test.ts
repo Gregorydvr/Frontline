@@ -16,6 +16,8 @@ import {
   numberKind,
   readOnly,
   reportLines,
+  safetyCheck,
+  safetyLines,
   summariseVapiCall,
   uk,
 } from '../scripts/call-report-text.js';
@@ -229,6 +231,61 @@ describe('the booking', () => {
   it('says why a confirmation did not go', async () => {
     const frontline = await throughTheSystem({ beforeTheReport: () => optOutNumber(db, firm, ukMobile('07700 900003')) });
     expect(bookingLines(summariseVapiCall(booked), frontline)).toContain("  Customer's confirmation: not sent (opted_out).");
+  });
+});
+
+describe('the agent’s safety advice', () => {
+  const lines = safetyLines(practice);
+  const [gas = '', water = '', other = ''] = lines;
+  /** A call in Vapi's form, with the agent's lines as given, a few seconds apart. */
+  const callWith = (...said: string[]) => ({
+    artifact: { messages: said.map((message, i) => ({ role: 'bot', message, secondsFromStart: 10 + i * 5 })) },
+  });
+
+  it('takes the lines from the agent’s settings file, word for word', () => {
+    expect(lines).toEqual([
+      'Please leave the property and call the National Gas Emergency Service on 0800 111 999, or 999 if anyone is in immediate danger.',
+      "Please keep away from any wet electrics, and don't touch switches or sockets near the water. If you can do it safely, turn off the water at the stopcock. If anyone is in danger, leave the property and call 999.",
+      'If anyone is in danger, leave the property and call 999.',
+    ]);
+  });
+
+  it('passes a gas boiler service quote, which mentions gas but gives no safety advice', () => {
+    const quote = callWith(
+      "Hello, you're through to Practice Test Plumbing's automated assistant. This call is recorded. How can I help?",
+      'Thank you. So that is a gas boiler service, and you would like someone to come and price it.',
+      'Let me check the diary.',
+      'I can offer Friday 16 October at midday, Monday 19 October at 9am, or Tuesday 20 October at 8am. Which suits you?',
+      'That is booked for Monday 19 October at 9am, and you will get a text to confirm it. Thank you, goodbye.',
+    );
+    expect(safetyCheck(quote, lines)).toEqual([]);
+    expect(safetyCheck(booked, lines)).toEqual([]);
+  });
+
+  it('passes each listed line, alone or among other words, whatever the punctuation, apostrophes or gaps in the number', () => {
+    expect(safetyCheck(callWith(gas, water, other), lines)).toEqual([]);
+    expect(safetyCheck(callWith(`Thank you for telling me. ${water} Now, can I take your name?`), lines)).toEqual([]);
+    const spoken = 'please leave the property and call the national gas emergency service on 0800111999 - or 999 if anyone is in immediate danger';
+    expect(safetyCheck(callWith(spoken, water.replace("don't", 'don’t')), lines)).toEqual([]);
+  });
+
+  it('fails advice of the agent’s own, as on the leak calls of 15 Oct 2026, giving only how far in it was', () => {
+    const ownAdvice =
+      'As you have a water leak, please be aware that if there is any risk of danger, such as electrical fittings getting wet or if you feel unsafe, please leave the property and call 999 if anyone is in immediate danger.';
+    expect(safetyCheck(callWith('Thank you.', ownAdvice), lines)).toEqual([
+      'The agent gave safety advice that is not one of its safety lines at 15.0s. Look at it with --transcript.',
+    ]);
+  });
+
+  it('fails a listed line with advice of its own added, on 999, leaving or an emergency', () => {
+    for (const added of ['Call 999 if the ceiling comes down.', 'You may want to leave the property for now.', 'This sounds like an emergency.']) {
+      expect(safetyCheck(callWith(`${water} ${added}`), lines)).toHaveLength(1);
+    }
+  });
+
+  it('says so when the settings file has no safety lines to check against', () => {
+    expect(safetyCheck(booked, [])).toEqual(["The agent's settings file has no list of safety lines, so its safety advice could not be checked."]);
+    expect(safetyLines({ model: { messages: [{ role: 'system', content: 'Take a message.' }] } })).toEqual([]);
   });
 });
 
