@@ -124,3 +124,21 @@ What it shows: the agent's new instructions and schema (postcode and first line 
 | The second try, with a word for each letter | **Not tested.** The caller said yes the first time |
 | The end of the call | **Known issue.** The agent said goodbye, then went on answering the caller's goodbyes, and did not end the call; the caller did |
 | What surprised us | The call was handled in Vapi's US region again (control address in AWS `us-west-2`). The caller's real first name is on practice and in Vapi's record of the call, as the brief allows for Greg's own test calls; it is not written here. The two known issues are to be fixed on Vapi's OpenAI realtime model, not on this one: see open questions 12 to 14 in `docs/decisions.md` |
+
+## What happened: the booking calls
+
+What it shows: the agent booking a quote visit on a real call to the practice number, with the times spread across days, the notice on the next working day, a day named by the caller, a change of mind on the same call, and both texts that follow a booking. Also an urgent call, which books nothing.
+
+| | |
+|---|---|
+| Date | 15 October 2026, slice I (`slice-i-booking`, pull request 12) |
+| Who ran it | Greg made the calls and checked Front-line's side by hand in the control room. Claude Code, on his machine, set the agent from its file with his go-ahead and ran `npm run practice:last-call` from `slice-i-call-report`, read only |
+| The Worker and the agent | Practice runs `2934c9e` (version `b6a8db29-2538-4f4f-9b4b-10c0949c34d9`). The agent was set from `vapi/practice-assistant.json` at the same commit: only `model` changed (the wording on when to give a `day`). Read back, it matched the file, and a second read-only run found nothing to change |
+| Front-line's side of the report | **Missing.** Practice does not yet run `slice-i-call-report`, so the control room's report on a call is not there, and `npm run practice:last-call` says "Front-line: no call with this id" and ends with a failure. Vapi's side was read from the report; Front-line's side (the visit, the texts, the alert) was checked by hand in the control room |
+| 1. No day named | Vapi's `01a13f89-16b8-700f-aa69-1065bc6c57e6`, 12:28:31Z to 12:30:08Z, ended by the caller. `free_times` called once, with no day, and given Friday 16 October at midday, Monday 19 October at 8am and Tuesday 20 October at 8am: the first time on each of the next three working days, with Friday from noon (the next-day notice) and the weekend left out. `book_visit` with `2026-10-19T08:00`: booked, `text` true |
+| What followed | **Pass.** The customer's confirmation and the owner's text about the booking both arrived. The confirmation's link opened without a Cloudflare login. The control room showed the visit on the job |
+| 2. An urgent leak | **Pass.** No times offered and nothing booked. The owner's alert arrived. Vapi's id and the call's times were not taken down |
+| The end of the urgent call | **Known issue.** The agent did not end the call after its goodbye, as on the postcode call |
+| 3. A day named, then a change of mind | Vapi's `01a1400c-6180-7773-b506-82c890f80b55`, 14:51:56Z to 14:53:27Z, ended by the caller. `free_times` first with no day, given Friday 16 October at midday, Monday 19 October at 9am and Tuesday 20 October at 8am; Monday's 8am was the visit booked on call 1. Then `free_times` with `day` `2026-10-21`, given Wednesday 21 October at 8am, at midday and at 3pm: the earliest, the one nearest midday and the latest. `book_visit` with `2026-10-21T08:00`: booked, `text` true. Then `book_visit` with `2026-10-21T12:00`: booked, `text` true, moving the time held on the call |
+| What followed | **Pass.** Greg checked it all worked as expected |
+| What surprised us | The tools' arguments came as text, as on 14 October. The callers' real details are on practice and in Vapi's record of each call, as the brief allows for Greg's own test calls; they are not written here |
