@@ -145,7 +145,7 @@ export const ACTIONS = {
     says: 'Keeps a call as its report comes in from Vapi, and alerts the owner at once if it is urgent.',
     who: ['system'],
     async run(ctx, input: { report: CallReport }): Promise<Landed> {
-      const landed = await landCall(ctx.db, input.report);
+      const landed = await landCall(ctx.db, input.report, ctx.deps.textsOn);
       if (landed.result === 'stored' && landed.alert !== null) {
         // Sent at once, before Vapi gets its answer. If this fails, the clock
         // runs the row again shortly, and the alert still cannot go twice.

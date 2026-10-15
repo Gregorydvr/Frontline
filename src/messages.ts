@@ -62,6 +62,12 @@ export const DRAFT_WORDING: Readonly<Record<MessageKind, string | null>> = {
   // Greg's answer to open question 16, 14 Oct 2026: the draft to start from,
   // which each owner agrees as for the other texts.
   visit_booked: 'Front-line: {customer} booked a quote visit for {day} at {time}, {place}. {link}',
+  // Task 5 of docs/autopilot.md: the build's drafts, [to agree] with Greg,
+  // and then each owner, as for every text (docs/texts-to-agree.md). These
+  // kinds are switched off on every copy until then.
+  visit_moved_notice: "Hi {customer}, it's {firm}. {owner}'s visit has moved to {day} at {time}. Need to change it? Just reply here.",
+  visit_cancelled_notice: "Hi {customer}, it's {firm}. Your visit on {day} at {time} is cancelled. Need a new time? Just reply here.",
+  visit_followup: "Hi {customer}, thanks for having {owner} round. {firm} will be in touch with the price. Any questions? Just reply here.",
 };
 
 /**

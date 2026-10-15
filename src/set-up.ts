@@ -211,8 +211,12 @@ export function nameProblems(name: string, longest: number): NameProblem[] {
   return problems;
 }
 
-/** The kinds of text a firm needs agreed wording for before Calls & bookings: every kind there is in Release 1. */
-export const CALLS_WORDING: readonly MessageKind[] = Object.keys(MESSAGE_KINDS) as MessageKind[];
+/**
+ * The kinds of text a firm needs agreed wording for before Calls & bookings:
+ * every kind there is in Release 1. Not the texts of task 5, which are
+ * switched off: a firm needs their wording only once they are switched on.
+ */
+export const CALLS_WORDING: readonly MessageKind[] = (Object.keys(MESSAGE_KINDS) as MessageKind[]).filter((kind) => !MESSAGE_KINDS[kind].switchable);
 
 /** Something a firm still needs before Calls & bookings can be switched on. */
 export type SetUpGap =

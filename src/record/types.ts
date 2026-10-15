@@ -184,7 +184,8 @@ export type Actor =
  * - a customer: details_taken, and opted_out and opted_in, which also name
  *   the kind of text
  * - a visit: visit_booked, confirmation_sent, reminder_sent, visit_moved,
- *   visit_cancelled
+ *   visit_cancelled, and, for the texts of task 5 when they go,
+ *   moved_notice_sent, cancelled_notice_sent and followup_sent
  * - a job, done by the customer from the link about it: details_confirmed,
  *   when nothing changed, and details_corrected. The old details are not kept.
  * - a call with no customer or job: message_taken, for a caller who is not
@@ -215,6 +216,9 @@ export const HISTORY_KINDS = {
   reminder_sent: 'visit',
   visit_moved: 'visit',
   visit_cancelled: 'visit',
+  moved_notice_sent: 'visit',
+  cancelled_notice_sent: 'visit',
+  followup_sent: 'visit',
   details_confirmed: 'job',
   details_corrected: 'job',
   message_taken: 'call',
@@ -357,7 +361,7 @@ export interface NewBooking {
   startsAt: Instant;
   endsAt: Instant;
   /** The rows in the due list for the visit, worked out from its time (src/booking.ts). */
-  dues: readonly { action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked'; runAt: Instant; latestAt: Instant }[];
+  dues: readonly { action: 'send_confirmation' | 'send_reminder' | 'tell_owner_booked' | 'send_visit_followup'; runAt: Instant; latestAt: Instant }[];
 }
 
 export const HOLD_STATES = ['held', 'filed', 'released'] as const;
@@ -422,6 +426,7 @@ export const MESSAGE_KINDS = {
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose'],
     linkRequired: false,
     quietHours: true,
+    switchable: false,
   },
   /**
    * The confirmation as the first text the firm sends a customer: the same,
@@ -434,9 +439,10 @@ export const MESSAGE_KINDS = {
     gaps: ['customer', 'firm', 'owner', 'day', 'time', 'purpose', 'link'],
     linkRequired: true,
     quietHours: true,
+    switchable: false,
   },
   /** The reminder the day before a visit. */
-  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'], linkRequired: false, quietHours: true },
+  visit_reminder: { to: 'customer', service: 'calls', history: 'reminder_sent', gaps: ['owner', 'weekday', 'time'], linkRequired: false, quietHours: true, switchable: false },
   /**
    * The owner's alert about an urgent call, with a link to the job once this
    * copy has an address for the app. It goes without the link otherwise: an
@@ -449,6 +455,7 @@ export const MESSAGE_KINDS = {
     gaps: ['customer', 'place', 'summary', 'number', 'link'],
     linkRequired: false,
     quietHours: false,
+    switchable: false,
   },
   /**
    * The owner's alert about an urgent call whose caller's name, job or
@@ -461,6 +468,7 @@ export const MESSAGE_KINDS = {
     gaps: ['summary', 'number'],
     linkRequired: false,
     quietHours: false,
+    switchable: false,
   },
   /**
    * The owner's text when the voice agent books a visit on a call, with a
@@ -475,16 +483,64 @@ export const MESSAGE_KINDS = {
     gaps: ['customer', 'day', 'time', 'place', 'link'],
     linkRequired: false,
     quietHours: true,
+    switchable: false,
   },
   /**
    * The link that logs the owner in, sent to the owner's own mobile when they
    * ask for it. The login is recorded when the link is used, so no history
    * entry is written when the text goes; the text itself is kept.
    */
-  login_link: { to: 'owner', service: null, history: null, gaps: ['link'], linkRequired: true, quietHours: false },
+  login_link: { to: 'owner', service: null, history: null, gaps: ['link'], linkRequired: true, quietHours: false, switchable: false },
+  /**
+   * Task 5 of docs/autopilot.md: three texts to customers, built and
+   * switched off. Each goes only on a copy whose TEXTS_ON setting names it,
+   * which no copy does, and only in wording the owner agreed, as every text.
+   * Their draft wording is to agree (docs/texts-to-agree.md).
+   *
+   * The visit moved: its new day and time. Only to a customer whose
+   * confirmation went, since one still waiting gives the new time itself.
+   */
+  visit_moved_notice: {
+    to: 'customer',
+    service: 'calls',
+    history: 'moved_notice_sent',
+    gaps: ['customer', 'firm', 'owner', 'day', 'time'],
+    linkRequired: false,
+    quietHours: true,
+    switchable: true,
+  },
+  /** The visit cancelled. Only to a customer whose confirmation went. */
+  visit_cancelled_notice: {
+    to: 'customer',
+    service: 'calls',
+    history: 'cancelled_notice_sent',
+    gaps: ['customer', 'firm', 'day', 'time'],
+    linkRequired: false,
+    quietHours: true,
+    switchable: true,
+  },
+  /** The morning after a quote visit: thanks, and that the firm will be in touch with the price. */
+  visit_followup: {
+    to: 'customer',
+    service: 'calls',
+    history: 'followup_sent',
+    gaps: ['customer', 'firm', 'owner'],
+    linkRequired: false,
+    quietHours: true,
+    switchable: true,
+  },
 } as const satisfies Record<
   string,
-  { to: 'customer' | 'owner'; service: Service | null; history: HistoryKind | null; gaps: readonly string[]; linkRequired: boolean; quietHours: boolean }
+  {
+    to: 'customer' | 'owner';
+    service: Service | null;
+    history: HistoryKind | null;
+    gaps: readonly string[];
+    linkRequired: boolean;
+    quietHours: boolean;
+    /** Whether it goes only on a copy whose TEXTS_ON setting names it. False for every text of Release 1. */
+    switchable: boolean;
+  }
 >;
 export type MessageKind = keyof typeof MESSAGE_KINDS;
 
@@ -590,6 +646,10 @@ export const DUE_ACTIONS = [
   // The firm's voice agent in Vapi: put the record's settings on it after a
   // change was saved (src/agent-push.ts).
   'push_agent',
+  // Task 5's texts to customers, written only while the copy switches them on.
+  'send_visit_moved',
+  'send_visit_cancelled',
+  'send_visit_followup',
 ] as const;
 export type DueAction = (typeof DUE_ACTIONS)[number];
 
@@ -620,6 +680,8 @@ export const DUE_OUTCOMES = [
   // the reason its push says (agent_pushes).
   'pushed',
   'not_pushed',
+  // A text of task 5 whose row ran after the copy switched it off.
+  'switched_off',
 ] as const;
 export type DueOutcome = (typeof DUE_OUTCOMES)[number];
 

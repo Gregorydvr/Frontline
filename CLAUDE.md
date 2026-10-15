@@ -186,7 +186,8 @@ scripts/call-report-text.js its report and checks, tested in test/last-call.test
 vapi/                each voice agent's settings, as the script puts them on Vapi, and agent-template.json, every firm's agent with
                      gaps for the record to fill. No keys or secrets
 docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
-                     the restore steps (restore.md), the checks made on practice (practice-checks.md), and when a firm leaves (firm-leaving.md)
+                     the restore steps (restore.md), the checks made on practice (practice-checks.md), when a firm leaves (firm-leaving.md),
+                     and new texts' wording waiting for Greg (texts-to-agree.md)
 docs/screens/        screenshots beside the example's, kept with the pull request that took them
 reference/           the example app: read-only
 wrangler.jsonc       the Worker's config: this machine at the top level, then practice and live

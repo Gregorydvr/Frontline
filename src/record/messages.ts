@@ -279,6 +279,9 @@ function sentEntry(message: Message): NewHistory | null {
   switch (history) {
     case 'reminder_sent':
     case 'confirmation_sent':
+    case 'moved_notice_sent':
+    case 'cancelled_notice_sent':
+    case 'followup_sent':
       return message.visit === null ? null : { kind: history, by: frontline, visit: message.visit };
     case 'passed_to_owner':
       return message.job === null ? null : { kind: history, by: frontline, job: message.job };

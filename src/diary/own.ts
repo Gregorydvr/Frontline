@@ -4,11 +4,17 @@
 import { instant, type Instant } from '../clock';
 import { cancelVisit, getFirm, getVisit, holdTime, listTakenTimes, moveVisit } from '../record';
 import type { RecordDb } from '../record/db';
-import type { Actor, FirmId, VisitId, VisitKind } from '../record/types';
+import type { Actor, FirmId, MessageKind, VisitId, VisitKind } from '../record/types';
+import type { VisitDue } from '../record/visits';
 import type { CallRef, Diary, FreeTime, HoldResult, MoveResult } from '.';
-import { isOffered, offeredStarts, reminderDue, spreadTimes, visitLength, type LondonDate } from './times';
+import { followupDue, isOffered, offeredStarts, reminderDue, spreadTimes, visitLength, type LondonDate } from './times';
 
-export function ownDiary(db: RecordDb): Diary {
+/**
+ * Front-line's own diary, on the record given. `textsOn` is the copy's
+ * texts of task 5 that are switched on (TEXTS_ON): moving or cancelling a
+ * visit writes their rows only then.
+ */
+export function ownDiary(db: RecordDb, textsOn: readonly MessageKind[] = []): Diary {
   return {
     async freeTimes(firm: FirmId, kind: VisitKind, options: { from: LondonDate | null; count: number; call: CallRef | null }): Promise<FreeTime[]> {
       const rules = (await getFirm(db, firm))?.diaryRules ?? null;
@@ -56,19 +62,17 @@ export function ownDiary(db: RecordDb): Diary {
         return 'not_offered';
       }
       const reminder = reminderDue(startsAt, now);
-      const moved = await moveVisit(
-        db,
-        firm,
-        visit,
-        { startsAt, endsAt: instant(startsAt + length) },
-        by,
-        reminder === null ? [] : [{ action: 'send_reminder', runAt: reminder.runAt, latestAt: reminder.latestAt }],
-      );
+      const dues: VisitDue[] = reminder === null ? [] : [{ action: 'send_reminder', runAt: reminder.runAt, latestAt: reminder.latestAt }];
+      if (found.kind === 'quote_visit' && textsOn.includes('visit_followup')) dues.push(followupDue(startsAt));
+      // Its confirmation, if still waiting, gives the new time itself; the
+      // record writes this only for a customer whose confirmation went.
+      if (textsOn.includes('visit_moved_notice')) dues.push({ action: 'send_visit_moved', runAt: now, latestAt: startsAt });
+      const moved = await moveVisit(db, firm, visit, { startsAt, endsAt: instant(startsAt + length) }, by, dues);
       return moved ? 'moved' : 'taken';
     },
 
     cancel(firm: FirmId, visit: VisitId, by: Actor): Promise<boolean> {
-      return cancelVisit(db, firm, visit, by);
+      return cancelVisit(db, firm, visit, by, textsOn.includes('visit_cancelled_notice'));
     },
   };
 }

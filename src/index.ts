@@ -4,7 +4,7 @@
 
 import { createApp } from './app';
 import { systemClock } from './clock';
-import { copyFrom, linkAddressFrom, vapiCredentialFrom, type Deps } from './deps';
+import { copyFrom, linkAddressFrom, textsOnFrom, vapiCredentialFrom, type Deps } from './deps';
 import { everyMinute, onQueue } from './due';
 import { CLOSED_GATE, type StaffGate } from './providers/access';
 import { CloudflareAccess } from './providers/access/cloudflare';
@@ -52,6 +52,7 @@ function realDeps(env: Env): Deps {
     files: { kept: env.FILES, inbox: env.CALLS_IN },
     agents: vapiAgents(env),
     vapiCredential: vapiCredentialFrom(env.VAPI_CREDENTIAL_ID),
+    textsOn: textsOnFrom(env.TEXTS_ON),
   };
 }
 

@@ -112,7 +112,11 @@ export type LogEvent =
   | 'agent_differs'
   | 'agent_unreachable'
   | 'agent_stuck'
-  | 'agent_set';
+  | 'agent_set'
+  // Task 5's texts to customers (src/due.ts): a row that ran after the copy
+  // switched its text off, and one whose visit changed.
+  | 'text_switched_off'
+  | 'visit_text_visit_changed';
 
 const ERROR_NAMES = [
   'Error',

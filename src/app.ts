@@ -244,7 +244,7 @@ async function toolRoute(c: Context<AppEnv>, tool: (typeof TOOL_NAMES)[keyof typ
     log('tool_call_for_unknown_number');
     return c.json({}, 404);
   }
-  const diary = ownDiary(withFirmClock(db, firm));
+  const diary = ownDiary(withFirmClock(db, firm), c.get('deps').textsOn);
   const call = message.providerCallId === null ? null : { provider: 'vapi', providerCallId: message.providerCallId } as const;
   const results = [];
   for (const toolCall of message.calls) {

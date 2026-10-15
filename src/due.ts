@@ -25,6 +25,9 @@
 // - make_firm_export: make the file of a firm's records staff asked for
 // - delete_firm: delete a leaving firm at the end of its 30 days. The row
 //   goes with the firm, so it is not marked done
+// - send_visit_moved, send_visit_cancelled and send_visit_followup: task 5's
+//   texts to customers, written only while the copy switches them on; a row
+//   that runs after it switched one off sends nothing
 // - push_agent: put the record's settings on the firm's voice agent in Vapi
 //   after a change the agent is made from was saved (src/agent-push.ts); it
 //   tries again while Vapi cannot be reached, for a day
@@ -73,7 +76,7 @@ import { pushAgent } from './agent-push';
  * copy's credential for them. The file stores come with the
  * record it is given.
  */
-export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress' | 'agents' | 'vapiCredential'>>;
+export type DueDeps = Pick<Deps, 'texts'> & Partial<Pick<Deps, 'linkAddress' | 'appAddress' | 'agents' | 'vapiCredential' | 'textsOn'>>;
 
 /** What goes on the queue for each row: ids only. */
 export interface DueMessage {
@@ -208,6 +211,12 @@ async function act(db: RecordDb, deps: DueDeps, firm: FirmId, row: ClaimedDue): 
       return deleteLeftFirm(db, firm);
     case 'push_agent':
       return pushTheAgent(db, deps, firm, row);
+    case 'send_visit_moved':
+      return sendVisitText(db, deps, firm, row, 'visit_moved_notice');
+    case 'send_visit_cancelled':
+      return sendVisitText(db, deps, firm, row, 'visit_cancelled_notice');
+    case 'send_visit_followup':
+      return sendVisitText(db, deps, firm, row, 'visit_followup');
   }
 }
 
@@ -467,6 +476,53 @@ async function tellOwnerBooked(db: RecordDb, deps: DueDeps, firm: FirmId, row: C
     return { until: held.why === 'quiet_hours' ? held.until : null };
   }
   return outcomeOf(results);
+}
+
+/**
+ * Texts the customer one of task 5's texts about their visit, if the copy
+ * still switches it on. The visit is looked at again first: a text that it
+ * moved goes only while it is booked, at its time now; one that it was
+ * cancelled, only while it is cancelled; and the text after a quote visit,
+ * only the day after a quote visit still booked. Otherwise nothing goes.
+ */
+async function sendVisitText(
+  db: RecordDb,
+  deps: DueDeps,
+  firm: FirmId,
+  row: ClaimedDue,
+  kind: 'visit_moved_notice' | 'visit_cancelled_notice' | 'visit_followup',
+): Promise<DueOutcome | Held> {
+  if (!(deps.textsOn ?? []).includes(kind)) {
+    log('text_switched_off', { firm, due: row.id });
+    return 'switched_off';
+  }
+  const visit = row.visit === null ? null : await getVisit(db, firm, row.visit);
+  const now = db.clock.now();
+  const still =
+    visit !== null &&
+    (kind === 'visit_cancelled_notice'
+      ? visit.state === 'cancelled'
+      : visit.state === 'booked' && (kind === 'visit_moved_notice' || (visit.kind === 'quote_visit' && londonDay(now) - londonDay(visit.startsAt) === 1)));
+  const job = still ? await getJob(db, firm, visit.job) : null;
+  const customer = job === null ? null : await getCustomer(db, firm, job.customer);
+  const firmNow = await getFirm(db, firm);
+  if (visit === null || job === null || customer === null || firmNow === null) {
+    log('visit_text_visit_changed', { firm, due: row.id });
+    return 'visit_changed';
+  }
+  const [owner] = await listOwners(db, firm);
+  const facts = { customer: customer.name, firm: firmNow.name, owner: owner?.name ?? firmNow.name, ...visitWhen(visit.startsAt) };
+  const result = await send(deps.texts, db, firm, {
+    due: row.id,
+    kind,
+    to: { kind: 'customer', customer: customer.id },
+    about: { job: job.id, visit: visit.id, call: null },
+    facts,
+  });
+  if (result.result === 'held') {
+    return { until: result.why === 'quiet_hours' ? result.until : null };
+  }
+  return outcomeOf([result]);
 }
 
 /** A visit's day and time in the words a text uses, such as "Thursday 1 October" and "3pm". */
