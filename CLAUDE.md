@@ -155,13 +155,15 @@ src/                 the Worker
                      erase.ts the one list of what each delete removes (a customer, an enquiry, a firm); example.ts moves the demo
                      firm's clock and resets it. files.ts is the only code that touches the file stores (FILES, and the inbox
                      CALLS_IN), with the restore ledger; keeping.ts moves and deletes recordings and runs each firm's daily sweep;
-                     periods.ts holds every period; firm-file.ts a firm's export, leaving and delete
+                     periods.ts holds every period; firm-file.ts a firm's export, leaving and delete; provisioning.ts each
+                     request to a provider to make a firm's number or agent, at most once
   screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
                      home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
                      app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link.
                      control.ts is the control room's screens
   example/           the demo firm, Tidewell Heating, as data, and its loader
   providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio.
+                     numbers/: buying a firm's number in Twilio, switched off unless a copy's NUMBERS_ON is "yes".
                      access/: the staff gate, the check of Cloudflare Access's note, and the stand-in.
                      vapi/: reading and changing an agent through Vapi's API, and the stand-in
 migrations/          plain SQL, numbered 0001_name.sql, applied in tests, on this machine and when deployed

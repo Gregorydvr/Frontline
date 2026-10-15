@@ -106,7 +106,8 @@ describe('adding a firm', () => {
   it('adds it by name, with every service off and the stop button off, recorded as done by staff', async () => {
     const added = await open('/control/add-firm', controlForm({ name: 'Second Example Firm' }));
     expect(added.status).toBe(303);
-    const id = /^\/control\/firms\/([0-9a-z]{26})$/.exec(added.headers.get('Location') ?? '')?.[1];
+    // Adding a firm starts its guided set-up (task 3 of queue 2).
+    const id = /^\/control\/firms\/([0-9a-z]{26})\/onboard$/.exec(added.headers.get('Location') ?? '')?.[1];
     if (id === undefined) throw new Error('No firm');
     firm = id as FirmId;
     expect(await getFirm(db, firm)).toMatchObject({

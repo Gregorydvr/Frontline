@@ -34,11 +34,15 @@ import {
   type Owner,
   type Service,
   type TextIn,
+  type Provision,
+  type Provisioning,
+  type ProvisionState,
   type Trade,
   type VisitKind,
   type WordingVersion,
 } from '../record/types';
 import { draftFor, TRADE_PACKS } from '../trade-packs';
+import type { Provisioned } from '../actions';
 import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
 import { dayWords } from './home';
@@ -383,6 +387,52 @@ export const CONTROL_WORDS = {
   tradeKeptUrgent: 'Kept as it is: the firm has its own list.',
   tradeKeptDiary: 'Kept as they are: the firm has its own rules.',
   tradeChoose: 'Choose a trade.',
+  // The guided set-up (task 3 of queue 2). New, for staff only; flagged in
+  // its pull request.
+  setUpFirm: 'Set up {firm}',
+  guidedSetUp: 'Guided set-up',
+  onboardHint: 'One step at a time. Each can be changed later from the firm’s page. Nothing here switches a service on.',
+  nextStep: 'Next: {step}',
+  allStepsDone: 'Every step is done.',
+  toDo: 'To do',
+  stepNames: {
+    firm: 'The firm',
+    owner: 'Its owner',
+    trade: 'Its trade',
+    services: 'The services it chose',
+    diary: 'When visits can be booked',
+    number: 'Its number',
+    agent: 'Its voice agent',
+    wording: 'Its wording, as the owner agrees it',
+  },
+  servicesChosen: 'The services it chose',
+  servicesHint: 'Which services the firm is signing up for. Choosing switches nothing on: each is switched on when the firm goes live.',
+  noServicesChosen: 'None chosen yet',
+  buyNumber: 'Buy a number in Twilio',
+  buyNumberHint: 'Buys one UK 07 number for the firm, which costs money, and sets it as the firm’s number. Then bring it into Vapi by hand (docs/vapi.md).',
+  buyNumberOff: 'Buying a number is switched off on this copy, since it costs money. Buy one by hand in Twilio (docs/twilio.md), then set it here.',
+  setNumberByHand: 'Set a number bought by hand',
+  createAgent: 'Make its agent in Vapi',
+  createAgentHint: 'Makes the firm’s voice agent in Vapi from the record (vapi/agent-template.json) and sets it as the firm’s agent.',
+  createAgentOff: 'Making an agent is switched off on this copy: it has no Vapi key (docs/decisions.md, open question 17). Make one by hand (docs/vapi.md), then set it here.',
+  setAgentByHand: 'Set an agent made by hand',
+  wordingAgreed: '{agreed} of {all} agreed',
+  provisionStates: {
+    asked: 'Asked {when}, waiting for an answer.',
+    done: 'Made {when}: {made}.',
+    failed: 'Asked {when}, and not made.',
+    unclear: 'Asked {when}, and the answer did not say whether it was made. Check by hand before asking again.',
+  } satisfies Record<ProvisionState, string>,
+  provisioned: {
+    made: 'Made, and set on the firm.',
+    made_not_set: 'Made, but not set on the firm. Check it on the firm’s page.',
+    switched_off: 'Switched off on this copy. Nothing was asked.',
+    has_one: 'The firm has one already. Nothing was asked.',
+    not_ready: 'Not ready: the firm or this copy is missing something it needs. Nothing was asked.',
+    already_asked: 'Already asked for. Nothing was asked again.',
+    failed: 'Not made. It can be asked for again.',
+    unclear: 'The answer did not say whether it was made. Check by hand before asking again.',
+  } satisfies Record<Provisioned['done'], string>,
   wordsLabel: 'Words',
   check: 'Check',
   saveAgreed: 'Save as agreed',
@@ -848,7 +898,8 @@ function setUpSection(firm: Firm, setUp: SetUpView): Html {
   const agreedCount = kinds - (wordingGap?.kind === 'wording' ? wordingGap.missing.length : 0);
   return section(
     CONTROL_WORDS.setUp,
-    html`${
+    html`<a class="btn btn-line" href="${base}/onboard">${CONTROL_WORDS.guidedSetUp}</a>
+${
       missing.length === 0
         ? html`<p class="meta">${CONTROL_WORDS.nothingMissing}</p>`
         : html`<p class="problem">${CONTROL_WORDS.missing}</p>${list(missing, '')}`
@@ -860,6 +911,7 @@ function setUpSection(firm: Firm, setUp: SetUpView): Html {
         : html`${owner.name} · ${owner.mobile === null ? CONTROL_WORDS.noMobile : nationalNumber(owner.mobile)} · <a class="link" href="${base}/owners/${owner.id}/mobile">${CONTROL_WORDS.changeMobile}</a>`
     }</dd>
 <dt>${CONTROL_WORDS.number}</dt><dd>${firm.phoneNumber === null ? CONTROL_WORDS.noneYet : nationalNumber(firm.phoneNumber)} · <a class="link" href="${base}/number">${CONTROL_WORDS.change}</a></dd>
+<dt>${CONTROL_WORDS.servicesChosen}</dt><dd>${firm.servicesChosen.length === 0 ? CONTROL_WORDS.noServicesChosen : firm.servicesChosen.map((service) => SERVICE_WORDS[service]).join(', ')} · <a class="link" href="${base}/services">${CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.trade}</dt><dd>${firm.trade === null ? CONTROL_WORDS.tradeNotChosen : CONTROL_WORDS.trades[firm.trade]} · <a class="link" href="${base}/trade">${firm.trade === null ? CONTROL_WORDS.chooseTrade : CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.urgent}</dt><dd>${firm.urgentList.length === 0 ? CONTROL_WORDS.noneYet : firm.urgentList.join('; ')} · <a class="link" href="${base}/urgent">${CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.diary}</dt><dd>${diaryInWords(firm)} · <a class="link" href="${base}/diary">${CONTROL_WORDS.change}</a></dd>
@@ -923,18 +975,25 @@ ${
 }
 
 /** Setting which agent in Vapi is the firm's. */
-export function agentScreen(firm: Firm, typed: string, problems: readonly string[]): Html {
-  return html`${back(firm)}
+export function agentScreen(firm: Firm, typed: string, problems: readonly string[], flow = false): Html {
+  return html`${back(firm, flow)}
 <div class="block"><h1>${CONTROL_WORDS.agent}</h1><p class="meta">${CONTROL_WORDS.agentHint}</p></div>
-<form method="post" action="/control/firms/${firm.id}/agent" class="stack">
+<form method="post" action="/control/firms/${firm.id}/agent${inFlow(flow)}" class="stack">
 ${problemList(problems)}
 <div class="field cr-field"><label for="cr-agent">${CONTROL_WORDS.agentId}</label><input id="cr-agent" name="agent" class="cr-mono" maxlength="36" autocomplete="off" value="${typed}"></div>
 <button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
 </form>`;
 }
 
-function back(firm: Firm): Html {
-  return html`<a class="link" href="/control/firms/${firm.id}">${firm.name}</a>`;
+function back(firm: Firm, flow = false): Html {
+  return flow
+    ? html`<a class="link" href="/control/firms/${firm.id}/onboard">${words(CONTROL_WORDS.setUpFirm, { firm: firm.name })}</a>`
+    : html`<a class="link" href="/control/firms/${firm.id}">${firm.name}</a>`;
+}
+
+/** What a set-up form's address carries when it is a step of the guided set-up, so saving goes back to it. */
+function inFlow(flow: boolean): string {
+  return flow ? '?flow=onboard' : '';
 }
 
 function problemList(problems: readonly string[]): Html | null {
@@ -962,10 +1021,10 @@ ${problemList(problems)}
 </form>`;
 }
 
-export function ownerScreen(firm: Firm, typed: { name: string; mobile: string }, problems: readonly string[]): Html {
-  return html`${back(firm)}
+export function ownerScreen(firm: Firm, typed: { name: string; mobile: string }, problems: readonly string[], flow = false): Html {
+  return html`${back(firm, flow)}
 <h1>${CONTROL_WORDS.addOwner}</h1>
-<form method="post" action="/control/firms/${firm.id}/owner" class="stack">
+<form method="post" action="/control/firms/${firm.id}/owner${inFlow(flow)}" class="stack">
 ${problemList(problems)}
 <div class="field cr-field"><label for="cr-owner-name">${CONTROL_WORDS.ownerName}</label><input id="cr-owner-name" name="name" type="text" autocomplete="off" maxlength="60" value="${typed.name}" required></div>
 <div class="field cr-field"><label for="cr-owner-mobile">${CONTROL_WORDS.ownerMobile}</label><input id="cr-owner-mobile" name="mobile" type="tel" autocomplete="off" maxlength="20" value="${typed.mobile}" required></div>
@@ -983,10 +1042,10 @@ ${problemList(problems)}
 </form>`;
 }
 
-export function numberScreen(firm: Firm, typed: string, problems: readonly string[]): Html {
-  return html`${back(firm)}
+export function numberScreen(firm: Firm, typed: string, problems: readonly string[], flow = false): Html {
+  return html`${back(firm, flow)}
 <div class="block"><h1>${CONTROL_WORDS.number}</h1><p class="meta">${CONTROL_WORDS.numberHint}</p></div>
-<form method="post" action="/control/firms/${firm.id}/number" class="stack">
+<form method="post" action="/control/firms/${firm.id}/number${inFlow(flow)}" class="stack">
 ${problemList(problems)}
 <div class="field cr-field"><label for="cr-number">${CONTROL_WORDS.number}</label><input id="cr-number" name="number" type="tel" autocomplete="off" maxlength="20" value="${typed}" required></div>
 <button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
@@ -1008,11 +1067,120 @@ ${problemList(problems)}
 </form>`;
 }
 
-/** Choosing the firm's trade: each pack, with what it would fill in. */
-export function tradeScreen(firm: Firm, problems: readonly string[]): Html {
+/** The services a firm can choose, with a tick for each it chose. */
+export function servicesScreen(firm: Firm, flow = false): Html {
+  return html`${back(firm, flow)}
+<div class="block"><h1>${CONTROL_WORDS.servicesChosen}</h1><p class="meta">${CONTROL_WORDS.servicesHint}</p></div>
+<form method="post" action="/control/firms/${firm.id}/services${inFlow(flow)}" class="stack">
+<fieldset class="cr-days"><legend>${CONTROL_WORDS.servicesChosen}</legend>
+${SERVICES.map(
+  (service) =>
+    html`<label class="cr-tick"><input type="checkbox" name="service" value="${service}"${firm.servicesChosen.includes(service) ? trusted(' checked') : null}>${SERVICE_WORDS[service]}</label>`,
+)}
+</fieldset>
+<button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
+</form>`;
+}
+
+/** What the guided set-up page shows. */
+export interface OnboardView {
+  firm: Firm;
+  setUp: SetUpView;
+  provisioning: readonly Provisioning[];
+  /** Whether this copy can buy a number, and make an agent. */
+  canBuyNumber: boolean;
+  canCreateAgent: boolean;
+  /** What came of the last request to a provider, when the page is shown after one. */
+  outcome: Provisioned['done'] | null;
+  /** How many kinds of text need agreed wording, and how many are agreed. */
+  wording: { agreed: number; all: number };
+}
+
+/** The guided set-up: each step, whether it is done, and the next one to do. */
+export function onboardScreen(view: OnboardView): Html {
+  const { firm, setUp } = view;
+  const base = `/control/firms/${firm.id}`;
+  const [owner] = setUp.owners;
+  const steps: { name: keyof typeof CONTROL_WORDS.stepNames; done: boolean; state: string; href: string | null }[] = [
+    { name: 'firm', done: true, state: firm.name, href: null },
+    {
+      name: 'owner',
+      done: owner !== undefined,
+      state: owner === undefined ? CONTROL_WORDS.toDo : `${owner.name} · ${owner.mobile === null ? CONTROL_WORDS.noMobile : nationalNumber(owner.mobile)}`,
+      href: owner === undefined ? `${base}/owner?flow=onboard` : null,
+    },
+    { name: 'trade', done: firm.trade !== null, state: firm.trade === null ? CONTROL_WORDS.toDo : CONTROL_WORDS.trades[firm.trade], href: `${base}/trade?flow=onboard` },
+    {
+      name: 'services',
+      done: firm.servicesChosen.length > 0,
+      state: firm.servicesChosen.length === 0 ? CONTROL_WORDS.toDo : firm.servicesChosen.map((service) => SERVICE_WORDS[service]).join(', '),
+      href: `${base}/services?flow=onboard`,
+    },
+    { name: 'diary', done: firm.diaryRules !== null, state: firm.diaryRules === null ? CONTROL_WORDS.toDo : rulesInWords(firm.diaryRules), href: `${base}/diary?flow=onboard` },
+    { name: 'number', done: firm.phoneNumber !== null, state: firm.phoneNumber === null ? CONTROL_WORDS.toDo : nationalNumber(firm.phoneNumber), href: `${base}/number?flow=onboard` },
+    { name: 'agent', done: setUp.agent !== null, state: setUp.agent === null ? CONTROL_WORDS.toDo : setUp.agent.assistantId, href: `${base}/agent?flow=onboard` },
+    {
+      name: 'wording',
+      done: view.wording.agreed === view.wording.all,
+      state: words(CONTROL_WORDS.wordingAgreed, view.wording),
+      href: `${base}/wording`,
+    },
+  ];
+  const next = steps.find((step) => !step.done);
   return html`${back(firm)}
+<div class="block"><h1>${words(CONTROL_WORDS.setUpFirm, { firm: firm.name })}</h1><p class="meta">${CONTROL_WORDS.onboardHint}</p></div>
+${view.outcome === null ? null : html`<p class="${view.outcome === 'made' ? 'meta' : 'problem'}" role="status">${CONTROL_WORDS.provisioned[view.outcome]}</p>`}
+${
+  next === undefined
+    ? html`<p class="meta">${CONTROL_WORDS.allStepsDone}</p>`
+    : next.href === null
+      ? null
+      : html`<a class="btn btn-ink" href="${next.href}">${words(CONTROL_WORDS.nextStep, { step: CONTROL_WORDS.stepNames[next.name] })}</a>`
+}
+<div class="card">${steps.map((step, index) => {
+    const line = html`<span class="txt"><span class="t1">${String(index + 1)}. ${CONTROL_WORDS.stepNames[step.name]}</span><span class="t2${step.done ? '' : ' problem'}">${step.state}</span></span>`;
+    return step.href === null ? html`<div class="row">${line}</div>` : html`<a class="row" href="${step.href}">${line}</a>`;
+  })}</div>
+${section(CONTROL_WORDS.stepNames.number, provisionPart(view, 'number', firm.phoneNumber === null, `${base}/onboard/number`, `${base}/number?flow=onboard`))}
+${section(CONTROL_WORDS.stepNames.agent, provisionPart(view, 'agent', setUp.agent === null, `${base}/onboard/agent`, `${base}/agent?flow=onboard`))}
+${section(
+  CONTROL_WORDS.setUp,
+  setUp.gaps.length === 0
+    ? html`<p class="meta">${CONTROL_WORDS.nothingMissing}</p>`
+    : html`<p class="problem">${CONTROL_WORDS.missing}</p>${list(
+        setUp.gaps.map((gap) =>
+          gap.kind === 'wording'
+            ? html`${words(CONTROL_WORDS.gaps.wording, { kinds: gap.missing.map((kind) => CONTROL_WORDS.textKinds[kind]).join('; ') })}`
+            : html`${CONTROL_WORDS.gaps[gap.kind]}`,
+        ),
+        '',
+      )}`,
+)}`;
+}
+
+/** Buying the number or making the agent: the button, or why it is switched off, with the way to do it by hand, and any request made so far. */
+function provisionPart(view: OnboardView, what: Provision, needed: boolean, action: string, byHand: string): Html {
+  const can = what === 'number' ? view.canBuyNumber : view.canCreateAgent;
+  const asked = view.provisioning.filter((one) => one.what === what);
+  return html`${list(
+    asked.map((one) => html`${words(CONTROL_WORDS.provisionStates[one.state], { when: when(one.askedAt), made: one.made ?? '' })}`),
+    CONTROL_WORDS.noneYet,
+  )}
+${
+  !needed
+    ? null
+    : can
+      ? html`<p class="meta">${what === 'number' ? CONTROL_WORDS.buyNumberHint : CONTROL_WORDS.createAgentHint}</p><form method="post" action="${action}"><button class="btn" type="submit">${what === 'number' ? CONTROL_WORDS.buyNumber : CONTROL_WORDS.createAgent}</button></form>`
+      : html`<p class="meta">${what === 'number' ? CONTROL_WORDS.buyNumberOff : CONTROL_WORDS.createAgentOff}</p>`
+}
+${needed ? html`<a class="link" href="${byHand}">${what === 'number' ? CONTROL_WORDS.setNumberByHand : CONTROL_WORDS.setAgentByHand}</a>` : null}`;
+}
+
+/** Choosing the firm's trade: each pack, with what it would fill in. */
+export function tradeScreen(firm: Firm, problems: readonly string[], flow = false): Html {
+  return html`${back(firm, flow)}
 <div class="block"><h1>${CONTROL_WORDS.chooseTrade}</h1><p class="meta">${CONTROL_WORDS.tradeHint}</p><p class="problem">${CONTROL_WORDS.tradeToAgree}</p></div>
-<form method="post" action="/control/firms/${firm.id}/trade" class="stack">
+<form method="post" action="/control/firms/${firm.id}/trade${inFlow(flow)}" class="stack">
 ${problemList(problems)}
 <fieldset class="stack"><legend>${CONTROL_WORDS.trade}</legend>
 ${TRADES.map((trade) => {
@@ -1045,10 +1213,10 @@ export function diaryProblemWords(problems: readonly DiaryProblem[]): string[] {
   return [...new Set(problems.map((problem) => CONTROL_WORDS.diaryProblems[problem.kind]))];
 }
 
-export function diaryScreen(firm: Firm, form: DiaryForm, problems: readonly string[]): Html {
-  return html`${back(firm)}
+export function diaryScreen(firm: Firm, form: DiaryForm, problems: readonly string[], flow = false): Html {
+  return html`${back(firm, flow)}
 <h1>${CONTROL_WORDS.diary}</h1>
-<form method="post" action="/control/firms/${firm.id}/diary" class="stack">
+<form method="post" action="/control/firms/${firm.id}/diary${inFlow(flow)}" class="stack">
 ${problemList(problems)}
 <fieldset class="cr-days"><legend>${CONTROL_WORDS.days}</legend>
 ${[1, 2, 3, 4, 5, 6, 0].map(

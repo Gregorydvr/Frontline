@@ -20,6 +20,7 @@
 // system's timed actions, each named in DUE_ACTIONS and run by src/due.ts.
 
 import { pushAgent, type Pushed } from './agent-push';
+import { agentSettingsFor, holdsASecret } from './agent-settings';
 import { answerBook } from './booking';
 import { instant, instantFromIso, type Instant } from './clock';
 import type { Deps } from './deps';
@@ -61,6 +62,7 @@ import {
   setFirmNumber,
   setOwnerMobile,
   setService,
+  setServicesChosen,
   setStopButton,
   setTrade,
   setUrgentList,
@@ -68,6 +70,9 @@ import {
   deleteFirm,
   markMissingRecordings,
   redoFirmDelete,
+  askProvisioning,
+  finishProvisioning,
+  getAgent,
 } from './record';
 import type { CustomerFile, Deleted } from './record/control';
 import type { CustomerDetails } from './record/customers';
@@ -97,6 +102,18 @@ import type {
 } from './record/types';
 import { stopOrStart } from './messages';
 import type { CallReport } from './vapi-report';
+
+/**
+ * What came of asking a provider to make the firm's number or agent: made
+ * and set on the firm; made but not set (such as a number another firm has
+ * since taken: staff look); switched off on this copy; the firm has one
+ * already; not ready (the copy or the firm lacks what it needs); asked
+ * already; clearly not made; or not clear, so staff check the provider by
+ * hand.
+ */
+export type Provisioned = {
+  done: 'made' | 'made_not_set' | 'switched_off' | 'has_one' | 'not_ready' | 'already_asked' | 'failed' | 'unclear';
+};
 
 /** Who may take an action: the owner, Front-line's staff, the customer, or the system itself. */
 export type Who = 'owner' | 'staff' | 'customer' | 'system';
@@ -448,6 +465,68 @@ export const ACTIONS = {
       const filled = await setTrade(db, input.firm, input.trade, ctx.by);
       log('firm_set_up_changed', { firm: input.firm, staff });
       return filled;
+    },
+  }),
+  choose_services: action({
+    says: 'Records which services the firm chose at set-up. Nothing is switched on.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId; services: readonly Service[] }): Promise<void> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      await setServicesChosen(db, input.firm, input.services, ctx.by);
+      log('firm_set_up_changed', { firm: input.firm, staff });
+    },
+  }),
+  buy_number: action({
+    says: 'Buys the firm a UK mobile number in Twilio, which costs money, and sets it as the firm’s number. Once per firm. Switched off unless this copy allows it.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<Provisioned> {
+      const staff = staffOf(ctx);
+      const { db, firm } = await firmDb(ctx, input.firm);
+      const numbers = ctx.deps.numbers;
+      if (numbers === null) return { done: 'switched_off' };
+      if (firm.phoneNumber !== null) return { done: 'has_one' };
+      if (ctx.deps.appAddress === null) return { done: 'not_ready' };
+      const asked = await askProvisioning(db, firm.id, 'number', staff);
+      if (asked === null) return { done: 'already_asked' };
+      log('number_asked', { firm: firm.id, staff });
+      const answer = await numbers.buy({ smsUrl: `${ctx.deps.appAddress}/twilio/texts`, label: firm.id });
+      if (!answer.ok) {
+        await finishProvisioning(db, firm.id, asked, { state: answer.why === 'unclear' ? 'unclear' : 'failed' });
+        log('number_not_bought', { firm: firm.id, unclear: answer.why === 'unclear' });
+        return { done: answer.why === 'unclear' ? 'unclear' : 'failed' };
+      }
+      await finishProvisioning(db, firm.id, asked, { state: 'done', made: answer.number });
+      const set = await setFirmNumber(db, firm.id, answer.number, ctx.by);
+      log('number_bought', { firm: firm.id, staff, set: set === 'set' });
+      return { done: set === 'set' ? 'made' : 'made_not_set' };
+    },
+  }),
+  create_agent: action({
+    says: 'Makes the firm’s voice agent in Vapi from the record, and sets it as the firm’s agent. Once per firm. Switched off while this copy has no Vapi key.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<Provisioned> {
+      const staff = staffOf(ctx);
+      const { db, firm } = await firmDb(ctx, input.firm);
+      const agents = ctx.deps.agents;
+      if (agents === null) return { done: 'switched_off' };
+      if ((await getAgent(db, firm.id)) !== null) return { done: 'has_one' };
+      const made = agentSettingsFor(firm, { appAddress: ctx.deps.appAddress, credential: ctx.deps.vapiCredential });
+      if ('notReady' in made || holdsASecret(made.settings)) return { done: 'not_ready' };
+      const asked = await askProvisioning(db, firm.id, 'agent', staff);
+      if (asked === null) return { done: 'already_asked' };
+      log('agent_asked', { firm: firm.id, staff });
+      const answer = await agents.create(made.settings);
+      if (!answer.ok) {
+        await finishProvisioning(db, firm.id, asked, { state: answer.why === 'unclear' ? 'unclear' : 'failed' });
+        log('agent_not_made', { firm: firm.id, unclear: answer.why === 'unclear' });
+        return { done: answer.why === 'unclear' ? 'unclear' : 'failed' };
+      }
+      await finishProvisioning(db, firm.id, asked, { state: 'done', made: answer.assistant });
+      // Setting it puts a check on the due list, which reads it back from Vapi.
+      const set = await setAgent(db, firm.id, answer.assistant, staff);
+      log('agent_made', { firm: firm.id, staff, set: set === 'set' });
+      return { done: set === 'set' ? 'made' : 'made_not_set' };
     },
   }),
   agree_wording: action({

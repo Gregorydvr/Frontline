@@ -21,11 +21,13 @@ export {
   setDiaryRules,
   setFirmNumber,
   setService,
+  setServicesChosen,
   setStopButton,
   setTrade,
   setUrgentList,
 } from './firms';
 export { createOwner, getOwner, listOwners, setOwnerMobile } from './owners';
+export { askProvisioning, finishProvisioning, listProvisioning } from './provisioning';
 export {
   confirmCustomerDetails,
   createCustomer,

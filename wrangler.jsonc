@@ -81,13 +81,22 @@
   // this copy sends, by kind, separated by commas, such as
   // "visit_moved_notice,visit_followup". Empty on every copy: they are
   // switched off until Greg agrees their wording and says to switch them on.
+  //
+  // NUMBERS_ON: "yes" lets the control room's guided set-up buy a firm's
+  // number in Twilio (task 3 of queue 2), which costs money. Empty on every
+  // copy. It also needs TWILIO_BUNDLE_SID and TWILIO_ADDRESS_SID, Twilio's ids
+  // for the regulatory bundle and address a UK number is bought under, made by
+  // hand in Twilio's console (docs/twilio.md). Ids, not secrets; empty here.
   "vars": {
     "PUBLIC_ADDRESS": "http://localhost:8787",
     "LINK_ADDRESS": "http://localhost:8787",
     "CONTROL_ADDRESS": "http://localhost:8787",
     "COPY": "local",
     "VAPI_CREDENTIAL_ID": "",
-    "TEXTS_ON": ""
+    "TEXTS_ON": "",
+    "NUMBERS_ON": "",
+    "TWILIO_BUNDLE_SID": "",
+    "TWILIO_ADDRESS_SID": ""
   },
 
   // The clock: every minute, the due list's rows whose time has come go on
@@ -143,7 +152,11 @@
         // as vapi/practice-assistant.json names it. An id, not a secret.
         "VAPI_CREDENTIAL_ID": "ecd964a5-42ff-4fca-952a-95ca211d84a5",
         // Task 5's texts to customers: none switched on (docs/texts-to-agree.md).
-        "TEXTS_ON": ""
+        "TEXTS_ON": "",
+        // Buying numbers from the control room: switched off (it costs money).
+        "NUMBERS_ON": "",
+        "TWILIO_BUNDLE_SID": "",
+        "TWILIO_ADDRESS_SID": ""
       },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
@@ -189,7 +202,7 @@
       // A placeholder until open question 9 is answered. Greg puts the
       // address of the live copy here, the address for customers' links,
       // and the control room's.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "", "TEXTS_ON": "" },
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "", "TEXTS_ON": "", "NUMBERS_ON": "", "TWILIO_BUNDLE_SID": "", "TWILIO_ADDRESS_SID": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {

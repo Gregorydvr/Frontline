@@ -71,7 +71,8 @@ const CHANGES_THE_RECORD = [
   'createLoginLink', 'endSession', 'logInWithLink', 'recordOwnerMessage', 'deleteCustomer', 'redoCustomerDelete', 'deleteExampleFirm',
   'setExampleClock', 'setAgent', 'recordAgentPush', 'addMissingSweeps', 'deleteRecording', 'emptyBin', 'giveUpRecording',
   'markMissingRecordings', 'moveRecording', 'sweepFirm', 'askFirmExport', 'cancelLeaving', 'deleteFirm', 'deleteLeftFirm',
-  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox', 'setTrade',
+  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox', 'setTrade', 'setServicesChosen', 'askProvisioning',
+  'finishProvisioning',
 ];
 const actionsMessage = 'Every action goes through act() in src/actions.ts, which names it and records who did it. Routes only read.';
 const changesOutsideActions = [
@@ -262,8 +263,10 @@ export default defineConfig(
   },
   {
     // send(), the providers that carry texts, and the tests of the providers
-    // themselves.
-    files: ['src/send.ts', 'src/providers/texts/**', 'test/twilio.test.ts'],
+    // themselves. Also the provider that buys a firm's number in Twilio
+    // (task 3 of queue 2), which carries no text and is switched off on
+    // every copy, and its tests.
+    files: ['src/send.ts', 'src/providers/texts/**', 'test/twilio.test.ts', 'src/providers/numbers/**', 'test/numbers.test.ts'],
     rules: { 'frontline/text-outside-send': 'off' },
   },
   {

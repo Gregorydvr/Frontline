@@ -55,6 +55,26 @@ export type FirmExportId = Id & { readonly [firmExportBrand]: true };
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
 export type Service = (typeof SERVICES)[number];
 
+/** What staff can ask a provider to make for a firm at set-up: its number in Twilio, its voice agent in Vapi. */
+export const PROVISIONS = ['number', 'agent'] as const;
+export type Provision = (typeof PROVISIONS)[number];
+
+/** Where a request to a provider stands. Unclear: the provider's answer did not say whether it was made. */
+export type ProvisionState = 'asked' | 'done' | 'failed' | 'unclear';
+
+export type ProvisioningId = Id & { readonly __provisioning: true };
+
+/** One request to a provider to make something for the firm. */
+export interface Provisioning {
+  id: ProvisioningId;
+  what: Provision;
+  state: ProvisionState;
+  askedAt: Instant;
+  finishedAt: Instant | null;
+  /** The number bought, or Vapi's id for the agent. */
+  made: string | null;
+}
+
 /**
  * The trades a firm can choose at set-up, each with a starter pack in
  * src/trade-packs.ts.
@@ -78,6 +98,8 @@ export interface Firm {
   diaryRules: DiaryRules | null;
   /** The trade chosen at set-up, whose starter pack its set-up started from. Null: none chosen. */
   trade: Trade | null;
+  /** The services the firm chose at set-up. Choosing switches nothing on. */
+  servicesChosen: readonly Service[];
   /**
    * How far ahead of the real time the firm's clock runs, in milliseconds:
    * 0 for every real firm. Only an example firm's clock is ever moved.
@@ -244,6 +266,7 @@ export const HISTORY_KINDS = {
   owner_mobile_set: 'firm',
   diary_rules_set: 'firm',
   trade_set: 'firm',
+  services_chosen: 'firm',
   firm_added: 'firm',
   owner_added: 'firm',
   wording_agreed: 'firm',
@@ -823,6 +846,8 @@ export const STAFF_ACTIONS = [
   'viewed_set_up_urgent',
   'viewed_set_up_diary',
   'viewed_set_up_trade',
+  'viewed_set_up_services',
+  'viewed_onboarding',
   'viewed_wording',
   'checked_wording',
   'added_firm',
@@ -832,6 +857,11 @@ export const STAFF_ACTIONS = [
   'set_urgent_list',
   'set_diary_rules',
   'set_trade',
+  'chose_services',
+  // Asking a provider to make something for the firm (task 3 of queue 2):
+  // its number bought in Twilio, its voice agent made in Vapi.
+  'asked_for_number',
+  'asked_for_agent',
   'agreed_wording',
   // The firm's voice agent in Vapi (task 3 of docs/autopilot.md).
   'viewed_set_up_agent',
