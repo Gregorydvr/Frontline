@@ -38,7 +38,9 @@ const SIZES = [
   { name: 'phone', width: 390, height: 844 },
   { name: 'laptop', width: 1280, height: 800 },
 ];
-const WRANGLER = join(ROOT, 'node_modules/.bin/wrangler');
+// Wrangler's own script, run by this Node, so the same call works on Linux,
+// macOS and Windows (where node_modules/.bin/wrangler is a shell script).
+const WRANGLER = join(ROOT, 'node_modules/wrangler/bin/wrangler.js');
 const QUIET = { ...process.env, WRANGLER_SEND_METRICS: 'false', CLOUDFLARE_CF_FETCH_ENABLED: 'false' };
 
 // The example's checks (AUDIT in reference/example-app/test.py), on the app
@@ -72,8 +74,20 @@ const AXE_RUN = `async () => {
 const problems = [];
 let checked = 0;
 
+// Waits until the page has loaded and every animation that ends has ended,
+// so the checks see the screen as it settles. A panel rises into place with
+// a fade (.sheet's "rise" in src/screens/look.ts); measured part way through,
+// its text is paler than it will be, and axe failed its contrast once that
+// way. Animations that never end, such as the recording bars, are left.
+const SETTLED = `async () => {
+  await document.fonts.ready;
+  const ending = document.getAnimations().filter((a) => a.effect && a.effect.getComputedTiming().endTime !== Infinity);
+  await Promise.all(ending.map((a) => a.finished.catch(() => undefined)));
+}`;
+
 async function check(page, name) {
-  await page.evaluate('document.fonts.ready');
+  await page.waitForLoadState('load');
+  await page.evaluate(`(${SETTLED})()`);
   const audit = await page.evaluate(`(${AUDIT})()`);
   for (const kind of ['wide', 'small', 'clipped']) {
     if (audit[kind].length > 0) problems.push(`${name}: ${kind}: ${JSON.stringify(audit[kind].slice(0, 6))}`);
@@ -84,6 +98,17 @@ async function check(page, name) {
   for (const violation of violations) problems.push(`${name}: ${violation.id} (${violation.impact}): ${violation.help}. ${violation.first}`);
   await page.screenshot({ path: join(OUT, `${name}.png`), fullPage: true });
   checked += 1;
+}
+
+// Stops the system and waits until it has gone. On Windows the runtime
+// Wrangler starts is a process of its own, which still holds the database's
+// files, so the whole tree is stopped.
+async function stop(worker) {
+  if (worker.exitCode !== null) return;
+  const gone = new Promise((done) => worker.once('exit', done));
+  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(worker.pid), '/T', '/F']);
+  else worker.kill();
+  await gone;
 }
 
 async function waitForHealth() {
@@ -107,11 +132,12 @@ async function main() {
   // reference/ is never changed.
   const wrapped = join(state, 'example.html');
   writeFileSync(wrapped, SKELETON.replace('@@BODY@@', () => readFileSync(EXAMPLE, 'utf8')));
-  const migrate = spawnSync(WRANGLER, ['d1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state], { env: QUIET, cwd: ROOT, encoding: 'utf8' });
+  const migrate = spawnSync(process.execPath, [WRANGLER, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state], { env: QUIET, cwd: ROOT, encoding: 'utf8' });
   if (migrate.status !== 0) throw new Error(`The migrations did not apply:\n${migrate.stderr}`);
   const worker = spawn(
-    WRANGLER,
+    process.execPath,
     [
+      WRANGLER,
       'dev',
       'src/local.ts',
       '--port',
@@ -292,8 +318,21 @@ async function main() {
     }
   } finally {
     await browser.close();
-    worker.kill();
-    rmSync(state, { recursive: true, force: true });
+    await stop(worker);
+    // Windows lets go of the database's files a little after the runtime has
+    // stopped, so the folder is tried again for up to 20 seconds.
+    for (let tries = 1; ; tries += 1) {
+      try {
+        rmSync(state, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (tries === 40) {
+          console.log(`Could not delete ${state} (${error.code}); delete it by hand.`);
+          break;
+        }
+        await new Promise((done) => setTimeout(done, 500));
+      }
+    }
   }
 
   console.log(`Checked ${String(checked)} screens at 390 by 844 and 1280 by 800. Screenshots are in screens/.`);
