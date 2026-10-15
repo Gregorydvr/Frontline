@@ -51,8 +51,32 @@ const FILE_TYPES = new Set(['R2Bucket', 'R2Object', 'R2ObjectBody', 'R2Objects',
 // test/fixtures/lint/ holds deliberate mistakes that show it works.
 const PROVIDER_ADDRESS = /api\.twilio\.com/i;
 
+// Task 3 of docs/autopilot.md: only the provider in src/providers/vapi/
+// reaches Vapi from the Worker, so every change to an agent goes through the
+// push's checks (src/agent-push.ts). The scripts run on Greg's machine are
+// the other place. test/fixtures/lint/ holds deliberate mistakes that show it
+// works.
+const VAPI_ADDRESS = /api\.vapi\.ai/i;
+
 const frontline = {
   rules: {
+    'vapi-outside-provider': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { vapi: 'Only src/providers/vapi/ reaches Vapi. Change an agent through pushAgent() in src/agent-push.ts.' },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            if (typeof node.value === 'string' && VAPI_ADDRESS.test(node.value)) context.report({ node, messageId: 'vapi' });
+          },
+          TemplateLiteral(node) {
+            if (VAPI_ADDRESS.test(node.quasis.map((quasi) => quasi.value.cooked ?? '').join(''))) context.report({ node, messageId: 'vapi' });
+          },
+        };
+      },
+    },
     'text-outside-send': {
       meta: {
         type: 'problem',
@@ -194,7 +218,14 @@ export default defineConfig(
       'frontline/files-outside-record': 'error',
       'frontline/sql-outside-record': 'error',
       'frontline/text-outside-send': 'error',
+      'frontline/vapi-outside-provider': 'error',
     },
+  },
+  {
+    // The provider that reaches Vapi, the scripts run on Greg's machine, and
+    // the tests of the provider itself.
+    files: ['src/providers/vapi/**', 'scripts/**', 'test/agent.test.ts'],
+    rules: { 'frontline/vapi-outside-provider': 'off' },
   },
   {
     // send(), the providers that carry texts, and the tests of the providers

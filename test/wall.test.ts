@@ -65,6 +65,9 @@ function newCall(forWhom: NewCall['for']): NewCall {
   };
 }
 const mrsAhmedsMobile = ukMobile('07700 900003');
+/** Each firm's agent in Vapi: invented ids. */
+const A_AGENT = '00000000-0000-4000-8000-0000000000a1';
+const B_AGENT = '00000000-0000-4000-8000-0000000000b1';
 const tidewellsNumber = ukMobile('07700 900100');
 const secondFirmsNumber = ukMobile('07700 900200');
 const mrsHallsLandline = ukLandline('01632 960001');
@@ -178,6 +181,10 @@ beforeAll(async () => {
     recordedBy.set(firm, recorded.call);
     const staff = await record.findOrAddStaff(db, 'staff@example.com');
     await record.askFirmExport(db, firm, staff.id);
+    // Each firm's agent in Vapi, checked once.
+    const assistant = firm === a ? A_AGENT : B_AGENT;
+    expect(await record.setAgent(db, firm, assistant, staff.id)).toBe('set');
+    await record.recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'frontline' }, due: null, outcome: 'in_step', settings: [], state: 'in_step', differing: [] });
   }
   // The exports made by their rows in the due list, as the clock runs them.
   for (const { firm, due } of await record.findDue(db)) {
@@ -291,6 +298,26 @@ async function refused(attempt: Promise<unknown>): Promise<void> {
 // One case for every record function. The type makes this list fail to build
 // when a record function is added without its case.
 const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
+  // Each firm's agent in Vapi.
+  async getAgent() {
+    expect((await record.getAgent(db, b))?.assistantId).toBe(B_AGENT);
+  },
+  async setAgent() {
+    const staff = await record.findOrAddStaff(db, 'staff@example.com');
+    expect(await record.setAgent(db, b, A_AGENT, staff.id)).toBe('taken');
+    expect(await record.setAgent(db, b, B_AGENT, staff.id)).toBe('set');
+    expect((await record.getAgent(db, b))?.assistantId).toBe(B_AGENT);
+  },
+  async recordAgentPush() {
+    const push = { by: { kind: 'frontline' }, due: null, outcome: 'changed', settings: ['model'], state: 'in_step', differing: [] } as const;
+    expect(await record.recordAgentPush(db, b, { ...push, assistantId: A_AGENT })).toBeNull();
+    expect(await record.recordAgentPush(db, b, { ...push, assistantId: B_AGENT })).not.toBeNull();
+  },
+  async listAgentPushes() {
+    const pushes = await record.listAgentPushes(db, b);
+    expect(pushes.length).toBeGreaterThan(0);
+    expect(pushes.every((push) => push.assistantId === B_AGENT)).toBe(true);
+  },
   // The two that work on firms themselves.
   async createFirm() {
     const made = await record.createFirm(db, { name: 'Tidewell Heating', isExample: false });

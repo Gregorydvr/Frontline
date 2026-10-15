@@ -19,6 +19,8 @@ import {
   createLoginLink,
   giveUpRecording,
   holdTime,
+  recordAgentPush,
+  setAgent,
   linkForDue,
   listCustomers,
   listJobsForCustomer,
@@ -89,6 +91,9 @@ async function recordedCall(firm: FirmId): Promise<CallId> {
   return made.call;
 }
 
+/** How many agents everyKindOfRow() has made, so each firm's has an id of its own. */
+let agentsMade = 0;
+
 /** Gives the firm a row in every table that holds a firm's rows. */
 async function everyKindOfRow(firm: FirmId): Promise<void> {
   const staff = await staffId();
@@ -99,6 +104,11 @@ async function everyKindOfRow(firm: FirmId): Promise<void> {
   if (job === undefined) throw new Error('No job');
   await recordedCall(firm);
   await askFirmExport(db, firm, staff);
+  // Its agent in Vapi, and one check of it, with an id of its own for each firm.
+  agentsMade += 1;
+  const assistant = `00000000-0000-4000-8000-${String(agentsMade).padStart(12, '0')}`;
+  expect(await setAgent(db, firm, assistant, staff)).toBe('set');
+  await recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'staff', staff }, due: null, outcome: 'not_connected', settings: [], state: 'stuck', differing: [] });
   await optOut(db, firm, customer.id, 'visit_reminder', { kind: 'frontline' });
   await optOutNumber(db, firm, ukMobile('07700 900399'));
   await recordTextIn(db, firm, { provider: 'fake', providerId: `every-${firm}`, from: '+447700900399', words: 'Hello.', consent: null });

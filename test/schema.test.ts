@@ -21,8 +21,10 @@ import {
 const db = openRecord(env.DB, pretendClock(instantFromIso('2026-10-15T08:10:00+01:00')));
 
 describe('the tables', () => {
-  it('are the six of slice B, the calls of slice C, the sending and due list of slice D, the holds and links of slice E, the logins and messages to staff of slice F, the staff, their log and the delete’s permission slip of slice G, and the bin, the firm exports, the deleted firms and the staff log’s permission slip of slice H', async () => {
+  it('are the six of slice B, the calls of slice C, the sending and due list of slice D, the holds and links of slice E, the logins and messages to staff of slice F, the staff, their log and the delete’s permission slip of slice G, and the bin, the firm exports, the deleted firms and the staff log’s permission slip of slice H, and each firm’s agent in Vapi with its log of pushes', async () => {
     expect(await recordTables(env.DB)).toEqual([
+      'agent_pushes',
+      'agents',
       'calls',
       'customers',
       'deleted_firms',

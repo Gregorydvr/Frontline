@@ -6,6 +6,7 @@ import { instant } from '../clock';
 import { newId } from '../ids';
 import { isUkMobile, type UkMobile } from '../phone';
 import { diaryRulesProblems, NAME_LIMITS, nameProblems, urgentListProblems } from '../set-up';
+import { pushAgentStatements } from './agents';
 import { bit, Refused, runTogether, type RecordDb } from './db';
 import { firmEntry } from './history';
 import { staffLogStatement } from './staff';
@@ -131,7 +132,9 @@ export async function setFirmNumber(db: RecordDb, firm: FirmId, number: UkMobile
 
 /**
  * Sets what counts as urgent for the firm, such as "a leak", and records who
- * did it. Each item is one short line, and no item appears twice.
+ * did it. Each item is one short line, and no item appears twice. The firm's
+ * agent in Vapi names the list, so, if the firm has one, it is marked behind
+ * and a row to push it goes on the due list, in the same step.
  */
 export async function setUrgentList(db: RecordDb, firm: FirmId, items: readonly string[], by: Actor): Promise<void> {
   if (urgentListProblems(items).length > 0) {
@@ -140,7 +143,7 @@ export async function setUrgentList(db: RecordDb, firm: FirmId, items: readonly 
   await changeFirm(db, [
     db.d1.prepare('UPDATE firms SET urgent_list = ? WHERE id = ?').bind(JSON.stringify(items), firm),
     ...recorded(db, firm, 'urgent_list_set', by, 'set_urgent_list'),
-  ]);
+  ], pushAgentStatements(db, firm));
 }
 
 /**
@@ -224,13 +227,17 @@ export async function setStopButton(db: RecordDb, firm: FirmId, on: boolean, by:
   ]);
 }
 
-/** Runs a change to the firm and how it is recorded as one step. */
-async function changeFirm(db: RecordDb, statements: D1PreparedStatement[]): Promise<void> {
+/**
+ * Runs a change to the firm and how it is recorded as one step, with any
+ * statements that follow from it and may change nothing, such as pushing an
+ * agent the firm may not have.
+ */
+async function changeFirm(db: RecordDb, statements: D1PreparedStatement[], following: D1PreparedStatement[] = []): Promise<void> {
   // A firm that does not exist changes nothing, and its history entry is
   // refused by the database, which undoes the whole step. A row of the staff
   // log about a firm that is not there writes nothing.
-  const results = await runTogether(db.d1, statements);
-  if (results.some((result) => result.meta.changes !== 1)) {
+  const results = await runTogether(db.d1, [...statements, ...following]);
+  if (results.slice(0, statements.length).some((result) => result.meta.changes !== 1)) {
     throw new Refused();
   }
 }

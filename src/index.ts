@@ -4,11 +4,12 @@
 
 import { createApp } from './app';
 import { systemClock } from './clock';
-import { copyFrom, linkAddressFrom, type Deps } from './deps';
+import { copyFrom, linkAddressFrom, vapiCredentialFrom, type Deps } from './deps';
 import { everyMinute, onQueue } from './due';
 import { CLOSED_GATE, type StaffGate } from './providers/access';
 import { CloudflareAccess } from './providers/access/cloudflare';
 import { TwilioTexts } from './providers/texts/twilio';
+import { VapiApi } from './providers/vapi/api';
 
 /** Cloudflare Access's check, once both its settings are given for this copy; until then the control room is shut. */
 function staffGate(env: Env): StaffGate {
@@ -20,6 +21,17 @@ function staffGate(env: Env): StaffGate {
   } catch {
     return CLOSED_GATE;
   }
+}
+
+/**
+ * Vapi's agents, once Greg has set a Vapi private key for this copy as the
+ * secret VAPI_API_KEY. Until then, null: the control room's pushes reach
+ * nothing and say so. The key is not listed with the secrets the Worker
+ * needs, since a copy runs without it.
+ */
+function vapiAgents(env: Env): VapiApi | null {
+  const key = ((env as unknown as { VAPI_API_KEY?: string }).VAPI_API_KEY ?? '').trim();
+  return key === '' ? null : new VapiApi(key);
 }
 
 function realDeps(env: Env): Deps {
@@ -38,6 +50,8 @@ function realDeps(env: Env): Deps {
     staff: staffGate(env),
     controlAddress: linkAddressFrom(env.CONTROL_ADDRESS),
     files: { kept: env.FILES, inbox: env.CALLS_IN },
+    agents: vapiAgents(env),
+    vapiCredential: vapiCredentialFrom(env.VAPI_CREDENTIAL_ID),
   };
 }
 

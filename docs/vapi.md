@@ -23,6 +23,21 @@ With `--apply` it changes the agent, reads it back, and shows each setting that 
 - Opening an assistant in the dashboard can save Vapi's defaults to it, such as the instructions `structuredDataPlan` uses to pull the details out of the transcript. So after any visit to the dashboard, run the script without `--apply`, and if it shows a change, copy what Vapi now holds into the file.
 - The order of a schema's `required` fields does not count as a change: Vapi reorders them.
 
+## The control room keeps the agent in step (switched off until a key is set)
+
+Built for task 3 of `docs/autopilot.md`, from plan J2 in `docs/plan-automation.md`. Nothing reaches Vapi from the Worker until Greg sets a Vapi private key for that copy, so until then the script above stays the way an agent is changed.
+
+- **One template.** `vapi/agent-template.json` is every agent's settings, with gaps for the firm's name (`[[firm]]`), its id (`[[firm id]]`, in the recording path), its urgent list (`[[urgent list]]`, and `[[urgent list, joined with or]]` where a sentence needs "or"), and the copy's address and Vapi credential (`[[address]]`, `[[credential]]`). `src/agent-settings.ts` fills them from the record. A test fails unless the practice firm's settings come out exactly as `vapi/practice-assistant.json`, so a change to the agent's wording is made in the template and the practice file together.
+- **Which agent.** On the firm's page in the control room, "Its agent in Vapi" takes the agent's id. No agent can be two firms'. Setting it puts a check on the due list.
+- **When it is pushed.** Saving the urgent list puts one row on the due list, if the firm has an agent. The row builds the settings from the record as it is when it runs. Staff can also press "Check and update now".
+- **How.** The push reads the agent from Vapi first. It changes nothing if the agent's recording path is not `/firms/<this firm's id>`. It sends only the top-level settings that differ, in one request, then reads the agent back. It counts as in step only if the read-back matches the record.
+- **Changes made in Vapi's dashboard.** Front-line keeps a fingerprint of what it last confirmed on Vapi. If Vapi holds anything else (a change in the dashboard, or an agent never confirmed), the push sends nothing. The firm's page then shows "Different from the record" and the settings that differ, and a button, "Put the record's settings on it", that staff press to replace them.
+- **Vapi down.** The row tries again every few minutes for a day, and the firm's page shows the agent as behind.
+- **The log.** Every push and check is a row in `agent_pushes`: who (Front-line or a member of staff), when, which settings were sent or differ, and what came of it. Ids and names of settings only, never edited, deleted only with the firm. The firm's page shows the latest five. Staff's views and buttons are in the staff log.
+- **The switch.** The Worker reads the key from the secret `VAPI_API_KEY`. While a copy has none, each push is logged as "Not connected" and nothing is sent. Practice's credential id is set in `wrangler.jsonc` (`VAPI_CREDENTIAL_ID`); it is an id, not a secret.
+
+To switch it on for practice, Greg decides first (questions in `docs/decisions.md`, Open 17). Then, on his own machine: `npx wrangler secret put VAPI_API_KEY --env practice`, set the practice firm's agent id on its page, and press "Check and update now". It should say "Already in step", since the script already put the same settings on it.
+
 ## Bringing a firm's number in
 
 Vapi's dashboard imports a Twilio number only with the account's auth token, which also signs Twilio's requests to the Worker, so it stays with the Worker alone. Instead, make a Twilio API key for Vapi (Standard), load its SID and secret into `TWILIO_API_KEY` and `TWILIO_API_SECRET`, set the number on the firm in the control room first, then:

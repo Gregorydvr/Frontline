@@ -3,6 +3,7 @@ import type { DueQueue } from './due';
 import type { StaffGate } from './providers/access';
 import type { FileStores } from './record/files';
 import type { Texts } from './providers/texts';
+import type { VapiAgents } from './providers/vapi';
 
 /**
  * Which copy of the system this is: this machine, practice or live. Only
@@ -51,11 +52,29 @@ export interface Deps {
    * touches them (src/record/files.ts).
    */
   files: FileStores;
+  /**
+   * Vapi's agents, for putting a firm's settings on its voice agent
+   * (src/agent-push.ts). Null while this copy has no Vapi key: then nothing
+   * reaches Vapi, and each push says it is not connected.
+   */
+  agents: VapiAgents | null;
+  /**
+   * Vapi's id for the credential that carries this copy's VAPI_SECRET, which
+   * the agent's tools and report present to Front-line. An id, not a secret.
+   * Null until this copy has one: then no agent's settings can be made.
+   */
+  vapiCredential: string | null;
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */
 export function copyFrom(setting: string | undefined): Copy {
   return setting === 'practice' ? 'practice' : 'live';
+}
+
+/** Vapi's id for the copy's credential, from its VAPI_CREDENTIAL_ID setting, or null when it is empty or not an id of Vapi's. */
+export function vapiCredentialFrom(setting: string | undefined): string | null {
+  const id = (setting ?? '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) ? id : null;
 }
 
 /** An address from a copy's setting, such as LINK_ADDRESS or PUBLIC_ADDRESS: no slash at the end, and null when empty. */

@@ -181,6 +181,16 @@ export async function tryToDeleteHistory(db: D1Database, id: string): Promise<vo
   await db.prepare('DELETE FROM history WHERE id = ?').bind(id).run();
 }
 
+/** Tries to change a row of a firm's log of agent pushes past the record, which the database must refuse. */
+export async function tryToEditAgentPush(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE agent_pushes SET outcome = 'in_step' WHERE id = ?").bind(id).run();
+}
+
+/** Tries to delete a row of a firm's log of agent pushes past the record, which the database must refuse. */
+export async function tryToDeleteAgentPush(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM agent_pushes WHERE id = ?').bind(id).run();
+}
+
 export async function tryToEditStaffLog(db: D1Database, id: string): Promise<void> {
   await db.prepare("UPDATE staff_log SET what = 'viewed_firm' WHERE id = ?").bind(id).run();
 }

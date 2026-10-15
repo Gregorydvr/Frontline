@@ -28,6 +28,8 @@ import { historyLine } from './history-lines';
 import { isId } from './ids';
 import { londonDayAround, londonInstant } from './london';
 import { log } from './log';
+import { pushAgent } from './agent-push';
+import { VAPI_ID } from './providers/vapi';
 import { DRAFT_WORDING, makeWords } from './messages';
 import { segments } from './gsm';
 import { callerNumber, nationalNumber } from './phone';
@@ -80,6 +82,9 @@ import {
   createOwner,
   getOwner,
   listOwners,
+  getAgent,
+  listAgentPushes,
+  setAgent,
   listWording,
   setDiaryRules,
   setFirmNumber,
@@ -122,6 +127,8 @@ import {
   ownerScreen,
   urgentProblemWords,
   urgentScreen,
+  agentScreen,
+  type SetUpView,
   wordingListScreen,
   wordingProblemWords,
   wordingScreen,
@@ -586,6 +593,49 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
+  app.get('/control/firms/:firm/agent', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
+      const agent = await getAgent(at.firmDb, at.firm.id);
+      return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, agent?.assistantId ?? '', []));
+    }),
+  );
+
+  // Setting the firm's agent puts a row on the due list to check it and put
+  // the record's settings on it (src/agent-push.ts), in the same step.
+  app.post('/control/firms/:firm/agent', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const typed = ((await readForm(c.req.raw)).get('agent') ?? '').trim().toLowerCase().slice(0, 60);
+      const problem = !VAPI_ID.test(typed) ? CONTROL_WORDS.agentNotAnId : (await setAgent(at.firmDb, at.firm.id, typed, at.staff)) === 'taken' ? CONTROL_WORDS.agentTaken : null;
+      if (problem !== null) {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_agent');
+        return drawn(c, CONTROL_WORDS.agent, agentScreen(at.firm, typed, [problem]), 400);
+      }
+      log('agent_set', { firm: at.firm.id, staff: at.staff });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  // Checks the firm's agent now, and puts the record's settings on it if
+  // nothing was changed in Vapi since Front-line last did.
+  app.post('/control/firms/:firm/agent/check', (c) =>
+    atFirm(c, 'form', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'checked_agent');
+      await pushAgent(at.firmDb, c.get('deps'), at.firm.id, { by: { kind: 'staff', staff: at.staff }, due: null, overwrite: false });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
+  // Staff saw what differs and chose to replace it with the record's
+  // settings. Never on an agent that is not this firm's own.
+  app.post('/control/firms/:firm/agent/overwrite', (c) =>
+    atFirm(c, 'form', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'overwrote_agent');
+      await pushAgent(at.firmDb, c.get('deps'), at.firm.id, { by: { kind: 'staff', staff: at.staff }, due: null, overwrite: true });
+      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+    }),
+  );
+
   app.get('/control/firms/:firm/diary', (c) =>
     atFirm(c, 'view', async (at) => {
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_set_up_diary');
@@ -769,9 +819,14 @@ function atKind(c: Context<AppEnv>, kind: 'view' | 'form', draw: (at: AtFirm, ki
 }
 
 /** How far the firm is set up, for its page. */
-async function setUpOf(at: AtFirm): Promise<{ gaps: ReturnType<typeof callsSetUpGaps>; owners: Owner[] }> {
+async function setUpOf(at: AtFirm): Promise<SetUpView> {
   const owners = await listOwners(at.firmDb, at.firm.id);
-  return { gaps: callsSetUpGaps(at.firm, owners, await firmWording(at.firmDb, at.firm.id)), owners };
+  return {
+    gaps: callsSetUpGaps(at.firm, owners, await firmWording(at.firmDb, at.firm.id)),
+    owners,
+    agent: await getAgent(at.firmDb, at.firm.id),
+    pushes: await listAgentPushes(at.firmDb, at.firm.id, 5),
+  };
 }
 
 /** A kind of text's wording page: the words, what a check found, and the text with example details when it can go. */
