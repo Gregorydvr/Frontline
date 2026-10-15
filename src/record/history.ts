@@ -118,20 +118,35 @@ export function firmEntry(
     | 'diary_rules_set'
     | 'trade_set'
     | 'services_chosen'
+    | 'went_live'
     | 'firm_added'
     | 'owner_added'
     | 'wording_agreed'
     | 'owner_message_sent',
   by: Actor,
   service: Service | null,
+  onlyIf: OnlyIf | null = null,
 ): D1PreparedStatement {
   const [actor, owner, staff] = actorColumns(by);
   return db.d1
     .prepare(
       `INSERT INTO history (${ENTRY_COLUMNS}, service)
-       VALUES (?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8)`,
+       SELECT ?1, ?2, ?3, ${NEXT_SEQ}, ?4, ?5, ?6, ?7, ?8
+       WHERE ${onlyIf?.where ?? '1'}`,
     )
-    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, service);
+    .bind(newId(), firm, db.clock.now(), actor, owner, staff, kind, service, ...(onlyIf?.binds ?? []));
+}
+
+/**
+ * A condition on the database, checked as an entry is written in the same
+ * step as a change that may not happen, such as a firm going live only if it
+ * has not already: the entry is written only if the change was made. Its
+ * values are plain `?`s, in order. Only the record layer writes one, from
+ * fixed words.
+ */
+export interface OnlyIf {
+  where: string;
+  binds: readonly (string | number | null)[];
 }
 
 /**

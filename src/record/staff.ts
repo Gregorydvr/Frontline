@@ -5,6 +5,7 @@
 import { instant } from '../clock';
 import { isId, newId } from '../ids';
 import { line, Refused, run, type RecordDb } from './db';
+import type { OnlyIf } from './history';
 import {
   MESSAGE_KINDS,
   SERVICES,
@@ -112,6 +113,7 @@ export function staffLogStatement(
   staff: StaffId,
   what: StaffAction,
   about: StaffLogAbout = {},
+  onlyIf: OnlyIf | null = null,
 ): [StaffLogId, D1PreparedStatement] {
   if (!STAFF_ACTIONS.includes(what) || !isId(staff) || (firm !== null && !isId(firm)) || (firm === null) !== ACROSS_FIRMS.includes(what)) {
     throw new Refused();
@@ -137,8 +139,9 @@ export function staffLogStatement(
          SELECT ?1, ?2, ?3, ?4, ${NEXT_SEQ}, ?5, ?6, ?7, ?8, ?9
          WHERE (?2 IS NULL OR EXISTS (SELECT 1 FROM firms WHERE id = ?2))
            AND (?6 IS NULL OR EXISTS (SELECT 1 FROM customers WHERE firm_id = ?2 AND id = ?6))
-           AND (?8 IS NULL OR EXISTS (SELECT 1 FROM owners WHERE firm_id = ?2 AND id = ?8))`,
+           AND (?8 IS NULL OR EXISTS (SELECT 1 FROM owners WHERE firm_id = ?2 AND id = ?8))
+           AND ${onlyIf?.where ?? '1'}`,
       )
-      .bind(id, firm, staff, db.clock.now(), what, customer, service, owner, messageKind),
+      .bind(id, firm, staff, db.clock.now(), what, customer, service, owner, messageKind, ...(onlyIf?.binds ?? [])),
   ];
 }

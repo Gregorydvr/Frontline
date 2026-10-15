@@ -29,6 +29,7 @@ import { act, type ActionContext, type Provisioned } from './actions';
 import { VAPI_ID } from './providers/vapi';
 import { makeWords } from './messages';
 import { draftFor } from './trade-packs';
+import { goLiveChecklist, TICKED_ITEMS } from './go-live';
 import { segments } from './gsm';
 import { callerNumber, nationalNumber } from './phone';
 import {
@@ -70,6 +71,7 @@ import {
   listAgentPushes,
   listWording,
   listProvisioning,
+  goLiveState,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
 import {
@@ -110,6 +112,8 @@ import {
   tradeScreen,
   servicesScreen,
   onboardScreen,
+  goLiveScreen,
+  type GoLiveView,
   agentScreen,
   type SetUpView,
   wordingListScreen,
@@ -150,7 +154,12 @@ const LONG_FORM_LIMIT = 12 * 1_024;
 interface Looking {
   db: RecordDb;
   staff: StaffId;
+  /** The email the gate vouched for: compared, never shown or logged. */
+  email: string;
 }
+
+/** Why switching a service on was refused, as the firm's page is told. */
+const SWITCH_REFUSALS = ['set_up_incomplete', 'not_live'] as const;
 
 /** The firm being looked at, with the record as that firm reads the time. */
 interface AtFirm extends Looking {
@@ -206,6 +215,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         exampleTools: at.firm.isExample && practiceTools(c),
         exports: await listFirmExports(at.firmDb, at.firm.id),
         setUp: await setUpOf(at),
+        switchRefused: SWITCH_REFUSALS.find((why) => why === c.req.query('refused')) ?? null,
       };
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_firm');
       return drawn(c, at.firm.name, firmScreen(view));
@@ -220,8 +230,8 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       if (service === null || !SERVICES.includes(service) || (on !== '1' && on !== '0')) {
         return c.body(null, 400);
       }
-      await act(asTaken(c, at), 'switch_service', { firm: at.firm.id, service, on: on === '1' });
-      return c.redirect(`/control/firms/${at.firm.id}`, 303);
+      const done = await act(asTaken(c, at), 'switch_service', { firm: at.firm.id, service, on: on === '1' });
+      return c.redirect(`/control/firms/${at.firm.id}${done === 'switched' ? '' : `?refused=${done}`}`, 303);
     }),
   );
 
@@ -575,6 +585,68 @@ export function controlRoutes(app: Hono<AppEnv>): void {
     }),
   );
 
+  // The go-live gate (task 4 of queue 2): the checklist, the ticks staff
+  // make, the test call, and the switch to live, which only the member of
+  // staff the copy names may make.
+  app.get('/control/firms/:firm/go-live', (c) =>
+    atFirm(c, 'view', async (at) => {
+      await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_go_live');
+      const said = c.req.query('done') ?? '';
+      const outcome = Object.hasOwn(CONTROL_WORDS.wentLive, said) ? CONTROL_WORDS.wentLive[said as keyof typeof CONTROL_WORDS.wentLive] : null;
+      return goLivePage(c, at, { typed: '', problem: null }, outcome);
+    }),
+  );
+
+  // Every item ticked by hand, as the form sends them all: only the ones that changed are recorded.
+  app.post('/control/firms/:firm/go-live/ticks', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const ticked = (await readForm(c.req.raw)).getAll('ticked');
+      const state = await goLiveState(at.firmDb, at.firm.id);
+      if (state === null) return notFound(c);
+      for (const item of TICKED_ITEMS) {
+        const now = ticked.includes(item);
+        if (now !== (state.evidence.ticks[item]?.ticked === true)) {
+          await act(asTaken(c, at), 'tick_go_live', { firm: at.firm.id, item, ticked: now });
+        }
+      }
+      return c.redirect(`/control/firms/${at.firm.id}/go-live`, 303);
+    }),
+  );
+
+  // The test call, by Vapi's id for it: only one of this firm's own calls.
+  app.post('/control/firms/:firm/go-live/test-call', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const form = await readForm(c.req.raw);
+      if (form.get('clear') === '1') {
+        await act(asTaken(c, at), 'record_test_call', { firm: at.firm.id, call: null });
+        return c.redirect(`/control/firms/${at.firm.id}/go-live`, 303);
+      }
+      const typed = (form.get('vapiId') ?? '').trim().slice(0, 60);
+      const call = typed === '' ? null : await findCallByProviderId(at.firmDb, at.firm.id, 'vapi', typed);
+      const problem = call === null ? CONTROL_WORDS.testCallNotFound : form.get('passed') !== '1' ? CONTROL_WORDS.testCallNeedsTick : null;
+      if (problem !== null || call === null) {
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_go_live');
+        return goLivePage(c, at, { typed, problem }, null, 400);
+      }
+      try {
+        await act(asTaken(c, at), 'record_test_call', { firm: at.firm.id, call });
+      } catch (thrown) {
+        // A call made before the firm's number was last set does not count.
+        if (!(thrown instanceof Refused)) throw thrown;
+        await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_go_live');
+        return goLivePage(c, at, { typed, problem: CONTROL_WORDS.testCallNotFound }, null, 400);
+      }
+      return c.redirect(`/control/firms/${at.firm.id}/go-live`, 303);
+    }),
+  );
+
+  app.post('/control/firms/:firm/go-live', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const done = await act(asTaken(c, at), 'go_live', { firm: at.firm.id });
+      return c.redirect(`/control/firms/${at.firm.id}/go-live?done=${done}`, 303);
+    }),
+  );
+
   // The guided set-up (task 3 of queue 2): each step in order, with what is
   // done, the next to do, and buying the number and making the agent, each
   // switched off unless this copy allows it.
@@ -783,6 +855,26 @@ export function controlRoutes(app: Hono<AppEnv>): void {
 }
 
 /** What an action taken by the member of staff looking is given (src/actions.ts). */
+/** The go-live page, with the checklist worked out from the record now. */
+async function goLivePage(c: Context<AppEnv>, at: AtFirm, testCall: GoLiveView['testCall'], outcome: string | null, status: 200 | 400 = 200): Promise<Response> {
+  const state = await goLiveState(at.firmDb, at.firm.id);
+  if (state === null) return notFound(c);
+  const named = c.get('deps').goLiveBy;
+  return drawn(
+    c,
+    CONTROL_WORDS.goingLive,
+    goLiveScreen({
+      firm: state.firm,
+      checklist: goLiveChecklist(state),
+      evidence: state.evidence,
+      mayGoLive: named === null ? 'nobody_named' : named === at.email ? 'yes' : 'not_them',
+      outcome,
+      testCall,
+    }),
+    status,
+  );
+}
+
 /** Whether a set-up page is a step of the guided set-up. */
 function inFlow(c: Context<AppEnv>): boolean {
   return c.req.query('flow') === 'onboard';
@@ -830,7 +922,7 @@ async function asStaff(c: Context<AppEnv>, kind: 'view' | 'form', draw: (who: Lo
   }
   const db = openRecord(c.env.DB, deps.clock, deps.files);
   const staff = await findOrAddStaff(db, email);
-  return draw({ db, staff: staff.id });
+  return draw({ db, staff: staff.id, email: staff.email });
 }
 
 /** A page about one firm, named in the address. A firm that is not there is "not found". */

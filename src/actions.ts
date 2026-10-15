@@ -73,16 +73,25 @@ import {
   askProvisioning,
   finishProvisioning,
   getAgent,
+  firmWording,
+  listOwners,
+  markLive,
+  recordTestCall,
+  tickGoLive,
 } from './record';
 import type { CustomerFile, Deleted } from './record/control';
 import type { CustomerDetails } from './record/customers';
 import { Refused, withFirmClock, type RecordDb } from './record/db';
 import { LOGIN_LINK_LIMITS, type SessionToken } from './record/logins';
 import type { NumberSet, TradeSet } from './record/firms';
+import type { WentLive } from './record/go-live';
+import type { TickedItem } from './go-live';
+import { callsSetUpGaps } from './set-up';
 import type { RecordedTextIn } from './record/texts-in';
 import type {
   Actor,
   AgreedHow,
+  CallId,
   CustomerId,
   DiaryRules,
   DueId,
@@ -284,14 +293,19 @@ export const ACTIONS = {
 
   // Front-line's staff, in the control room. Each is in the staff log.
   switch_service: action({
-    says: 'Switches one of the firm’s services on or off.',
+    says: 'Switches one of the firm’s services on or off. Before the firm goes live, only Calls & bookings can be switched on, for its test call, and only once its set-up is complete. An example firm is not held to either.',
     who: ['staff'],
-    async run(ctx, input: { firm: FirmId; service: Service; on: boolean }): Promise<void> {
+    async run(ctx, input: { firm: FirmId; service: Service; on: boolean }): Promise<'switched' | 'set_up_incomplete' | 'not_live'> {
       const staff = staffOf(ctx);
-      const { db } = await firmDb(ctx, input.firm);
+      const { db, firm } = await firmDb(ctx, input.firm);
+      if (input.on && !firm.isExample) {
+        if (input.service !== 'calls' && firm.live === null) return 'not_live';
+        if (input.service === 'calls' && callsSetUpGaps(firm, await listOwners(db, firm.id), await firmWording(db, firm.id)).length > 0) return 'set_up_incomplete';
+      }
       await setService(db, input.firm, input.service, input.on, ctx.by);
       await logStaff(db, input.firm, staff, input.on ? 'service_on' : 'service_off', { service: input.service });
       log('staff_changed_firm', { firm: input.firm, staff });
+      return 'switched';
     },
   }),
   set_stop_button: action({
@@ -527,6 +541,38 @@ export const ACTIONS = {
       const set = await setAgent(db, firm.id, answer.assistant, staff);
       log('agent_made', { firm: firm.id, staff, set: set === 'set' });
       return { done: set === 'set' ? 'made' : 'made_not_set' };
+    },
+  }),
+  tick_go_live: action({
+    says: 'Ticks or unticks one of the items on the firm’s go-live checklist that staff check by hand, such as a data-protection item.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId; item: TickedItem; ticked: boolean }): Promise<void> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      await tickGoLive(db, input.firm, input.item, input.ticked, staff);
+      log('go_live_ticked', { firm: input.firm, staff });
+    },
+  }),
+  record_test_call: action({
+    says: 'Records one of the firm’s own calls as its end-to-end test call, passed, or that none has passed.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId; call: CallId | null }): Promise<void> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      await recordTestCall(db, input.firm, input.call, staff);
+      log('go_live_ticked', { firm: input.firm, staff });
+    },
+  }),
+  go_live: action({
+    says: 'Switches the firm to live, once every item on its go-live checklist is met, and switches on the services it chose. Only the one member of staff this copy names (Greg) may take it.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<WentLive | 'nobody_named'> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      if (ctx.deps.goLiveBy === null) return 'nobody_named';
+      const done = await markLive(db, input.firm, staff, ctx.deps.goLiveBy);
+      log(done === 'live' ? 'firm_went_live' : 'firm_not_live', { firm: input.firm, staff });
+      return done;
     },
   }),
   agree_wording: action({

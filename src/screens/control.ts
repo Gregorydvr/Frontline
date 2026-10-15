@@ -43,6 +43,8 @@ import {
 } from '../record/types';
 import { draftFor, TRADE_PACKS } from '../trade-packs';
 import type { Provisioned } from '../actions';
+import { GO_LIVE_CHECKS, TICKED_ITEMS, type GoLiveCheck, type GoLiveEvidence } from '../go-live';
+import type { WentLive } from '../record/go-live';
 import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
 import { dayWords } from './home';
@@ -389,6 +391,68 @@ export const CONTROL_WORDS = {
   tradeChoose: 'Choose a trade.',
   // The guided set-up (task 3 of queue 2). New, for staff only; flagged in
   // its pull request.
+  // The go-live gate (task 4 of queue 2). New, for staff only; flagged in
+  // its pull request. The data-protection items are [to agree] with Greg.
+  goingLive: 'Going live',
+  goLiveHint: 'A firm goes live only when every item below is met. Going live switches on the services it chose. Only Greg can switch a firm to live.',
+  liveSince: 'Live since {when}',
+  notLiveYet: 'Not live yet',
+  goLiveChecklist: 'Go-live checklist',
+  met: 'Met',
+  notMet: 'Not yet',
+  checks: {
+    set_up: 'Its set-up is complete, and its owner has agreed the wording of every text',
+    services: 'It has chosen its services',
+    number_approved: 'Its number is approved by Twilio and registered in the firm’s name',
+    number_calls: 'A call to its number has reached Front-line',
+    number_texts_out: 'A text from its number was delivered',
+    number_texts_in: 'A text to its number has reached Front-line',
+    agent_in_step: 'Its voice agent in Vapi matches the control room',
+    test_call: 'An end-to-end test call is recorded as passed',
+    dp_agreement: 'Data protection: the firm has signed Front-line’s agreement, with its data processing terms [to agree]',
+    dp_privacy_notice: 'Data protection: the firm’s privacy notice tells its customers that Front-line answers and records its calls, and texts them, for it [to agree]',
+    dp_ico: 'Data protection: the firm is registered with the ICO, or has told us why it need not be [to agree]',
+    dp_vapi_region: 'Data protection: where Vapi handles calls is answered and accepted (open question 10) [to agree]',
+  } satisfies Record<GoLiveCheck, string>,
+  checkHints: {
+    set_up: 'See “Still missing” on the firm’s page.',
+    services: 'Choose them in the guided set-up.',
+    number_approved: 'Ticked by staff, once Twilio’s console shows the number approved under the firm’s own details.',
+    number_calls: 'Ring its number: the call shows on the firm’s page.',
+    number_texts_out: 'A confirmation or alert from its number, reported delivered by Twilio.',
+    number_texts_in: 'Text its number from any mobile.',
+    agent_in_step: 'Checked by Front-line from Vapi. Needs a Vapi key on this copy (open question 17).',
+    test_call: 'Make the call, check it with npm run practice:last-call, then record it below by its id in Vapi.',
+    dp_agreement: 'Ticked by staff.',
+    dp_privacy_notice: 'Ticked by staff.',
+    dp_ico: 'Ticked by staff.',
+    dp_vapi_region: 'Ticked by staff.',
+  } satisfies Record<GoLiveCheck, string>,
+  tickedByHand: 'Ticked by staff',
+  saveTicks: 'Save the ticks',
+  testCall: 'The test call',
+  testCallId: 'Vapi’s id for the call',
+  testCallPassedTick: 'It passed: it landed as it should, and its texts went',
+  recordTestCall: 'Record the test call',
+  clearTestCall: 'Clear the test call',
+  testCallRecorded: 'Recorded: the call at {when}.',
+  testCallNotFound: 'No call of this firm’s has that id in Vapi, made since its number was set.',
+  testCallNeedsTick: 'Tick that it passed.',
+  switchToLive: 'Switch to live',
+  goLiveOnlyGreg: 'Only Greg can switch a firm to live.',
+  goLiveNobodyNamed: 'Nobody is named on this copy to switch firms to live (the secret GO_LIVE_BY).',
+  goLiveNotReady: 'Not every item is met yet.',
+  wentLive: {
+    live: 'Switched to live. Its chosen services are on.',
+    not_ready: 'Not switched: not every item is met.',
+    not_allowed: 'Not switched: only Greg can switch a firm to live.',
+    already_live: 'It is live already.',
+    nobody_named: 'Not switched: nobody is named on this copy to switch firms to live.',
+  } satisfies Record<WentLive | 'nobody_named', string>,
+  switchRefused: {
+    set_up_incomplete: 'Not switched on: Calls & bookings needs the firm’s set-up complete first.',
+    not_live: 'Not switched on: before the firm goes live, only Calls & bookings can be switched on, for its test call.',
+  },
   setUpFirm: 'Set up {firm}',
   guidedSetUp: 'Guided set-up',
   onboardHint: 'One step at a time. Each can be changed later from the firm’s page. Nothing here switches a service on.',
@@ -591,6 +655,8 @@ export interface FirmView {
   exports: readonly FirmExport[];
   /** How far the firm is set up. */
   setUp: SetUpView;
+  /** Why the last switch was not made, when the page is shown after one. */
+  switchRefused: keyof typeof CONTROL_WORDS.switchRefused | null;
 }
 
 /** How far a firm is set up: what it still needs before Calls & bookings, and its owners. */
@@ -610,7 +676,7 @@ ${findForm(base, '')}
 ${setUpSection(firm, view.setUp)}
 ${section(
   CONTROL_WORDS.services,
-  html`<div class="card">${SERVICES.map((service) => switchRow(base, service, firm.services[service]))}
+  html`${view.switchRefused === null ? null : html`<p class="problem" role="status">${CONTROL_WORDS.switchRefused[view.switchRefused]}</p>`}<div class="card">${SERVICES.map((service) => switchRow(base, service, firm.services[service]))}
 <div class="cr-row"><span class="txt"><span class="t1">${CONTROL_WORDS.stopButton}</span><span class="t2${firm.stopped ? ' problem' : ''}">${firm.stopped ? CONTROL_WORDS.stopIsOn : CONTROL_WORDS.stopIsOff}</span></span>
 <form method="post" action="${base}/stop"><input type="hidden" name="on" value="${firm.stopped ? '0' : '1'}"><button class="btn btn-sm ${firm.stopped ? 'btn-line' : 'cr-danger'}" type="submit">${firm.stopped ? CONTROL_WORDS.releaseStop : CONTROL_WORDS.pressStop}</button></form></div></div>`,
 )}
@@ -911,6 +977,7 @@ ${
         : html`${owner.name} · ${owner.mobile === null ? CONTROL_WORDS.noMobile : nationalNumber(owner.mobile)} · <a class="link" href="${base}/owners/${owner.id}/mobile">${CONTROL_WORDS.changeMobile}</a>`
     }</dd>
 <dt>${CONTROL_WORDS.number}</dt><dd>${firm.phoneNumber === null ? CONTROL_WORDS.noneYet : nationalNumber(firm.phoneNumber)} · <a class="link" href="${base}/number">${CONTROL_WORDS.change}</a></dd>
+<dt>${CONTROL_WORDS.goingLive}</dt><dd>${firm.live === null ? CONTROL_WORDS.notLiveYet : words(CONTROL_WORDS.liveSince, { when: when(firm.live.at) })} · <a class="link" href="${base}/go-live">${CONTROL_WORDS.goLiveChecklist}</a></dd>
 <dt>${CONTROL_WORDS.servicesChosen}</dt><dd>${firm.servicesChosen.length === 0 ? CONTROL_WORDS.noServicesChosen : firm.servicesChosen.map((service) => SERVICE_WORDS[service]).join(', ')} · <a class="link" href="${base}/services">${CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.trade}</dt><dd>${firm.trade === null ? CONTROL_WORDS.tradeNotChosen : CONTROL_WORDS.trades[firm.trade]} · <a class="link" href="${base}/trade">${firm.trade === null ? CONTROL_WORDS.chooseTrade : CONTROL_WORDS.change}</a></dd>
 <dt>${CONTROL_WORDS.urgent}</dt><dd>${firm.urgentList.length === 0 ? CONTROL_WORDS.noneYet : firm.urgentList.join('; ')} · <a class="link" href="${base}/urgent">${CONTROL_WORDS.change}</a></dd>
@@ -1067,6 +1134,76 @@ ${problemList(problems)}
 </form>`;
 }
 
+/** What the go-live page shows. */
+export interface GoLiveView {
+  firm: Firm;
+  checklist: readonly { check: GoLiveCheck; met: boolean }[];
+  evidence: GoLiveEvidence;
+  /** Whether the member of staff looking may switch it to live, or why not. */
+  mayGoLive: 'yes' | 'not_them' | 'nobody_named';
+  /** What came of the last thing done on the page. */
+  outcome: string | null;
+  /** The id typed for the test call, and what was wrong with it. */
+  testCall: { typed: string; problem: string | null };
+}
+
+/** The go-live checklist: each item, met or not, the ticks staff make, the test call, and the switch to live. */
+export function goLiveScreen(view: GoLiveView): Html {
+  const { firm, evidence } = view;
+  const base = `/control/firms/${firm.id}/go-live`;
+  const ready = view.checklist.every((item) => item.met);
+  return html`${back(firm)}
+<div class="block"><h1>${CONTROL_WORDS.goingLive}</h1><p class="meta">${firm.live === null ? CONTROL_WORDS.notLiveYet : words(CONTROL_WORDS.liveSince, { when: when(firm.live.at) })}</p><p class="meta">${CONTROL_WORDS.goLiveHint}</p></div>
+${view.outcome === null ? null : html`<p class="problem" role="status">${view.outcome}</p>`}
+${section(
+  CONTROL_WORDS.goLiveChecklist,
+  list(
+    GO_LIVE_CHECKS.map((check) => {
+      const met = view.checklist.find((item) => item.check === check)?.met === true;
+      return html`<span class="chip ${met ? 'chip-good' : 'chip-bad'}">${met ? CONTROL_WORDS.met : CONTROL_WORDS.notMet}</span> ${CONTROL_WORDS.checks[check]}<br><span class="t2">${CONTROL_WORDS.checkHints[check]}</span>`;
+    }),
+    '',
+  ),
+)}
+${section(
+  CONTROL_WORDS.tickedByHand,
+  html`<form method="post" action="${base}/ticks" class="stack">
+<fieldset class="stack"><legend>${CONTROL_WORDS.tickedByHand}</legend>
+${TICKED_ITEMS.map(
+  (item) =>
+    html`<label class="cr-tick"><input type="checkbox" name="ticked" value="${item}"${evidence.ticks[item]?.ticked === true ? trusted(' checked') : null}>${CONTROL_WORDS.checks[item]}</label>`,
+)}
+</fieldset>
+<button class="btn btn-line" type="submit">${CONTROL_WORDS.saveTicks}</button>
+</form>`,
+)}
+${section(
+  CONTROL_WORDS.testCall,
+  html`${evidence.testCall === null ? null : html`<p class="meta">${words(CONTROL_WORDS.testCallRecorded, { when: when(evidence.testCall.at) })}</p>`}
+<form method="post" action="${base}/test-call" class="stack">
+${view.testCall.problem === null ? null : problemList([view.testCall.problem])}
+<div class="field cr-field"><label for="cr-test-call">${CONTROL_WORDS.testCallId}</label><input id="cr-test-call" name="vapiId" class="cr-mono" maxlength="60" autocomplete="off" value="${view.testCall.typed}"></div>
+<label class="cr-tick"><input type="checkbox" name="passed" value="1">${CONTROL_WORDS.testCallPassedTick}</label>
+<button class="btn btn-line" type="submit">${CONTROL_WORDS.recordTestCall}</button>
+</form>
+${evidence.testCall === null ? null : html`<form method="post" action="${base}/test-call"><input type="hidden" name="clear" value="1"><button class="btn btn-line" type="submit">${CONTROL_WORDS.clearTestCall}</button></form>`}`,
+)}
+${
+  firm.live !== null
+    ? null
+    : section(
+        CONTROL_WORDS.switchToLive,
+        !ready
+          ? html`<p class="meta">${CONTROL_WORDS.goLiveNotReady}</p>`
+          : view.mayGoLive === 'nobody_named'
+            ? html`<p class="meta">${CONTROL_WORDS.goLiveNobodyNamed}</p>`
+            : view.mayGoLive === 'not_them'
+              ? html`<p class="meta">${CONTROL_WORDS.goLiveOnlyGreg}</p>`
+              : html`<form method="post" action="${base}"><button class="btn btn-ink" type="submit">${CONTROL_WORDS.switchToLive}</button></form>`,
+      )
+}`;
+}
+
 /** The services a firm can choose, with a tick for each it chose. */
 export function servicesScreen(firm: Firm, flow = false): Html {
   return html`${back(firm, flow)}
@@ -1141,6 +1278,7 @@ ${
     const line = html`<span class="txt"><span class="t1">${String(index + 1)}. ${CONTROL_WORDS.stepNames[step.name]}</span><span class="t2${step.done ? '' : ' problem'}">${step.state}</span></span>`;
     return step.href === null ? html`<div class="row">${line}</div>` : html`<a class="row" href="${step.href}">${line}</a>`;
   })}</div>
+<a class="btn btn-line" href="${base}/go-live">${CONTROL_WORDS.goLiveChecklist}</a>
 ${section(CONTROL_WORDS.stepNames.number, provisionPart(view, 'number', firm.phoneNumber === null, `${base}/onboard/number`, `${base}/number?flow=onboard`))}
 ${section(CONTROL_WORDS.stepNames.agent, provisionPart(view, 'agent', setUp.agent === null, `${base}/onboard/agent`, `${base}/agent?flow=onboard`))}
 ${section(

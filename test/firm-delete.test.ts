@@ -22,6 +22,7 @@ import {
   recordAgentPush,
   setAgent,
   askProvisioning,
+  tickGoLive,
   linkForDue,
   listCustomers,
   listJobsForCustomer,
@@ -112,6 +113,8 @@ async function everyKindOfRow(firm: FirmId): Promise<void> {
   await recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'staff', staff }, due: null, outcome: 'not_connected', settings: [], state: 'stuck', differing: [] });
   // A request to Twilio for its number (task 3 of queue 2).
   expect(await askProvisioning(db, firm, 'number', staff)).not.toBeNull();
+  // A tick on its go-live checklist (task 4 of queue 2).
+  await tickGoLive(db, firm, 'dp_agreement', true, staff);
   await optOut(db, firm, customer.id, 'visit_reminder', { kind: 'frontline' });
   await optOutNumber(db, firm, ukMobile('07700 900399'));
   await recordTextIn(db, firm, { provider: 'fake', providerId: `every-${firm}`, from: '+447700900399', words: 'Hello.', consent: null });

@@ -78,6 +78,12 @@ export interface Deps {
    * money): then the step says it is switched off, and nothing reaches Twilio.
    */
   numbers: PhoneNumbers | null;
+  /**
+   * The email of the one member of staff who may switch a firm to live
+   * (Greg), from the copy's secret GO_LIVE_BY, so it is never in the
+   * repository. Null until it is set: then no firm can go live.
+   */
+  goLiveBy: string | null;
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */

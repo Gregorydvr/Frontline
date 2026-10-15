@@ -145,6 +145,7 @@ src/                 the Worker
   agent-settings.ts  a firm's voice agent as the record says it should be: vapi/agent-template.json filled in, and comparing settings
   agent-push.ts      pushAgent(): the one way the Worker changes an agent in Vapi: read, check it is the firm's, send only what differs,
                      read back, never over a change made in Vapi without staff. Switched off while a copy has no VAPI_API_KEY
+  go-live.ts         the go-live checklist, worked out from the record: what must be true before a firm is switched to live
   trade-packs.ts     the trade starter packs: each trade's urgent list, diary rules and drafts, which fill in only what a firm has none of
   set-up.ts          setting up a firm: the checks on its name, wording, urgent list and diary rules, each with its reason, which the
                      record refuses on and the control room shows; what a firm still needs before Calls & bookings; a wording preview's facts
@@ -156,7 +157,8 @@ src/                 the Worker
                      firm's clock and resets it. files.ts is the only code that touches the file stores (FILES, and the inbox
                      CALLS_IN), with the restore ledger; keeping.ts moves and deletes recordings and runs each firm's daily sweep;
                      periods.ts holds every period; firm-file.ts a firm's export, leaving and delete; provisioning.ts each
-                     request to a provider to make a firm's number or agent, at most once
+                     request to a provider to make a firm's number or agent, at most once; go-live.ts the checklist's
+                     evidence and ticks, and switching a firm to live, only by the member of staff the copy names
   screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
                      home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
                      app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link.

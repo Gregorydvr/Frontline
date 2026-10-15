@@ -20,7 +20,7 @@ import { diaryRulesProblems, urgentListProblems, wordingProblems } from '../src/
 import { draftFor, TRADE_PACKS } from '../src/trade-packs';
 import { EXAMPLE_DIARY_RULES } from '../src/example/tidewell';
 import { controlForm, controlOpener } from './helpers/control';
-import { firmRows } from './helpers/db';
+import { firmRows, withStepBefore } from './helpers/db';
 import { testDeps } from './helpers/deps';
 
 const clock = pretendClock(instantFromIso('2026-10-15T16:00:00+01:00'));
@@ -158,6 +158,25 @@ describe('choosing a firm’s trade', () => {
     const page = await (await open(`/control/firms/${firm}/trade`)).text();
     expect(page).toContain(escaped(CONTROL_WORDS.tradeKeptUrgent));
     expect(page).toContain(escaped(CONTROL_WORDS.tradeKeptDiary));
+  });
+
+  it('keeps a list staff save while the trade is being chosen, and records only the fill it made', async () => {
+    const racing = await createFirm(db, { name: 'Racing Example Firm', isExample: false });
+    // A database that lets another member of staff save the urgent list
+    // just before the trade's step runs.
+    const between = withStepBefore(env.DB, () => setUrgentList(db, racing, ['a leak'], frontline));
+    const filled = await setTrade({ ...db, d1: between }, racing, 'electrical', { kind: 'staff', staff });
+    expect(filled).toEqual({ urgentList: false, diaryRules: true });
+    expect(await getFirm(db, racing)).toMatchObject({ trade: 'electrical', urgentList: ['a leak'], diaryRules: TRADE_PACKS.electrical.diaryRules });
+    const entries = await historyBetween(db, racing, ...allTime);
+    expect(entries.map((entry) => [entry.kind, entry.by.kind])).toEqual([
+      ['firm_added', 'frontline'],
+      ['urgent_list_set', 'frontline'],
+      ['trade_set', 'staff'],
+      ['diary_rules_set', 'staff'],
+    ]);
+    const log = (await firmRows(env.DB, racing)).staff_log as { what: string }[];
+    expect(log.map((row) => row.what)).toEqual(['set_trade', 'set_diary_rules']);
   });
 
   it('shows the trade on the firm’s page', async () => {
