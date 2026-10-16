@@ -37,7 +37,7 @@ import type {
   VisitId,
   WordingId,
 } from '../src/record/types';
-import { firmRows } from './helpers/db';
+import { firmRows, insertBillingPastTheRecord } from './helpers/db';
 import { testDeps } from './helpers/deps';
 import { agreedByOwner } from './helpers/owner';
 
@@ -189,6 +189,14 @@ beforeAll(async () => {
     const assistant = firm === a ? A_AGENT : B_AGENT;
     expect(await record.setAgent(db, firm, assistant, staff.id)).toBe('set');
     await record.recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'frontline' }, due: null, outcome: 'in_step', settings: [], state: 'in_step', differing: [] });
+    // And its billing in Stripe, in its free trial, with Stripe's ids. The
+    // demo firm is never billed, so its row is written past the record.
+    if (firm === a) {
+      await insertBillingPastTheRecord(env.DB, firm, 'cus_FirmA', 'sub_FirmA', clock.now());
+    } else {
+      expect(await record.claimBilling(db, firm, { services: ['calls'], monthly: 8_000 as never, trialEndsAt: far }, staff.id)).not.toBeNull();
+      await record.finishBilling(db, firm, { state: 'trialing', customer: 'cus_FirmB', subscription: 'sub_FirmB' });
+    }
     // And a request to Vapi for an agent, still waiting for its answer.
     const asked = await record.askProvisioning(db, firm, 'agent', staff.id);
     if (asked === null) throw new Error('Not asked');
@@ -511,6 +519,35 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
   async markLive() {
     // Not met, so not live, and the first firm is untouched.
     expect(await record.markLive(db, b, (await record.findOrAddStaff(db, 'staff@example.com')).id, 'staff@example.com', { handCheckCounts: true })).toBe('not_ready');
+  },
+  // Billing (task 2 of queue 3): the second firm's own billing and Stripe
+  // events. The first firm's Stripe customer finds the first firm only, and
+  // nothing done under the second firm's name reaches the first's billing.
+  async getBilling() {
+    expect((await record.getBilling(db, b))?.customer).toBe('cus_FirmB');
+  },
+  async claimBilling() {
+    // The second firm's billing is running, so it is not started again.
+    expect(await record.claimBilling(db, b, { services: ['calls'], monthly: 8_000 as never, trialEndsAt: far }, null)).toBeNull();
+  },
+  async finishBilling() {
+    await refused(record.finishBilling(db, b, { state: 'trialing', customer: 'cus_FirmA', subscription: 'sub_FirmA' }));
+  },
+  async logCardLink() {
+    await record.logCardLink(db, b, (await record.findOrAddStaff(db, 'staff@example.com')).id);
+  },
+  async markBillingCancelled() {
+    await record.markBillingCancelled(db, b, 'cancelling', null);
+    expect((await record.getBilling(db, b))?.state).toBe('cancelling');
+  },
+  async applyStripeEvent() {
+    expect(await record.applyStripeEvent(db, b, { id: 'evt_WallB', type: 'subscription', created: clock.now() }, { kind: 'payment_failed' })).toBe(true);
+  },
+  async findFirmByStripeCustomer() {
+    // The sixth record function that cannot take a firm: Stripe's customer finds it, and only its own.
+    expect(await record.findFirmByStripeCustomer(db, 'cus_FirmA')).toBe(a);
+    expect(await record.findFirmByStripeCustomer(db, 'cus_FirmB')).toBe(b);
+    expect(await record.findFirmByStripeCustomer(db, 'cus_Nobody')).toBeNull();
   },
   async setStopButton() {
     await record.setStopButton(db, b, true, frontline);
@@ -1191,6 +1228,7 @@ describe('the wall between firms', () => {
       | 'logInWithLink'
       | 'findSession'
       | 'findOrAddStaff'
+      | 'findFirmByStripeCustomer'
       | 'listFirms'
       | 'logStaffAcrossFirms'
       | 'addMissingSweeps'

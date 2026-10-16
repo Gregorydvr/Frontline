@@ -61,6 +61,8 @@ const TAKES_NO_FIRM: Record<string, string> = {
     'The control room’s “Delete again”, for staff only. It takes only a time: each delete it does again names its own firm in the restore ledger, as staff asked for it before (tested in test/keeping.test.ts).',
   'GET /local/files': 'This machine only. Lists the example firm’s files, and takes nothing from the request.',
   'GET /control/add-firm': 'The control room’s form to add a firm, for staff only. It shows no firm’s data and takes nothing from the request.',
+  'POST /stripe/webhook':
+    'Where Stripe sends its events (task 2 of queue 3), outside the gate and checked by Stripe’s signature. It takes no firm from the request: the Stripe customer in the signed event finds its own firm only (tested in test/billing.test.ts and test/wall.test.ts).',
   'POST /control/add-firm':
     'The control room’s “Add”, for staff only. It makes a new firm from the name typed, and reads or changes no other firm (tested in test/set-up.test.ts).',
 };
@@ -325,6 +327,11 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     const [callOfA] = await listCallsBetween(db, a, ...allTime);
     await controlAsB((b) => `/control/firms/${b}/go-live/test-call`, () => controlForm({ vapiId: callOfA?.providerCallId ?? 'none', passed: '1' }), [400]);
   },
+  // Billing (task 2 of queue 3): the second firm's own billing. The first
+  // firm's billing and Stripe's records are untouched (controlAsB checks it).
+  'POST /control/firms/:firm/billing/start': () => controlAsB((b) => `/control/firms/${b}/billing/start`, () => controlForm({}), [303]),
+  'POST /control/firms/:firm/billing/card-link': () => controlAsB((b) => `/control/firms/${b}/billing/card-link`, () => controlForm({}), [303]),
+  'POST /control/firms/:firm/billing/cancel': () => controlAsB((b) => `/control/firms/${b}/billing/cancel`, () => controlForm({}), [303]),
   'POST /control/firms/:firm/go-live/agent-check': () => controlAsB((b) => `/control/firms/${b}/go-live/agent-check`, () => controlForm({ checked: '1' }), [303]),
   'POST /control/firms/:firm/go-live': () => controlAsB((b) => `/control/firms/${b}/go-live`, () => controlForm({}), [303]),
   'GET /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`),
@@ -633,6 +640,7 @@ describe('every route', () => {
       'POST /d/:token',
       'POST /twilio/texts',
       'POST /twilio/status',
+      'POST /stripe/webhook',
       'GET /app.js',
       'GET /login',
       'POST /login',
@@ -679,6 +687,9 @@ describe('every route', () => {
       'POST /control/firms/:firm/urgent',
       'GET /control/firms/:firm/trade',
       'POST /control/firms/:firm/trade',
+      'POST /control/firms/:firm/billing/start',
+      'POST /control/firms/:firm/billing/card-link',
+      'POST /control/firms/:firm/billing/cancel',
       'GET /control/firms/:firm/go-live',
       'POST /control/firms/:firm/go-live/ticks',
       'POST /control/firms/:firm/go-live/test-call',

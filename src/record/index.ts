@@ -29,6 +29,7 @@ export {
 export { createOwner, getOwner, listOwners, setOwnerMobile } from './owners';
 export { askProvisioning, finishProvisioning, listProvisioning } from './provisioning';
 export { goLiveState, markLive, recordTestCall, tickGoLive } from './go-live';
+export { applyStripeEvent, claimBilling, findFirmByStripeCustomer, finishBilling, getBilling, logCardLink, markBillingCancelled } from './billing';
 export {
   confirmCustomerDetails,
   createCustomer,

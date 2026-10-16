@@ -25,6 +25,8 @@ export default defineConfig({
           VAPI_SECRET: testSecret,
           TWILIO_ACCOUNT_SID: `AC${randomHex(16)}`,
           TWILIO_AUTH_TOKEN: randomHex(16),
+          // Stripe's signing secret for the events it sends (task 2 of queue 3).
+          STRIPE_WEBHOOK_SECRET: `whsec_${randomHex(24)}`,
         },
       },
     })),

@@ -72,6 +72,7 @@ import {
   listWording,
   listProvisioning,
   goLiveState,
+  getBilling,
 } from './record';
 import { openRecord, Refused, withFirmClock, type RecordDb } from './record/db';
 import {
@@ -113,6 +114,7 @@ import {
   servicesScreen,
   onboardScreen,
   goLiveScreen,
+  cardLinkScreen,
   type GoLiveView,
   agentScreen,
   type SetUpView,
@@ -156,6 +158,11 @@ interface Looking {
   staff: StaffId;
   /** The email the gate vouched for: compared, never shown or logged. */
   email: string;
+}
+
+/** What came of the last thing done to the firm's billing, as the firm's page is told: only words from the list. */
+function billingSaid(told: string | undefined): keyof typeof CONTROL_WORDS.billingSaid | null {
+  return told !== undefined && Object.hasOwn(CONTROL_WORDS.billingSaid, told) ? (told as keyof typeof CONTROL_WORDS.billingSaid) : null;
 }
 
 /** Why switching a service on was refused, as the firm's page is told. */
@@ -216,6 +223,9 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         exports: await listFirmExports(at.firmDb, at.firm.id),
         setUp: await setUpOf(at),
         switchRefused: SWITCH_REFUSALS.find((why) => why === c.req.query('refused')) ?? null,
+        billing: await getBilling(at.firmDb, at.firm.id),
+        billingOn: c.get('deps').billing !== null,
+        billingSaid: billingSaid(c.req.query('billing')),
       };
       await logStaff(at.firmDb, at.firm.id, at.staff, 'viewed_firm');
       return drawn(c, at.firm.name, firmScreen(view));
@@ -582,6 +592,31 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       }
       await act(asTaken(c, at), 'choose_trade', { firm: at.firm.id, trade });
       return saved(c, at);
+    }),
+  );
+
+  // Billing, in Stripe's test mode (task 2 of queue 3): starting it again,
+  // a link for the owner to add a card, and cancelling it.
+  app.post('/control/firms/:firm/billing/start', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const done = await act(asTaken(c, at), 'start_billing', { firm: at.firm.id });
+      return c.redirect(`/control/firms/${at.firm.id}?billing=${done}`, 303);
+    }),
+  );
+
+  // The link is shown once, on its own page, and kept nowhere.
+  app.post('/control/firms/:firm/billing/card-link', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const made = await act(asTaken(c, at), 'make_card_link', { firm: at.firm.id });
+      if ('refused' in made) return c.redirect(`/control/firms/${at.firm.id}?billing=${made.refused}`, 303);
+      return drawn(c, CONTROL_WORDS.cardLinkTitle, cardLinkScreen(at.firm, made.url));
+    }),
+  );
+
+  app.post('/control/firms/:firm/billing/cancel', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const done = await act(asTaken(c, at), 'cancel_billing', { firm: at.firm.id });
+      return c.redirect(`/control/firms/${at.firm.id}?billing=${done}`, 303);
     }),
   );
 

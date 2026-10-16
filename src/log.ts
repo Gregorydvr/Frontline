@@ -129,7 +129,18 @@ export type LogEvent =
   // switched to live, or not.
   | 'go_live_ticked'
   | 'firm_went_live'
-  | 'firm_not_live';
+  | 'firm_not_live'
+  // Billing (task 2 of queue 3): a live key refused, billing started or not,
+  // a card link made, billing cancelled, and Stripe's events.
+  | 'stripe_live_key_refused'
+  | 'billing_started'
+  | 'billing_not_started'
+  | 'card_link_made'
+  | 'billing_cancelled'
+  | 'stripe_refused'
+  | 'stripe_event'
+  | 'stripe_event_for_unknown_customer'
+  | 'stripe_card_not_used';
 
 const ERROR_NAMES = [
   'Error',

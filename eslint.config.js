@@ -58,6 +58,11 @@ const PROVIDER_ADDRESS = /api\.twilio\.com/i;
 // works.
 const VAPI_ADDRESS = /api\.vapi\.ai/i;
 
+// Billing (task 2 of queue 3): only the provider in src/providers/stripe/
+// reaches Stripe, and it refuses a live key. test/fixtures/lint/ holds a
+// deliberate mistake that shows it works.
+const STRIPE_ADDRESS = /api\.stripe\.com/i;
+
 // Task 4 of docs/autopilot.md: every action goes through act() in
 // src/actions.ts, which names it, says who may take it, and records who did.
 // So the routes may read the record, and log a view, but not change it:
@@ -71,7 +76,8 @@ const CHANGES_THE_RECORD = [
   'createLoginLink', 'endSession', 'logInWithLink', 'recordOwnerMessage', 'deleteCustomer', 'redoCustomerDelete', 'deleteExampleFirm',
   'setExampleClock', 'setAgent', 'recordAgentPush', 'addMissingSweeps', 'deleteRecording', 'emptyBin', 'giveUpRecording',
   'markMissingRecordings', 'moveRecording', 'sweepFirm', 'askFirmExport', 'cancelLeaving', 'deleteFirm', 'deleteLeftFirm',
-  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox', 'setTrade', 'setServicesChosen', 'askProvisioning',
+  'markFirmExportReady', 'markLeaving', 'redoFirmDelete', 'placeInInbox', 'setTrade', 'setServicesChosen', 'askProvisioning', 'claimBilling', 'finishBilling', 'applyStripeEvent', 'logCardLink',
+  'markBillingCancelled',
   'finishProvisioning', 'tickGoLive', 'recordTestCall', 'markLive',
 ];
 const actionsMessage = 'Every action goes through act() in src/actions.ts, which names it and records who did it. Routes only read.';
@@ -99,6 +105,23 @@ const frontline = {
           },
           TemplateLiteral(node) {
             if (VAPI_ADDRESS.test(node.quasis.map((quasi) => quasi.value.cooked ?? '').join(''))) context.report({ node, messageId: 'vapi' });
+          },
+        };
+      },
+    },
+    'stripe-outside-provider': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: { stripe: 'Only src/providers/stripe/ reaches Stripe, in test mode only. Bill a firm through the actions in src/actions.ts.' },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            if (typeof node.value === 'string' && STRIPE_ADDRESS.test(node.value)) context.report({ node, messageId: 'stripe' });
+          },
+          TemplateLiteral(node) {
+            if (STRIPE_ADDRESS.test(node.quasis.map((quasi) => quasi.value.cooked ?? '').join(''))) context.report({ node, messageId: 'stripe' });
           },
         };
       },
@@ -245,6 +268,7 @@ export default defineConfig(
       'frontline/sql-outside-record': 'error',
       'frontline/text-outside-send': 'error',
       'frontline/vapi-outside-provider': 'error',
+      'frontline/stripe-outside-provider': 'error',
     },
   },
   {
@@ -254,6 +278,11 @@ export default defineConfig(
     // firm are its own.
     files: ['src/app.ts', 'src/control-room.ts', 'src/owner-app.ts', 'test/fixtures/lint/change-outside-action.ts'],
     rules: { 'no-restricted-imports': ['error', { patterns: changesOutsideActions }] },
+  },
+  {
+    // The provider that reaches Stripe, and the tests of it.
+    files: ['src/providers/stripe/**', 'test/stripe.test.ts'],
+    rules: { 'frontline/stripe-outside-provider': 'off' },
   },
   {
     // The provider that reaches Vapi, the scripts run on Greg's machine, and

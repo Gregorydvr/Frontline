@@ -78,6 +78,12 @@ import {
   markLive,
   recordTestCall,
   tickGoLive,
+  applyStripeEvent,
+  claimBilling,
+  finishBilling,
+  getBilling,
+  logCardLink,
+  markBillingCancelled,
 } from './record';
 import type { CustomerFile, Deleted } from './record/control';
 import type { CustomerDetails } from './record/customers';
@@ -87,6 +93,9 @@ import type { NumberSet, TradeSet } from './record/firms';
 import type { WentLive } from './record/go-live';
 import { AGENT_HAND_CHECK, checklistRulesFor, type TickedItem } from './go-live';
 import { callsSetUpGaps } from './set-up';
+import { cancelsAtPeriodEnd, monthlyPrice, stateFromStripe, trialEndsAt } from './billing';
+import type { StripeEvent } from './providers/stripe/api';
+import { SERVICE_WORDS } from './words';
 import type { RecordedTextIn } from './record/texts-in';
 import type {
   Actor,
@@ -163,6 +172,67 @@ async function firmDb(ctx: ActionContext, firm: FirmId): Promise<{ db: RecordDb;
   const found = await getFirm(ctx.db, firm);
   if (found === null) throw new Refused();
   return { db: withFirmClock(ctx.db, found), firm: found };
+}
+
+/** What came of starting a firm's billing. */
+export type BillingStarted = 'started' | 'switched_off' | 'not_live' | 'already' | 'failed' | 'unclear';
+
+/**
+ * Starts the firm's billing in Stripe: written first, so it never starts
+ * twice, priced from the services the firm chose, with its free trial
+ * counted from going live. On a copy with no Stripe test key it is written
+ * as not started, to start once billing is switched on.
+ */
+async function startBilling(ctx: ActionContext, db: RecordDb, firm: Firm, staff: StaffId): Promise<BillingStarted> {
+  if (firm.live === null || firm.servicesChosen.length === 0) return 'not_live';
+  const already = await getBilling(db, firm.id);
+  const services = already?.services ?? firm.servicesChosen;
+  const ends = already?.trialEndsAt ?? trialEndsAt(firm.live.at, db.clock.now());
+  const attempt = await claimBilling(db, firm.id, { services, monthly: already?.monthly ?? monthlyPrice(services), trialEndsAt: ends }, staff);
+  if (attempt === null) return 'already';
+  const stripe = ctx.deps.billing;
+  if (stripe === null) {
+    await finishBilling(db, firm.id, { state: 'not_started' });
+    log('billing_not_started', { firm: firm.id });
+    return 'switched_off';
+  }
+  const billing = await getBilling(db, firm.id);
+  if (billing === null) throw new Refused();
+  const answer = await stripe.subscribe({
+    firm: firm.id,
+    name: firm.name,
+    monthlyPence: billing.monthly,
+    description: billing.services.map((service) => SERVICE_WORDS[service]).join(', '),
+    trialEnd: Math.floor(billing.trialEndsAt / 1000),
+    attempt,
+  });
+  if (!answer.ok) {
+    await finishBilling(db, firm.id, { state: answer.why === 'unclear' ? 'unclear' : 'failed' });
+    log('stripe_refused', { firm: firm.id });
+    return answer.why === 'unclear' ? 'unclear' : 'failed';
+  }
+  await finishBilling(db, firm.id, { state: answer.status === 'active' ? 'active' : 'trialing', customer: answer.customer, subscription: answer.subscription });
+  log('billing_started', { firm: firm.id });
+  return 'started';
+}
+
+/** What came of cancelling a firm's billing. */
+export type BillingCancelled = 'cancelled' | 'cancelling' | 'nothing_to_cancel' | 'check_stripe' | 'switched_off' | 'failed';
+
+/** Cancels the firm's billing in Stripe, then in the record: at once, or, when it is paying and not leaving, at the end of the month paid for. */
+async function cancelBilling(ctx: ActionContext, db: RecordDb, firm: FirmId, staff: StaffId, leaving: boolean): Promise<BillingCancelled> {
+  const billing = await getBilling(db, firm);
+  if (billing === null || billing.state === 'cancelled' || (billing.state === 'cancelling' && !leaving)) return 'nothing_to_cancel';
+  if (billing.state === 'starting' || billing.state === 'unclear') return 'check_stripe';
+  const atPeriodEnd = !leaving && cancelsAtPeriodEnd(billing.state);
+  if (billing.subscription !== null) {
+    if (ctx.deps.billing === null) return 'switched_off';
+    const done = await ctx.deps.billing.cancel({ subscription: billing.subscription, atPeriodEnd });
+    if (!done.ok) return 'failed';
+  }
+  await markBillingCancelled(db, firm, atPeriodEnd ? 'cancelling' : 'cancelled', staff);
+  log('billing_cancelled', { firm, staff });
+  return atPeriodEnd ? 'cancelling' : 'cancelled';
 }
 
 export const ACTIONS = {
@@ -355,13 +425,16 @@ export const ACTIONS = {
     },
   }),
   mark_leaving: action({
-    says: 'Marks the firm as leaving, once its name is typed: stop button on, every service off, its export asked for, and its delete in 30 days.',
+    says: 'Marks the firm as leaving, once its name is typed: stop button on, every service off, its export asked for, its delete in 30 days, and its billing cancelled at once.',
     who: ['staff'],
     async run(ctx, input: { firm: FirmId; typedName: string }): Promise<DueId> {
       const staff = staffOf(ctx);
       const { db } = await firmDb(ctx, input.firm);
       const due = await markLeaving(db, input.firm, staff, input.typedName);
       log('firm_leaving', { firm: input.firm, staff });
+      // Its services are off, so nothing more is charged. If Stripe cannot
+      // be reached, the firm's page shows billing still running, to cancel.
+      await cancelBilling(ctx, db, input.firm, staff, true);
       return due;
     },
   }),
@@ -575,7 +648,7 @@ export const ACTIONS = {
     },
   }),
   go_live: action({
-    says: 'Switches the firm to live, once every item on its go-live checklist is met, and switches on the services it chose. Only the one member of staff this copy names (Greg) may take it.',
+    says: 'Switches the firm to live, once every item on its go-live checklist is met, switches on the services it chose, and starts its 14-day free trial in Stripe (test mode). Only the one member of staff this copy names (Greg) may take it.',
     who: ['staff'],
     async run(ctx, input: { firm: FirmId }): Promise<WentLive | 'nobody_named'> {
       const staff = staffOf(ctx);
@@ -583,7 +656,78 @@ export const ACTIONS = {
       if (ctx.deps.goLiveBy === null) return 'nobody_named';
       const done = await markLive(db, input.firm, staff, ctx.deps.goLiveBy, checklistRulesFor(ctx.deps.copy));
       log(done === 'live' ? 'firm_went_live' : 'firm_not_live', { firm: input.firm, staff });
+      if (done === 'live') {
+        // The firm is live whatever Stripe says; billing that did not start
+        // shows on the firm's page, to start again.
+        const { firm } = await firmDb(ctx, input.firm);
+        await startBilling(ctx, db, firm, staff);
+      }
       return done;
+    },
+  }),
+  start_billing: action({
+    says: 'Starts billing a live firm in Stripe (test mode), if it did not start as the firm went live: a 14-day free trial from going live, then monthly for the services it chose. Never twice.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<BillingStarted> {
+      const staff = staffOf(ctx);
+      const { db, firm } = await firmDb(ctx, input.firm);
+      return startBilling(ctx, db, firm, staff);
+    },
+  }),
+  make_card_link: action({
+    says: 'Makes a link to Stripe’s own page, where the firm’s owner adds a card for their subscription. The link is shown once and not kept; Front-line never sees the card.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<{ url: string } | { refused: 'switched_off' | 'not_billed' | 'failed' }> {
+      const staff = staffOf(ctx);
+      const { db, firm } = await firmDb(ctx, input.firm);
+      if (ctx.deps.billing === null) return { refused: 'switched_off' };
+      const billing = await getBilling(db, firm.id);
+      if (billing?.customer == null || billing.state === 'cancelled' || ctx.deps.appAddress === null) return { refused: 'not_billed' };
+      const made = await ctx.deps.billing.cardLink({ firm: firm.id, customer: billing.customer, returnUrl: `${ctx.deps.appAddress}/` });
+      if (!made.ok) return { refused: 'failed' };
+      await logCardLink(db, firm.id, staff);
+      log('card_link_made', { firm: firm.id, staff });
+      return { url: made.url };
+    },
+  }),
+  cancel_billing: action({
+    says: 'Cancels the firm’s billing, on the owner’s word: at once in its free trial, or when paused or behind; at the end of the month paid for when it is paying. Its services stay as they are.',
+    who: ['staff'],
+    async run(ctx, input: { firm: FirmId }): Promise<BillingCancelled> {
+      const staff = staffOf(ctx);
+      const { db } = await firmDb(ctx, input.firm);
+      return cancelBilling(ctx, db, input.firm, staff, false);
+    },
+  }),
+  take_stripe_event: action({
+    says: 'Keeps an event Stripe sent about a firm’s subscription, once, and applies it: its state, a failed payment, or a card the owner added on Stripe’s page, which becomes the one charged.',
+    who: ['system'],
+    async run(ctx, input: { firm: FirmId; event: StripeEvent }): Promise<'kept' | 'try_again'> {
+      const { db } = await firmDb(ctx, input.firm);
+      const { event } = input;
+      if (event.kind === 'other') return 'kept';
+      const at = { id: event.id, type: event.kind, created: instant(event.created * 1000) };
+      if (event.kind === 'card_added') {
+        // Make it the card charged first; Stripe sends the event again until this has worked.
+        const billing = await getBilling(db, input.firm);
+        if (ctx.deps.billing === null || billing?.customer !== event.customer || billing.subscription === null) return 'try_again';
+        const used = await ctx.deps.billing.useCard({ setupIntent: event.setupIntent, customer: event.customer, subscription: billing.subscription });
+        if (!used.ok) {
+          log('stripe_card_not_used', { firm: input.firm });
+          return 'try_again';
+        }
+        await applyStripeEvent(db, input.firm, at, { kind: 'card_added' });
+      } else if (event.kind === 'subscription') {
+        await applyStripeEvent(db, input.firm, at, {
+          kind: 'subscription',
+          state: stateFromStripe(event.status, event.cancelAtPeriodEnd),
+          periodEndsAt: event.periodEnd === null ? null : instant(event.periodEnd * 1000),
+        });
+      } else {
+        await applyStripeEvent(db, input.firm, at, { kind: event.kind });
+      }
+      log('stripe_event', { firm: input.firm });
+      return 'kept';
     },
   }),
   agree_wording: action({

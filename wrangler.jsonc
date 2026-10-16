@@ -87,6 +87,13 @@
   // copy. It also needs TWILIO_BUNDLE_SID and TWILIO_ADDRESS_SID, Twilio's ids
   // for the regulatory bundle and address a UK number is bought under, made by
   // hand in Twilio's console (docs/twilio.md). Ids, not secrets; empty here.
+  //
+  // STRIPE_PRODUCT_ID: Stripe's id for the product each firm's monthly price
+  // belongs to, in Stripe's test mode (task 2 of queue 3, docs/stripe.md).
+  // An id, not a secret. Billing also needs the secrets STRIPE_SECRET_KEY,
+  // one of Stripe's test keys, and STRIPE_WEBHOOK_SECRET, which Greg sets;
+  // they are not listed with the secrets above, since a copy runs without
+  // them. A live key is refused, and live never bills yet.
   "vars": {
     "PUBLIC_ADDRESS": "http://localhost:8787",
     "LINK_ADDRESS": "http://localhost:8787",
@@ -96,7 +103,8 @@
     "TEXTS_ON": "",
     "NUMBERS_ON": "",
     "TWILIO_BUNDLE_SID": "",
-    "TWILIO_ADDRESS_SID": ""
+    "TWILIO_ADDRESS_SID": "",
+    "STRIPE_PRODUCT_ID": ""
   },
 
   // The clock: every minute, the due list's rows whose time has come go on
@@ -156,7 +164,9 @@
         // Buying numbers from the control room: switched off (it costs money).
         "NUMBERS_ON": "",
         "TWILIO_BUNDLE_SID": "",
-        "TWILIO_ADDRESS_SID": ""
+        "TWILIO_ADDRESS_SID": "",
+        // Billing in Stripe's test mode: empty until Greg sets it up (docs/stripe.md).
+        "STRIPE_PRODUCT_ID": ""
       },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
@@ -202,7 +212,7 @@
       // A placeholder until open question 9 is answered. Greg puts the
       // address of the live copy here, the address for customers' links,
       // and the control room's.
-      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "", "TEXTS_ON": "", "NUMBERS_ON": "", "TWILIO_BUNDLE_SID": "", "TWILIO_ADDRESS_SID": "" },
+      "vars": { "PUBLIC_ADDRESS": "", "LINK_ADDRESS": "", "CONTROL_ADDRESS": "", "COPY": "live", "VAPI_CREDENTIAL_ID": "", "TEXTS_ON": "", "NUMBERS_ON": "", "TWILIO_BUNDLE_SID": "", "TWILIO_ADDRESS_SID": "", "STRIPE_PRODUCT_ID": "" },
       "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
