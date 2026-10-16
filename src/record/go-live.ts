@@ -7,7 +7,7 @@
 
 import { instant } from '../clock';
 import { isId, newId } from '../ids';
-import { readyToGoLive, TICKED_ITEMS, type GoLiveEvidence, type GoLiveState, type Tick, type TickedItem } from '../go-live';
+import { AGENT_HAND_CHECK, readyToGoLive, TICKED_ITEMS, type ChecklistRules, type GoLiveEvidence, type GoLiveState, type Tick, type TickedItem } from '../go-live';
 import { getAgent } from './agents';
 import { bit, Refused, runTogether, type RecordDb } from './db';
 import { getFirm, SERVICE_COLUMNS } from './firms';
@@ -70,15 +70,26 @@ export async function goLiveState(db: RecordDb, firm: FirmId): Promise<GoLiveSta
   };
 }
 
-/** Ticks or unticks one of the items staff tick by hand, and records who did it in the staff log. */
-export async function tickGoLive(db: RecordDb, firm: FirmId, item: TickedItem, ticked: boolean, staff: StaffId): Promise<void> {
+/**
+ * Ticks or unticks one of the items staff tick by hand, and records who did
+ * it in the staff log. Greg's check of the agent by hand is refused unless
+ * `onlyBy` is the email of the member of staff ticking it, which the
+ * database checks in the same step.
+ */
+export async function tickGoLive(db: RecordDb, firm: FirmId, item: TickedItem, ticked: boolean, staff: StaffId, onlyBy: string | null = null): Promise<void> {
   if (!TICKED_ITEMS.includes(item) || !isId(staff)) throw new Refused();
+  if (item === AGENT_HAND_CHECK && (onlyBy === null || onlyBy.trim() === '')) throw new Refused();
   const id = newId();
   const results = await runTogether(db.d1, [
     db.d1
-      .prepare('INSERT INTO go_live_ticks (id, firm_id, item, ticked, call_id, at) SELECT ?1, ?2, ?3, ?4, NULL, ?5 WHERE EXISTS (SELECT 1 FROM firms WHERE id = ?2)')
-      .bind(id, firm, item, bit(ticked), db.clock.now()),
-    staffLogStatement(db, firm, staff, ticked ? 'ticked_go_live' : 'unticked_go_live')[1],
+      .prepare(
+        `INSERT INTO go_live_ticks (id, firm_id, item, ticked, call_id, at) SELECT ?1, ?2, ?3, ?4, NULL, ?5
+         WHERE EXISTS (SELECT 1 FROM firms WHERE id = ?2)
+           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM staff WHERE id = ?7 AND email = ?6))`,
+      )
+      .bind(id, firm, item, bit(ticked), db.clock.now(), item === AGENT_HAND_CHECK ? (onlyBy ?? '').trim().toLowerCase() : null, staff),
+    // In the staff log only if it was recorded.
+    staffLogStatement(db, firm, staff, ticked ? 'ticked_go_live' : 'unticked_go_live', {}, { where: 'EXISTS (SELECT 1 FROM go_live_ticks WHERE id = ?)', binds: [id] })[1],
   ]);
   if (results[0]?.meta.changes !== 1) throw new Refused();
 }
@@ -120,12 +131,12 @@ export type WentLive = 'live' | 'not_ready' | 'not_allowed' | 'already_live';
  * database checks it too. A firm leaving cannot go live, nor one already
  * live.
  */
-export async function markLive(db: RecordDb, firm: FirmId, staff: StaffId, goLiveBy: string): Promise<WentLive> {
+export async function markLive(db: RecordDb, firm: FirmId, staff: StaffId, goLiveBy: string, rules: ChecklistRules): Promise<WentLive> {
   if (!isId(staff) || goLiveBy.trim() === '') throw new Refused();
   const state = await goLiveState(db, firm);
   if (state === null) throw new Refused();
   if (state.firm.live !== null) return 'already_live';
-  if (!readyToGoLive(state)) return 'not_ready';
+  if (!readyToGoLive(state, rules)) return 'not_ready';
   const now = db.clock.now();
   const by = { kind: 'staff', staff } as const;
   // The columns come from the fixed list, never from the caller.

@@ -29,7 +29,7 @@ import { act, type ActionContext, type Provisioned } from './actions';
 import { VAPI_ID } from './providers/vapi';
 import { makeWords } from './messages';
 import { draftFor } from './trade-packs';
-import { goLiveChecklist, TICKED_ITEMS } from './go-live';
+import { AGENT_HAND_CHECK, checklistRulesFor, goLiveChecklist, STAFF_TICKED_ITEMS } from './go-live';
 import { segments } from './gsm';
 import { callerNumber, nationalNumber } from './phone';
 import {
@@ -603,7 +603,7 @@ export function controlRoutes(app: Hono<AppEnv>): void {
       const ticked = (await readForm(c.req.raw)).getAll('ticked');
       const state = await goLiveState(at.firmDb, at.firm.id);
       if (state === null) return notFound(c);
-      for (const item of TICKED_ITEMS) {
+      for (const item of STAFF_TICKED_ITEMS) {
         const now = ticked.includes(item);
         if (now !== (state.evidence.ticks[item]?.ticked === true)) {
           await act(asTaken(c, at), 'tick_go_live', { firm: at.firm.id, item, ticked: now });
@@ -637,6 +637,16 @@ export function controlRoutes(app: Hono<AppEnv>): void {
         return goLivePage(c, at, { typed, problem: CONTROL_WORDS.testCallNotFound }, null, 400);
       }
       return c.redirect(`/control/firms/${at.firm.id}/go-live`, 303);
+    }),
+  );
+
+  // Greg's check of the agent by hand (his decision of 16 Oct 2026): on
+  // practice and this machine only, and only by him.
+  app.post('/control/firms/:firm/go-live/agent-check', (c) =>
+    atFirm(c, 'form', async (at) => {
+      const ticked = (await readForm(c.req.raw)).get('checked') === '1';
+      const done = await act(asTaken(c, at), 'tick_go_live', { firm: at.firm.id, item: AGENT_HAND_CHECK, ticked });
+      return c.redirect(`/control/firms/${at.firm.id}/go-live${done === 'ticked' ? '' : '?done=not_allowed'}`, 303);
     }),
   );
 
@@ -865,7 +875,8 @@ async function goLivePage(c: Context<AppEnv>, at: AtFirm, testCall: GoLiveView['
     CONTROL_WORDS.goingLive,
     goLiveScreen({
       firm: state.firm,
-      checklist: goLiveChecklist(state),
+      checklist: goLiveChecklist(state, checklistRulesFor(c.get('deps').copy)),
+      handCheck: checklistRulesFor(c.get('deps').copy).handCheckCounts,
       evidence: state.evidence,
       mayGoLive: named === null ? 'nobody_named' : named === at.email ? 'yes' : 'not_them',
       outcome,

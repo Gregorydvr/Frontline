@@ -85,7 +85,7 @@ import { Refused, withFirmClock, type RecordDb } from './record/db';
 import { LOGIN_LINK_LIMITS, type SessionToken } from './record/logins';
 import type { NumberSet, TradeSet } from './record/firms';
 import type { WentLive } from './record/go-live';
-import type { TickedItem } from './go-live';
+import { AGENT_HAND_CHECK, checklistRulesFor, type TickedItem } from './go-live';
 import { callsSetUpGaps } from './set-up';
 import type { RecordedTextIn } from './record/texts-in';
 import type {
@@ -544,13 +544,24 @@ export const ACTIONS = {
     },
   }),
   tick_go_live: action({
-    says: 'Ticks or unticks one of the items on the firm’s go-live checklist that staff check by hand, such as a data-protection item.',
+    says: 'Ticks or unticks one of the items on the firm’s go-live checklist that staff check by hand, such as a data-protection item. Greg’s check of the agent by hand only by Greg, and never on live.',
     who: ['staff'],
-    async run(ctx, input: { firm: FirmId; item: TickedItem; ticked: boolean }): Promise<void> {
+    async run(ctx, input: { firm: FirmId; item: TickedItem; ticked: boolean }): Promise<'ticked' | 'not_allowed'> {
       const staff = staffOf(ctx);
       const { db } = await firmDb(ctx, input.firm);
-      await tickGoLive(db, input.firm, input.item, input.ticked, staff);
+      if (input.item === AGENT_HAND_CHECK) {
+        if (!checklistRulesFor(ctx.deps.copy).handCheckCounts || ctx.deps.goLiveBy === null) return 'not_allowed';
+        try {
+          await tickGoLive(db, input.firm, input.item, input.ticked, staff, ctx.deps.goLiveBy);
+        } catch (thrown) {
+          if (thrown instanceof Refused) return 'not_allowed';
+          throw thrown;
+        }
+      } else {
+        await tickGoLive(db, input.firm, input.item, input.ticked, staff);
+      }
       log('go_live_ticked', { firm: input.firm, staff });
+      return 'ticked';
     },
   }),
   record_test_call: action({
@@ -570,7 +581,7 @@ export const ACTIONS = {
       const staff = staffOf(ctx);
       const { db } = await firmDb(ctx, input.firm);
       if (ctx.deps.goLiveBy === null) return 'nobody_named';
-      const done = await markLive(db, input.firm, staff, ctx.deps.goLiveBy);
+      const done = await markLive(db, input.firm, staff, ctx.deps.goLiveBy, checklistRulesFor(ctx.deps.copy));
       log(done === 'live' ? 'firm_went_live' : 'firm_not_live', { firm: input.firm, staff });
       return done;
     },

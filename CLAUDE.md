@@ -69,7 +69,7 @@ Each rule gets a test or a check as soon as the code it covers exists. If a task
 - One task, one branch, one pull request. Never push to `main`.
 - Every change comes with a test that fails without it. Run `npm run check` before you push. It must pass.
 - Providers (Vapi, Twilio, Stripe, Deepgram, the Claude API, email) sit behind interfaces in `src/providers/`, each with a fake. Tests never call a real provider.
-- Deploying, and creating or changing anything in Cloudflare or a provider's account, happens only on Greg's own machine, and only when he asks for it in that session. Never from a cloud session. Nothing goes to live unless he says "deploy to live".
+- Deploying, and creating or changing anything in Cloudflare or a provider's account, happens only on Greg's own machine, and only when he asks for it in that session. The one exception: on practice, once Greg has set its Vapi key, the deployed Worker changes a practice firm's existing voice agent through `pushAgent()` in `src/agent-push.ts` and its checks. It never creates an agent, buys a number, or holds a live key (Greg, 16 Oct 2026). Never from a cloud session. Nothing goes to live unless he says "deploy to live".
 - If the brief does not answer a product, legal or wording question, do not guess. Build what does not depend on it, and list the question under "Questions for Greg" in the pull request.
 - When something is decided, add it to `docs/decisions.md` in the same pull request. A cloud session starts from a fresh copy and remembers nothing else. Do not reopen a settled decision. If one looks wrong, say why in the pull request and stop.
 - Mark the slice done in `docs/build-brief.md` when its pull request is ready.

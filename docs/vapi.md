@@ -36,7 +36,7 @@ Built for task 3 of `docs/autopilot.md`, from plan J2 in `docs/plan-automation.m
 - **The log.** Every push and check is a row in `agent_pushes`: who (Front-line or a member of staff), when, which settings were sent or differ, and what came of it. Ids and names of settings only, never edited, deleted only with the firm. The firm's page shows the latest five. Staff's views and buttons are in the staff log.
 - **The switch.** The Worker reads the key from the secret `VAPI_API_KEY`. While a copy has none, each push is logged as "Not connected" and nothing is sent. Practice's credential id is set in `wrangler.jsonc` (`VAPI_CREDENTIAL_ID`); it is an id, not a secret.
 
-To switch it on for practice, Greg decides first (questions in `docs/decisions.md`, Open 17). Then, on his own machine: `npx wrangler secret put VAPI_API_KEY --env practice`, set the practice firm's agent id on its page, and press "Check and update now". It should say "Already in step", since the script already put the same settings on it.
+Greg decided on 16 Oct 2026 (`docs/decisions.md`, Settled): practice and live have separate Vapi accounts, and only practice's Worker holds a key; a key set on any other copy is not used (`src/index.ts`). To switch it on for practice, Greg, on his own machine, with the **practice** account's private key: `npx wrangler secret put VAPI_API_KEY --env practice`, set the practice firm's agent id on its page, and press "Check and update now". It should say "Already in step", since the script already put the same settings on it.
 
 ## Bringing a firm's number in
 

@@ -325,6 +325,7 @@ const CROSS_FIRM_CASES: Record<string, () => Promise<void>> = {
     const [callOfA] = await listCallsBetween(db, a, ...allTime);
     await controlAsB((b) => `/control/firms/${b}/go-live/test-call`, () => controlForm({ vapiId: callOfA?.providerCallId ?? 'none', passed: '1' }), [400]);
   },
+  'POST /control/firms/:firm/go-live/agent-check': () => controlAsB((b) => `/control/firms/${b}/go-live/agent-check`, () => controlForm({ checked: '1' }), [303]),
   'POST /control/firms/:firm/go-live': () => controlAsB((b) => `/control/firms/${b}/go-live`, () => controlForm({}), [303]),
   'GET /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`),
   'POST /control/firms/:firm/services': () => controlAsB((b) => `/control/firms/${b}/services`, () => controlForm({ service: 'calls' }), [303]),
@@ -681,6 +682,7 @@ describe('every route', () => {
       'GET /control/firms/:firm/go-live',
       'POST /control/firms/:firm/go-live/ticks',
       'POST /control/firms/:firm/go-live/test-call',
+      'POST /control/firms/:firm/go-live/agent-check',
       'POST /control/firms/:firm/go-live',
       'GET /control/firms/:firm/onboard',
       'POST /control/firms/:firm/onboard/number',

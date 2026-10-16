@@ -510,7 +510,7 @@ const cases: { [Name in keyof typeof record]: () => Promise<void> } = {
   },
   async markLive() {
     // Not met, so not live, and the first firm is untouched.
-    expect(await record.markLive(db, b, (await record.findOrAddStaff(db, 'staff@example.com')).id, 'staff@example.com')).toBe('not_ready');
+    expect(await record.markLive(db, b, (await record.findOrAddStaff(db, 'staff@example.com')).id, 'staff@example.com', { handCheckCounts: true })).toBe('not_ready');
   },
   async setStopButton() {
     await record.setStopButton(db, b, true, frontline);

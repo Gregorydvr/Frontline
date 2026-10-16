@@ -18,9 +18,26 @@ import type { Instant } from './clock';
 export const DATA_PROTECTION_ITEMS = ['dp_agreement', 'dp_privacy_notice', 'dp_ico', 'dp_vapi_region'] as const;
 export type DataProtectionItem = (typeof DATA_PROTECTION_ITEMS)[number];
 
-/** The items staff tick by hand: what the record cannot know. */
-export const TICKED_ITEMS = ['number_approved', ...DATA_PROTECTION_ITEMS] as const;
+/** The items any member of staff ticks by hand: what the record cannot know. */
+export const STAFF_TICKED_ITEMS = ['number_approved', ...DATA_PROTECTION_ITEMS] as const;
+
+/**
+ * Greg's own record of a read-only run of scripts/vapi-assistant.js that
+ * found nothing to change. Greg's decision of 16 Oct 2026: on practice only,
+ * until a copy has a Vapi key, it counts as the firm's agent matching the
+ * control room. Only the member of staff the copy names (GO_LIVE_BY) may
+ * tick it. On live it never counts: a live firm needs the automatic check.
+ */
+export const AGENT_HAND_CHECK = 'agent_checked_by_hand';
+
+/** Every item ticked by hand. */
+export const TICKED_ITEMS = [...STAFF_TICKED_ITEMS, AGENT_HAND_CHECK] as const;
 export type TickedItem = (typeof TICKED_ITEMS)[number];
+
+/** How a copy reads the checklist: whether Greg's check of the agent by hand counts, as on practice and this machine, never on live. */
+export interface ChecklistRules {
+  handCheckCounts: boolean;
+}
 
 /** Every item on the checklist, in the order the control room shows them. */
 export const GO_LIVE_CHECKS = [
@@ -65,7 +82,7 @@ export interface GoLiveState {
 }
 
 /** Each item on the checklist, and whether it is met. */
-export function goLiveChecklist(state: GoLiveState): { check: GoLiveCheck; met: boolean }[] {
+export function goLiveChecklist(state: GoLiveState, rules: ChecklistRules): { check: GoLiveCheck; met: boolean }[] {
   const { firm, evidence } = state;
   const ticked = (item: TickedItem) => evidence.ticks[item]?.ticked === true;
   const met: Record<GoLiveCheck, boolean> = {
@@ -76,7 +93,7 @@ export function goLiveChecklist(state: GoLiveState): { check: GoLiveCheck; met: 
     number_calls: firm.phoneNumber !== null && evidence.calls > 0,
     number_texts_out: firm.phoneNumber !== null && evidence.textsDelivered > 0,
     number_texts_in: firm.phoneNumber !== null && evidence.textsIn > 0,
-    agent_in_step: state.agent?.state === 'in_step',
+    agent_in_step: state.agent?.state === 'in_step' || (rules.handCheckCounts && ticked(AGENT_HAND_CHECK)),
     test_call: evidence.testCall !== null,
     dp_agreement: ticked('dp_agreement'),
     dp_privacy_notice: ticked('dp_privacy_notice'),
@@ -87,6 +104,11 @@ export function goLiveChecklist(state: GoLiveState): { check: GoLiveCheck; met: 
 }
 
 /** Whether every item on the checklist is met. */
-export function readyToGoLive(state: GoLiveState): boolean {
-  return goLiveChecklist(state).every((item) => item.met);
+export function readyToGoLive(state: GoLiveState, rules: ChecklistRules): boolean {
+  return goLiveChecklist(state, rules).every((item) => item.met);
+}
+
+/** The rules for a copy: Greg's check by hand counts everywhere but live. */
+export function checklistRulesFor(copy: 'local' | 'practice' | 'live'): ChecklistRules {
+  return { handCheckCounts: copy !== 'live' };
 }

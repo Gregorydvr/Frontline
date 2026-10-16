@@ -11,7 +11,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { instantFromIso, pretendClock } from '../src/clock';
-import { phoneNumbers } from '../src/index';
+import { phoneNumbers, vapiAgents } from '../src/index';
 import { askProvisioning, createFirm, findOrAddStaff, getAgent, getFirm, historyBetween, listProvisioning, setUrgentList } from '../src/record';
 import { openRecord, Refused } from '../src/record/db';
 import { finishProvisioning } from '../src/record/provisioning';
@@ -223,5 +223,15 @@ describe('asking a provider at most once', () => {
     const asked = (await askProvisioning(db, firm, 'agent', staff)) as ProvisioningId;
     await finishProvisioning(db, firm, asked, { state: 'failed' });
     await expect(finishProvisioning(db, firm, asked, { state: 'done', made: 'x' })).rejects.toThrow(Refused);
+  });
+});
+
+describe('the Vapi key (Greg’s decision of 16 Oct 2026)', () => {
+  it('is used by practice’s Worker only: a key set on live, or anywhere else, is not', () => {
+    const withKey = (copy: string) => vapiAgents({ ...env, COPY: copy, VAPI_API_KEY: 'invented-key' } as unknown as Env);
+    expect(withKey('practice')).not.toBeNull();
+    expect(withKey('live')).toBeNull();
+    expect(withKey('')).toBeNull();
+    expect(vapiAgents({ ...env, COPY: 'practice', VAPI_API_KEY: '' } as unknown as Env)).toBeNull();
   });
 });

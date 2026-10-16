@@ -79,6 +79,29 @@ Updated 15 Oct 2026. Each task's branch is made from `slice-i-practice` after th
 | 3. Onboarding flow | `slice-i-onboarding` | Merged as #23 and deployed to practice (version 8c49a17a, with migration 0013). Built: adding a firm opens its guided set-up (`/control/firms/:firm/onboard`), eight steps in order, each saving back to it. New actions `choose_services`, `buy_number`, `create_agent`. Buying a number and making an agent are built and switched off on every copy (no `NUMBERS_ON`, no Vapi key), and each can happen at most once per firm. Migration 0013 | Open question 18: switching on buying numbers and making agents from the Worker; the new staff words |
 | 4. Go-live gate | `slice-i-go-live` | Merged as #24 and deployed to practice (version 25ba89fa, with migration 0014); `npm run practice:gates` passes. Built: each firm's go-live checklist (`/control/firms/:firm/go-live`), read from the record where it can be and ticked by staff where not; `go_live` only for the email in the secret `GO_LIVE_BY`, which switches on the services chosen. Before going live, only Calls & bookings can be switched on, and only with set-up complete. New actions `tick_go_live`, `record_test_call`, `go_live`. Migration 0014. Also fixes task 2's `setTrade` so a fill staff overtake is not recorded | Open question 19: the data-protection items [to agree], setting `GO_LIVE_BY`, and the agent check needing a Vapi key |
 
+## Queue 3
+
+Given by Greg on 16 Oct 2026, with his answers to queue 2's questions (recorded in `docs/decisions.md`, Settled, 16 Oct 2026). Kept as he wrote it.
+
+---
+
+1. Fix the local test suite timing out on this machine, without weakening any test.
+2. Billing with Stripe in TEST MODE only: go-live starts the 2-week free trial; after it, the firm pays monthly for the services it chose at Front-line's approved prices (£50 per service, £80 calls & bookings, £150 all five), founding price locked for the first 20 firms, cancel any time, no setup fee. Not VAT-registered, so no VAT. Nothing live, no real cards. Stop before anything that would need a live Stripe key.
+
+Stop after task 2 with a summary.
+
+---
+
+## Where queue 3 stands
+
+Updated 16 Oct 2026.
+
+| Task | Branch | State | Waiting on Greg |
+|---|---|---|---|
+| Greg's answers of 16 Oct | `slice-i-decisions-16-oct` | Recorded; `GO_LIVE_BY` set on practice; his check of an agent by hand counts on practice only; a Vapi key is used by practice's Worker only | Setting practice's `VAPI_API_KEY` himself; the data-protection items (19 a) |
+| 1. Local test timeouts | | Not started | |
+| 2. Stripe billing, test mode | | Not started | |
+
 ## Where the first queue stands
 
 Updated 15 Oct 2026. Each task's branch builds on the one before, so they merge in this order.

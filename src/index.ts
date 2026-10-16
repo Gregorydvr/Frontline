@@ -25,14 +25,16 @@ function staffGate(env: Env): StaffGate {
 }
 
 /**
- * Vapi's agents, once Greg has set a Vapi private key for this copy as the
- * secret VAPI_API_KEY. Until then, null: the control room's pushes reach
+ * Vapi's agents, once Greg has set practice's Vapi private key as the secret
+ * VAPI_API_KEY: practice only, never live (docs/decisions.md, 16 Oct 2026). Until then, null: the control room's pushes reach
  * nothing and say so. The key is not listed with the secrets the Worker
  * needs, since a copy runs without it.
  */
-function vapiAgents(env: Env): VapiApi | null {
+export function vapiAgents(env: Env): VapiApi | null {
   const key = ((env as unknown as { VAPI_API_KEY?: string }).VAPI_API_KEY ?? '').trim();
-  return key === '' ? null : new VapiApi(key);
+  // Greg's decision of 16 Oct 2026: only practice's Worker holds a Vapi key.
+  // A key set on any other copy is not used.
+  return key === '' || copyFrom(env.COPY) !== 'practice' ? null : new VapiApi(key);
 }
 
 /**
