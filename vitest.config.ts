@@ -31,6 +31,14 @@ export default defineConfig({
   ],
   test: {
     include: ['test/**/*.test.ts'],
+    // At most four test files at once, each in its own Workers runtime with
+    // its own local database. Vitest would otherwise run one per processor
+    // thread, 19 on Greg's machine, and so many runtimes at once slow every
+    // test, the longest past their time limit, without finishing the run any
+    // sooner: measured on 16 Oct 2026, from 4 to 20 at once the whole run took
+    // about the same time, while the slowest tests took up to three times as
+    // long. GitHub's machine has 4 threads, so it runs about as many as before.
+    maxWorkers: 4,
     setupFiles: ['./test/setup.ts'],
   },
 });
