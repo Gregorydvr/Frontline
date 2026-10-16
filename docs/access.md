@@ -20,7 +20,7 @@ Nothing for two people. Cloudflare Zero Trust's free plan covers up to 50 users.
 2. Under **Settings → Authentication**, choose how staff log in: a one-time code sent by email (built in), or Google.
 3. Under **Access → Applications**, add a **self-hosted** application for practice's whole address:
    - an **Allow** policy naming Greg's and Sophie's emails
-   - a **Bypass** policy for the paths `/vapi/*`, `/twilio/*` and `/health`, which Vapi, Twilio and checks call, and which have their own secrets and signatures
+   - a **Bypass** policy for the paths `/vapi/*`, `/twilio/*` and `/health`, which Vapi, Twilio and checks call, and which have their own secrets and signatures; and, once billing is switched on, `/stripe/*`, which checks Stripe's signature (`docs/stripe.md`)
 4. Add a second self-hosted application for the control room's address on live, with the same Allow policy. The address waits on open question 9. Access needs the address to be on Cloudflare: a domain in Greg's account, or the Worker's `workers.dev` address with its Access switch turned on.
 5. From each application's overview, copy its **Application Audience (AUD) tag**. Then set two secrets for that copy:
 

@@ -11,6 +11,9 @@ import { CloudflareAccess } from './providers/access/cloudflare';
 import { TwilioTexts } from './providers/texts/twilio';
 import { numbersSettingsWhole, TwilioNumbers } from './providers/numbers/twilio';
 import { VapiApi } from './providers/vapi/api';
+import { isTestKey } from './providers/stripe';
+import { StripeApi } from './providers/stripe/api';
+import { log } from './log';
 
 /** Cloudflare Access's check, once both its settings are given for this copy; until then the control room is shut. */
 function staffGate(env: Env): StaffGate {
@@ -53,6 +56,27 @@ export function phoneNumbers(env: Env): TwilioNumbers | null {
   return env.NUMBERS_ON.trim() === 'yes' && numbersSettingsWhole(settings) ? new TwilioNumbers(settings) : null;
 }
 
+/**
+ * Stripe, in test mode only: built when the copy has STRIPE_SECRET_KEY and
+ * STRIPE_PRODUCT_ID, and the key is one of Stripe's test keys. A live key is
+ * refused and logged, and live never bills yet (Greg, 16 Oct 2026: "Stop
+ * before anything that would need a live Stripe key").
+ */
+export function stripeBilling(env: Env): StripeApi | null {
+  const key = ((env as unknown as { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY ?? '').trim();
+  const product = env.STRIPE_PRODUCT_ID.trim();
+  if (key === '' || product === '' || copyFrom(env.COPY) === 'live') return null;
+  if (!isTestKey(key)) {
+    log('stripe_live_key_refused');
+    return null;
+  }
+  try {
+    return new StripeApi({ key, product });
+  } catch {
+    return null;
+  }
+}
+
 /** Who may switch a firm to live: the email in the secret GO_LIVE_BY, or nobody while it is not set. */
 function goLiveBy(env: Env): string | null {
   const email = ((env as unknown as { GO_LIVE_BY?: string }).GO_LIVE_BY ?? '').trim().toLowerCase();
@@ -80,6 +104,7 @@ function realDeps(env: Env): Deps {
     textsOn: textsOnFrom(env.TEXTS_ON),
     numbers: phoneNumbers(env),
     goLiveBy: goLiveBy(env),
+    billing: stripeBilling(env),
   };
 }
 

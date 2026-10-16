@@ -22,6 +22,8 @@ import {
   VISIT_KINDS,
   type AgreedHow,
   type Agent,
+  type Billing,
+  type BillingState,
   type AgentPush,
   type Call,
   type Customer,
@@ -43,6 +45,8 @@ import {
 } from '../record/types';
 import { draftFor, TRADE_PACKS } from '../trade-packs';
 import type { Provisioned } from '../actions';
+import { monthlyPrice } from '../billing';
+import { formatMoney } from '../money';
 import { AGENT_HAND_CHECK, GO_LIVE_CHECKS, STAFF_TICKED_ITEMS, type GoLiveCheck, type GoLiveEvidence } from '../go-live';
 import type { WentLive } from '../record/go-live';
 import { SERVICE_WORDS } from '../words';
@@ -393,8 +397,57 @@ export const CONTROL_WORDS = {
   // its pull request.
   // The go-live gate (task 4 of queue 2). New, for staff only; flagged in
   // its pull request. The data-protection items are [to agree] with Greg.
+  // Billing, in Stripe's test mode (task 2 of queue 3). New, for staff only;
+  // flagged in its pull request.
+  billing: 'Billing',
+  billingTestMode: 'Stripe test mode: no real card is charged.',
+  billingOff: 'Billing is switched off on this copy: it has no Stripe test key (docs/stripe.md).',
+  billingBeforeLive: 'Starts when the firm goes live: a 14-day free trial, then {price} a month for {services}. No set-up fee, no VAT.',
+  billingNoServices: 'No services chosen yet.',
+  billingStates: {
+    not_started: 'Not started',
+    starting: 'Starting',
+    trialing: 'In its free trial',
+    active: 'Paying',
+    past_due: 'A payment failed',
+    paused: 'Paused: its trial ended with no card',
+    cancelling: 'Cancelling at the end of the month paid for',
+    cancelled: 'Cancelled',
+    failed: 'Did not start',
+    unclear: 'Not clear whether Stripe started it: check Stripe before starting again',
+  } satisfies Record<BillingState, string>,
+  billingState: 'Where it stands',
+  billingMonthly: 'A month',
+  billingFor: '{price} for {services}',
+  billingFoundingLabel: 'Founding price',
+  billingFounding: 'Founding firm {n} of 20: its price is locked',
+  billingNotFounding: 'Not a founding firm',
+  billingTrialEnds: 'Free trial ends',
+  billingCard: 'Card',
+  billingCardYes: 'Stripe holds a card',
+  billingCardNo: 'No card yet',
+  billingPeriodEnds: 'Month paid for ends',
+  startBilling: 'Start billing',
+  makeCardLink: 'Make a link to add a card',
+  cardLinkTitle: 'A link to add a card',
+  cardLinkHint: 'Send this to the owner yourself. It opens Stripe’s own page, which takes the card: Front-line never sees it. It works for a day, and is not kept here.',
+  cancelBilling: 'Cancel billing',
+  cancelBillingHint: 'On the owner’s word. In its free trial it ends at once; when it is paying, at the end of the month paid for. Its services stay as they are.',
+  billingSaid: {
+    started: 'Billing started: its free trial is running.',
+    switched_off: 'Not started: billing is switched off on this copy.',
+    not_live: 'Not started: the firm is not live, or chose no services.',
+    already: 'Billing has already started.',
+    failed: 'Stripe refused it. Nothing was made.',
+    unclear: 'Not clear whether Stripe made it. Check Stripe before trying again.',
+    cancelled: 'Billing cancelled.',
+    cancelling: 'Billing will end at the end of the month paid for.',
+    nothing_to_cancel: 'Nothing to cancel.',
+    check_stripe: 'Not clear where billing stands. Check Stripe first.',
+    not_billed: 'There is no subscription to add a card to.',
+  },
   goingLive: 'Going live',
-  goLiveHint: 'A firm goes live only when every item below is met. Going live switches on the services it chose. Only Greg can switch a firm to live.',
+  goLiveHint: 'A firm goes live only when every item below is met. Going live switches on the services it chose, and starts its 14-day free trial. Only Greg can switch a firm to live.',
   liveSince: 'Live since {when}',
   notLiveYet: 'Not live yet',
   goLiveChecklist: 'Go-live checklist',
@@ -661,6 +714,10 @@ export interface FirmView {
   setUp: SetUpView;
   /** Why the last switch was not made, when the page is shown after one. */
   switchRefused: keyof typeof CONTROL_WORDS.switchRefused | null;
+  /** The firm's billing, whether this copy bills, and what came of the last thing done to it. */
+  billing: Billing | null;
+  billingOn: boolean;
+  billingSaid: keyof typeof CONTROL_WORDS.billingSaid | null;
 }
 
 /** How far a firm is set up: what it still needs before Calls & bookings, and its owners. */
@@ -684,6 +741,7 @@ ${section(
 <div class="cr-row"><span class="txt"><span class="t1">${CONTROL_WORDS.stopButton}</span><span class="t2${firm.stopped ? ' problem' : ''}">${firm.stopped ? CONTROL_WORDS.stopIsOn : CONTROL_WORDS.stopIsOff}</span></span>
 <form method="post" action="${base}/stop"><input type="hidden" name="on" value="${firm.stopped ? '0' : '1'}"><button class="btn btn-sm ${firm.stopped ? 'btn-line' : 'cr-danger'}" type="submit">${firm.stopped ? CONTROL_WORDS.releaseStop : CONTROL_WORDS.pressStop}</button></form></div></div>`,
 )}
+${billingSection(view)}
 ${section(CONTROL_WORDS.needsALook, list(view.look.map(lookLine), CONTROL_WORDS.nothingNeedsALook))}
 ${section(
   CONTROL_WORDS.ownerMessages,
@@ -1136,6 +1194,55 @@ ${problemList(problems)}
 <div class="field cr-field"><label for="cr-urgent">${CONTROL_WORDS.urgent}</label><textarea id="cr-urgent" name="items" maxlength="1300">${typed}</textarea></div>
 <button class="btn btn-ink" type="submit">${CONTROL_WORDS.save}</button>
 </form>`;
+}
+
+/** The firm's billing: before it goes live, what it will pay; after, where its billing stands, with its buttons. */
+function billingSection(view: FirmView): Html | null {
+  const { firm, billing } = view;
+  const base = `/control/firms/${firm.id}/billing`;
+  const servicesIn = (services: readonly Service[]) => services.map((service) => SERVICE_WORDS[service]).join(', ');
+  const said = view.billingSaid === null ? null : html`<p class="problem" role="status">${CONTROL_WORDS.billingSaid[view.billingSaid]}</p>`;
+  const off = view.billingOn ? html`<p class="meta">${CONTROL_WORDS.billingTestMode}</p>` : html`<p class="meta">${CONTROL_WORDS.billingOff}</p>`;
+  if (firm.isExample) return null;
+  if (billing === null) {
+    return section(
+      CONTROL_WORDS.billing,
+      html`${said}${off}<p class="meta">${
+        firm.servicesChosen.length === 0
+          ? CONTROL_WORDS.billingNoServices
+          : words(CONTROL_WORDS.billingBeforeLive, { price: formatMoney(monthlyPrice(firm.servicesChosen)), services: servicesIn(firm.servicesChosen) })
+      }</p>${
+        firm.live !== null && view.billingOn
+          ? html`<form method="post" action="${base}/start"><button class="btn btn-ink" type="submit">${CONTROL_WORDS.startBilling}</button></form>`
+          : null
+      }`,
+    );
+  }
+  const canStartAgain = view.billingOn && (billing.state === 'not_started' || billing.state === 'failed');
+  const canCancel = !['cancelled', 'cancelling', 'starting', 'unclear'].includes(billing.state);
+  const canLink = view.billingOn && billing.customer !== null && billing.state !== 'cancelled' && !billing.cardOnFile;
+  return section(
+    CONTROL_WORDS.billing,
+    html`${said}${off}
+<dl class="card cr-dl">
+<dt>${CONTROL_WORDS.billingState}</dt><dd${['past_due', 'paused', 'failed', 'unclear'].includes(billing.state) ? trusted(' class="problem"') : null}>${CONTROL_WORDS.billingStates[billing.state]}</dd>
+<dt>${CONTROL_WORDS.billingMonthly}</dt><dd>${words(CONTROL_WORDS.billingFor, { price: formatMoney(billing.monthly), services: servicesIn(billing.services) })}</dd>
+<dt>${CONTROL_WORDS.billingFoundingLabel}</dt><dd>${billing.foundingNumber === null ? CONTROL_WORDS.billingNotFounding : words(CONTROL_WORDS.billingFounding, { n: billing.foundingNumber })}</dd>
+<dt>${CONTROL_WORDS.billingTrialEnds}</dt><dd>${when(billing.trialEndsAt)}</dd>
+<dt>${CONTROL_WORDS.billingCard}</dt><dd>${billing.cardOnFile ? CONTROL_WORDS.billingCardYes : CONTROL_WORDS.billingCardNo}</dd>
+${billing.periodEndsAt === null ? null : html`<dt>${CONTROL_WORDS.billingPeriodEnds}</dt><dd>${when(billing.periodEndsAt)}</dd>`}
+</dl>
+${canStartAgain ? html`<form method="post" action="${base}/start"><button class="btn btn-ink" type="submit">${CONTROL_WORDS.startBilling}</button></form>` : null}
+${canLink ? html`<form method="post" action="${base}/card-link"><button class="btn btn-line" type="submit">${CONTROL_WORDS.makeCardLink}</button></form>` : null}
+${canCancel ? html`<p class="meta">${CONTROL_WORDS.cancelBillingHint}</p><form method="post" action="${base}/cancel"><button class="btn cr-danger" type="submit">${CONTROL_WORDS.cancelBilling}</button></form>` : null}`,
+  );
+}
+
+/** The link for the owner to add a card, shown once. */
+export function cardLinkScreen(firm: Firm, url: string): Html {
+  return html`${back(firm)}
+<div class="block"><h1>${CONTROL_WORDS.cardLinkTitle}</h1><p class="meta">${CONTROL_WORDS.cardLinkHint}</p></div>
+<div class="card cr-preview cr-mono">${url}</div>`;
 }
 
 /** What the go-live page shows. */

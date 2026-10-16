@@ -4,6 +4,7 @@ import type { StaffGate } from './providers/access';
 import type { FileStores } from './record/files';
 import type { Texts } from './providers/texts';
 import type { PhoneNumbers } from './providers/numbers';
+import type { StripeBilling } from './providers/stripe';
 import type { VapiAgents } from './providers/vapi';
 import { MESSAGE_KINDS, type MessageKind } from './record/types';
 
@@ -84,6 +85,13 @@ export interface Deps {
    * repository. Null until it is set: then no firm can go live.
    */
   goLiveBy: string | null;
+  /**
+   * Billing firms through Stripe, in test mode only (task 2 of queue 3).
+   * Null unless the copy has one of Stripe's test keys and a product id, and
+   * never on live: then going live starts no subscription, and the firm's
+   * page says billing is switched off.
+   */
+  billing: StripeBilling | null;
 }
 
 /** The copy a deployed Worker is, from its COPY setting. Anything but "practice" is live. */

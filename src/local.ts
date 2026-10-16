@@ -175,6 +175,8 @@ const localDeps = (env: Env): Deps => ({
   // The stand-in member of staff may switch a firm to live here, so the
   // go-live gate can be seen working with invented firms.
   goLiveBy: 'staff@example.com',
+  // Nothing reaches Stripe from this machine.
+  billing: null,
 });
 const app = createLocalApp(localDeps);
 

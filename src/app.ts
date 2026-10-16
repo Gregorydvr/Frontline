@@ -8,7 +8,9 @@ import { ownDiary } from './diary/own';
 import { errorName, log } from './log';
 import { isUkMobile } from './phone';
 import { formField, isFromTwilio, readTwilioForm } from './providers/texts/twilio';
+import { isFromStripe, readStripeEvent } from './providers/stripe/api';
 import {
+  findFirmByStripeCustomer,
   findFirmByNumber,
   findLink,
   getCustomer,
@@ -24,6 +26,9 @@ import { DETAILS_HEADERS, detailsPage, detailsSavedPage, formFromRecord, linkExp
 import { bearerToken, sameSecret } from './secret';
 import { readVapiMessage, text } from './vapi-report';
 import { readToolCalls, TOOL_NAMES } from './vapi-tools';
+
+/** The largest event from Stripe taken: real ones about a subscription are a few KB. */
+const STRIPE_EVENT_LIMIT = 64 * 1024;
 
 /** The answer to Twilio for a text that came in: empty, so Twilio sends no reply. */
 const NO_REPLY = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
@@ -181,6 +186,39 @@ export function createApp(makeDeps: (env: Env) => Deps, extend?: (app: Hono<AppE
     }
     await act({ ...bySystem(c), db }, 'record_delivery', { firm, provider: 'twilio', providerId, report });
     return c.body(null, 200);
+  });
+
+  // Where Stripe sends its events about firms' subscriptions (task 2 of
+  // queue 3, docs/stripe.md), in test mode only. Outside the practice gate,
+  // so it checks Stripe's signature, with the copy's STRIPE_WEBHOOK_SECRET,
+  // before it reads anything, and refuses everything while there is none.
+  // Each event is kept once; one Front-line does not need is answered and
+  // left.
+  app.post('/stripe/webhook', async (c) => {
+    const length = Number(c.req.header('Content-Length') ?? '0');
+    const body = Number.isFinite(length) && length <= STRIPE_EVENT_LIMIT ? await c.req.text() : null;
+    if (body === null || body.length > STRIPE_EVENT_LIMIT) {
+      log('stripe_refused');
+      return c.body(null, 413);
+    }
+    const secret = (c.env as unknown as { STRIPE_WEBHOOK_SECRET?: string }).STRIPE_WEBHOOK_SECRET;
+    const deps = c.get('deps');
+    if (!(await isFromStripe(secret, body, c.req.header('Stripe-Signature'), Math.floor(deps.clock.now() / 1000)))) {
+      log('stripe_refused');
+      return c.body(null, 401);
+    }
+    const event = readStripeEvent(body);
+    if (event === null) return c.body(null, 400);
+    if (event.kind === 'other') return c.body(null, 200);
+    const db = openRecord(c.env.DB, deps.clock);
+    const firm = await findFirmByStripeCustomer(db, event.customer);
+    if (firm === null) {
+      log('stripe_event_for_unknown_customer');
+      return c.body(null, 200);
+    }
+    const done = await act({ ...bySystem(c), db }, 'take_stripe_event', { firm, event });
+    // Stripe sends it again until it is kept.
+    return c.body(null, done === 'kept' ? 200 : 503);
   });
 
   // The owner's app: logging in, and the owner's screens (src/owner-app.ts).

@@ -204,6 +204,8 @@ export const FIRM_TABLES = [
   'agents',
   'provisioning',
   'go_live_ticks',
+  'billing_events',
+  'billing',
 ] as const;
 
 /**

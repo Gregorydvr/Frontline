@@ -285,3 +285,18 @@ export function withStepBefore(db: D1Database, before: () => Promise<void>): D1D
     },
   });
 }
+
+/**
+ * A billing row written past the record, for a firm the record never bills,
+ * such as the demo firm in the wall tests: so a cross-firm case has one to
+ * try to reach.
+ */
+export async function insertBillingPastTheRecord(db: D1Database, firm: string, customer: string, subscription: string, at: number): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO billing (firm_id, state, services, monthly_pence, price_list, founding_number, trial_ends_at, stripe_customer, stripe_subscription, card_on_file, started_at, updated_at)
+       VALUES (?1, 'trialing', '["calls"]', 8000, 'founding-2026-10', NULL, ?2, ?3, ?4, 0, ?2, ?2)`,
+    )
+    .bind(firm, at, customer, subscription)
+    .run();
+}

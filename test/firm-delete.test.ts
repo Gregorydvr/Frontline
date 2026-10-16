@@ -23,6 +23,9 @@ import {
   setAgent,
   askProvisioning,
   tickGoLive,
+  claimBilling,
+  finishBilling,
+  applyStripeEvent,
   linkForDue,
   listCustomers,
   listJobsForCustomer,
@@ -115,6 +118,10 @@ async function everyKindOfRow(firm: FirmId): Promise<void> {
   expect(await askProvisioning(db, firm, 'number', staff)).not.toBeNull();
   // A tick on its go-live checklist (task 4 of queue 2).
   await tickGoLive(db, firm, 'dp_agreement', true, staff);
+  // Its billing, and an event from Stripe about it (task 2 of queue 3).
+  expect(await claimBilling(db, firm, { services: ['calls'], monthly: 8_000 as never, trialEndsAt: db.clock.now() }, staff)).not.toBeNull();
+  await finishBilling(db, firm, { state: 'trialing', customer: `cus_Delete${firm.slice(0, 8)}`, subscription: `sub_Delete${firm.slice(0, 8)}` });
+  expect(await applyStripeEvent(db, firm, { id: `evt_Delete${firm.slice(0, 8)}`, type: 'paid', created: db.clock.now() }, { kind: 'paid' })).toBe(true);
   await optOut(db, firm, customer.id, 'visit_reminder', { kind: 'frontline' });
   await optOutNumber(db, firm, ukMobile('07700 900399'));
   await recordTextIn(db, firm, { provider: 'fake', providerId: `every-${firm}`, from: '+447700900399', words: 'Hello.', consent: null });

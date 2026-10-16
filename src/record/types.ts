@@ -1,6 +1,7 @@
 // The shapes the record layer takes and gives back. Lists that later slices
 // will add to are here, and are checked by the record layer, not the database.
 
+import type { Pence } from '../money';
 import type { Instant } from '../clock';
 import type { Id } from '../ids';
 import type { UkLandline, UkMobile } from '../phone';
@@ -54,6 +55,37 @@ export type FirmExportId = Id & { readonly [firmExportBrand]: true };
 /** The five services, by the example app's names for them. */
 export const SERVICES = ['calls', 'quotes', 'followups', 'paperwork', 'invoices'] as const;
 export type Service = (typeof SERVICES)[number];
+
+/**
+ * Where a firm's billing stands (task 2 of queue 3): not started (billing is
+ * switched off on this copy, or Stripe was not asked); starting (Stripe is
+ * being asked); in its free trial; paying; a payment failed; paused (its
+ * trial ended with no card); cancelling at the end of the month paid for;
+ * cancelled; clearly failed to start; or not clear, so staff check Stripe.
+ */
+export const BILLING_STATES = ['not_started', 'starting', 'trialing', 'active', 'past_due', 'paused', 'cancelling', 'cancelled', 'failed', 'unclear'] as const;
+export type BillingState = (typeof BILLING_STATES)[number];
+
+/** A firm's billing, as the record holds it. */
+export interface Billing {
+  firm: FirmId;
+  state: BillingState;
+  /** The services billed, and what they cost a month. */
+  services: readonly Service[];
+  monthly: Pence;
+  priceList: string;
+  /** Its place among the first 20 firms billed, whose price is locked; null after them. */
+  foundingNumber: number | null;
+  trialEndsAt: Instant;
+  /** Stripe's ids, once made. */
+  customer: string | null;
+  subscription: string | null;
+  /** Whether Stripe holds a card to charge. Only Stripe holds it. */
+  cardOnFile: boolean;
+  /** When the month paid for ends, once Stripe says. */
+  periodEndsAt: Instant | null;
+  startedAt: Instant;
+}
 
 /** What staff can ask a provider to make for a firm at set-up: its number in Twilio, its voice agent in Vapi. */
 export const PROVISIONS = ['number', 'agent'] as const;
@@ -872,6 +904,11 @@ export const STAFF_ACTIONS = [
   'unticked_go_live',
   'recorded_test_call',
   'went_live',
+  // Billing (task 2 of queue 3): started, a link made for the owner to add
+  // a card, and cancelled.
+  'started_billing',
+  'made_card_link',
+  'cancelled_billing',
   'agreed_wording',
   // The firm's voice agent in Vapi (task 3 of docs/autopilot.md).
   'viewed_set_up_agent',

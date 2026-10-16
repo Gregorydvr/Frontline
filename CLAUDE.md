@@ -145,6 +145,7 @@ src/                 the Worker
   agent-settings.ts  a firm's voice agent as the record says it should be: vapi/agent-template.json filled in, and comparing settings
   agent-push.ts      pushAgent(): the one way the Worker changes an agent in Vapi: read, check it is the firm's, send only what differs,
                      read back, never over a change made in Vapi without staff. Switched off while a copy has no VAPI_API_KEY
+  billing.ts         what a firm pays a month, in whole pence: Greg's prices, the founding price, the 14-day trial
   go-live.ts         the go-live checklist, worked out from the record: what must be true before a firm is switched to live
   trade-packs.ts     the trade starter packs: each trade's urgent list, diary rules and drafts, which fill in only what a firm has none of
   set-up.ts          setting up a firm: the checks on its name, wording, urgent list and diary rules, each with its reason, which the
@@ -158,7 +159,8 @@ src/                 the Worker
                      CALLS_IN), with the restore ledger; keeping.ts moves and deletes recordings and runs each firm's daily sweep;
                      periods.ts holds every period; firm-file.ts a firm's export, leaving and delete; provisioning.ts each
                      request to a provider to make a firm's number or agent, at most once; go-live.ts the checklist's
-                     evidence and ticks, and switching a firm to live, only by the member of staff the copy names
+                     evidence and ticks, and switching a firm to live, only by the member of staff the copy names; billing.ts
+                     each firm's billing and Stripe's events, kept once
   screens/           the owner's screens in the example's look, drawn from the record: shell.ts (the frame and side menu),
                      home, job, jobs, calls, done, rules, message, login; look.ts holds the example's styles and icons;
                      app-script.ts the one small script. details.ts is the customer's confirm-your-details page, opened from their link.
@@ -166,6 +168,7 @@ src/                 the Worker
   example/           the demo firm, Tidewell Heating, as data, and its loader
   providers/         one folder per provider, each with a fake. texts/: the interface, the stand-in, and Twilio.
                      numbers/: buying a firm's number in Twilio, switched off unless a copy's NUMBERS_ON is "yes".
+                     stripe/: billing firms, in Stripe's test mode only: a live key is refused, and live never bills.
                      access/: the staff gate, the check of Cloudflare Access's note, and the stand-in.
                      vapi/: reading and changing an agent through Vapi's API, and the stand-in
 migrations/          plain SQL, numbered 0001_name.sql, applied in tests, on this machine and when deployed
@@ -194,7 +197,7 @@ scripts/call-report-text.js its report and checks, tested in test/last-call.test
 scripts/practice-gates.js   npm run practice:gates; what passes is in scripts/gates.js, tested in test/practice-gates.test.ts
 vapi/                each voice agent's settings, as the script puts them on Vapi, and agent-template.json, every firm's agent with
                      gaps for the record to fill. No keys or secrets
-docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md) and Cloudflare Access (access.md),
+docs/                the build brief, the decisions, what to set in Vapi (vapi.md), Twilio (twilio.md), Stripe (stripe.md) and Cloudflare Access (access.md),
                      the restore steps (restore.md), the checks made on practice (practice-checks.md), when a firm leaves (firm-leaving.md),
                      and new texts' wording waiting for Greg (texts-to-agree.md)
 docs/screens/        screenshots beside the example's, kept with the pull request that took them

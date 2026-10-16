@@ -9,6 +9,7 @@ import type { DueMessage, DueQueue } from '../../src/due';
 import { StandInStaff } from '../../src/providers/access/fake';
 import { FakeTexts } from '../../src/providers/texts/fake';
 import { FakeNumbers } from '../../src/providers/numbers/fake';
+import { FakeStripe } from '../../src/providers/stripe/fake';
 import { FakeVapi } from '../../src/providers/vapi/fake';
 
 /** A queue that keeps what the clock puts on it, for a test to run by hand. */
@@ -40,6 +41,7 @@ export interface TestDeps extends Deps {
   queue: PretendQueue;
   agents: FakeVapi;
   numbers: FakeNumbers;
+  billing: FakeStripe;
 }
 
 export function testDeps(clock: Clock): TestDeps {
@@ -65,5 +67,8 @@ export function testDeps(clock: Clock): TestDeps {
     // The stand-in member of staff may switch a firm to live; a test adds
     // another member of staff to see anyone else refused.
     goLiveBy: 'staff@example.com',
+    // The stand-in for Stripe, which reaches nothing. A test sets this to
+    // null to see billing switched off, as on every copy without a test key.
+    billing: new FakeStripe(),
   };
 }
