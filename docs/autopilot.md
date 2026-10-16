@@ -94,13 +94,13 @@ Stop after task 2 with a summary.
 
 ## Where queue 3 stands
 
-Updated 16 Oct 2026.
+Updated 16 Oct 2026. Queue 3 is done: both tasks are merged and on practice, and the session stopped to give Greg a summary.
 
 | Task | Branch | State | Waiting on Greg |
 |---|---|---|---|
 | Greg's answers of 16 Oct | `slice-i-decisions-16-oct` | Merged as #26 and deployed to practice (version 7d2e8d02). Recorded; `GO_LIVE_BY` set on practice; his check of an agent by hand counts on practice only; a Vapi key is used by practice's Worker only | Setting practice's `VAPI_API_KEY` himself; the data-protection items (19 a) |
 | 1. Local test timeouts | `slice-i-test-workers` | Merged as #27. Too many test files ran at once (19), each in its own Workers runtime; now at most four. No test or time limit changed | Nothing |
-| 2. Stripe billing, test mode | `slice-i-billing` | Built, switched off on every copy until Greg sets a Stripe test key and product (`docs/stripe.md`); a live key is refused and live never bills. Going live starts a 14-day trial at Greg's prices; founding price locked for the first 20; card added on Stripe's own page from a link staff make; cancel any time; Stripe's events signed and kept once. Migration 0015 | Open question 20: prices for 3-4 services, the test key on practice, trial end with no card, cancelling, and the rest |
+| 2. Stripe billing, test mode | `slice-i-billing` | Merged as #28 and deployed to practice (version 194c0455, with migration 0015). Built, switched off on every copy until Greg sets a Stripe test key and product (`docs/stripe.md`); a live key is refused and live never bills. Going live starts a 14-day trial at Greg's prices; founding price locked for the first 20; card added on Stripe's own page from a link staff make; cancel any time; Stripe's events signed and kept once. Migration 0015 | Open question 20: prices for 3-4 services, the test key on practice, trial end with no card, cancelling, and the rest |
 
 ## Where the first queue stands
 
