@@ -98,7 +98,7 @@ Not being built yet, so do not add them: WhatsApp, Xero or QuickBooks, staff log
 Slice A creates these. Keep the names.
 
 - `npm run check`: types, lint and every test. This is the one that must pass. Types means `wrangler types --check` (is `worker-configuration.d.ts` current?) and `tsc` over `src/` and `test/`.
-- `npm test`: the tests only. They run in the Workers runtime against a local database, with `migrations/` applied before each test file.
+- `npm test`: the tests only. They run in the Workers runtime against a local database, with `migrations/` applied before each test file, at most four test files at once (`vitest.config.ts`).
 - `npm run dev`: the system on this machine, with the invented data. It applies `migrations/` to the local database first, and loads the demo firm the first time it is used. http://localhost:8787/local/example shows the demo firm in plain text.
 - `npm run types`: rewrites `worker-configuration.d.ts` after a change to `wrangler.jsonc`.
 - `npm run check:screens`: the owner's screens in a real browser at 390 by 844 and 1280 by 800: no sideways scroll, nothing under 44px, nothing cut off, no accessibility failures (axe-core). Saves screenshots in `screens/`, beside the example's. It measures each screen once it has loaded and its animations have ended. GitHub runs it after `npm run check`; it runs on Windows too.
