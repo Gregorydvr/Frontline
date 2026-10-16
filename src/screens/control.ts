@@ -43,7 +43,7 @@ import {
 } from '../record/types';
 import { draftFor, TRADE_PACKS } from '../trade-packs';
 import type { Provisioned } from '../actions';
-import { GO_LIVE_CHECKS, TICKED_ITEMS, type GoLiveCheck, type GoLiveEvidence } from '../go-live';
+import { AGENT_HAND_CHECK, GO_LIVE_CHECKS, STAFF_TICKED_ITEMS, type GoLiveCheck, type GoLiveEvidence } from '../go-live';
 import type { WentLive } from '../record/go-live';
 import { SERVICE_WORDS } from '../words';
 import { ARCHIVO_FONT_FACE } from './archivo';
@@ -421,7 +421,7 @@ export const CONTROL_WORDS = {
     number_calls: 'Ring its number: the call shows on the firm’s page.',
     number_texts_out: 'A confirmation or alert from its number, reported delivered by Twilio.',
     number_texts_in: 'Text its number from any mobile.',
-    agent_in_step: 'Checked by Front-line from Vapi. Needs a Vapi key on this copy (open question 17).',
+    agent_in_step: 'Checked by Front-line from Vapi, once this copy has a Vapi key. On practice until then, Greg’s check by hand below counts.',
     test_call: 'Make the call, check it with npm run practice:last-call, then record it below by its id in Vapi.',
     dp_agreement: 'Ticked by staff.',
     dp_privacy_notice: 'Ticked by staff.',
@@ -429,6 +429,10 @@ export const CONTROL_WORDS = {
     dp_vapi_region: 'Ticked by staff.',
   } satisfies Record<GoLiveCheck, string>,
   tickedByHand: 'Ticked by staff',
+  agentHandCheck: 'Its agent, checked by hand',
+  agentHandCheckHint: 'Practice only, until this copy has a Vapi key: Greg’s read-only run of scripts/vapi-assistant.js for this firm’s agent, which found nothing to change, counts as its agent matching the control room. Never on live.',
+  agentHandCheckTick: 'Greg ran scripts/vapi-assistant.js read only for this firm’s agent, and it found nothing to change',
+  agentHandCheckOnlyGreg: 'Only Greg can record this.',
   saveTicks: 'Save the ticks',
   testCall: 'The test call',
   testCallId: 'Vapi’s id for the call',
@@ -1141,6 +1145,8 @@ export interface GoLiveView {
   evidence: GoLiveEvidence;
   /** Whether the member of staff looking may switch it to live, or why not. */
   mayGoLive: 'yes' | 'not_them' | 'nobody_named';
+  /** Whether Greg's check of the agent by hand counts on this copy: practice and this machine, never live. */
+  handCheck: boolean;
   /** What came of the last thing done on the page. */
   outcome: string | null;
   /** The id typed for the test call, and what was wrong with it. */
@@ -1169,7 +1175,7 @@ ${section(
   CONTROL_WORDS.tickedByHand,
   html`<form method="post" action="${base}/ticks" class="stack">
 <fieldset class="stack"><legend>${CONTROL_WORDS.tickedByHand}</legend>
-${TICKED_ITEMS.map(
+${STAFF_TICKED_ITEMS.map(
   (item) =>
     html`<label class="cr-tick"><input type="checkbox" name="ticked" value="${item}"${evidence.ticks[item]?.ticked === true ? trusted(' checked') : null}>${CONTROL_WORDS.checks[item]}</label>`,
 )}
@@ -1177,6 +1183,19 @@ ${TICKED_ITEMS.map(
 <button class="btn btn-line" type="submit">${CONTROL_WORDS.saveTicks}</button>
 </form>`,
 )}
+${
+  !view.handCheck
+    ? null
+    : section(
+        CONTROL_WORDS.agentHandCheck,
+        html`<p class="meta">${CONTROL_WORDS.agentHandCheckHint}</p>
+${
+  view.mayGoLive === 'yes'
+    ? html`<form method="post" action="${base}/agent-check" class="stack"><label class="cr-tick"><input type="checkbox" name="checked" value="1"${evidence.ticks[AGENT_HAND_CHECK]?.ticked === true ? trusted(' checked') : null}>${CONTROL_WORDS.agentHandCheckTick}</label><button class="btn btn-line" type="submit">${CONTROL_WORDS.save}</button></form>`
+    : html`<p class="meta">${evidence.ticks[AGENT_HAND_CHECK]?.ticked === true ? CONTROL_WORDS.agentHandCheckTick : CONTROL_WORDS.agentHandCheckOnlyGreg}</p>`
+}`,
+      )
+}
 ${section(
   CONTROL_WORDS.testCall,
   html`${evidence.testCall === null ? null : html`<p class="meta">${words(CONTROL_WORDS.testCallRecorded, { when: when(evidence.testCall.at) })}</p>`}

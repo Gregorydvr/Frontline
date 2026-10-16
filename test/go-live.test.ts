@@ -13,7 +13,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { instantFromIso, pretendClock } from '../src/clock';
-import { GO_LIVE_CHECKS, goLiveChecklist, readyToGoLive, TICKED_ITEMS } from '../src/go-live';
+import { AGENT_HAND_CHECK, GO_LIVE_CHECKS, goLiveChecklist, readyToGoLive, STAFF_TICKED_ITEMS, type ChecklistRules } from '../src/go-live';
 import {
   createFirm,
   findCallByProviderId,
@@ -41,6 +41,8 @@ import { report, send, tidewell } from './helpers/vapi';
 const clock = pretendClock(instantFromIso('2026-10-15T11:00:00+01:00'));
 const db = openRecord(env.DB, clock);
 const frontline = { kind: 'frontline' } as const;
+/** The checklist as live reads it: only the automatic check of the agent counts. */
+const LIVE_RULES = { handCheckCounts: false } as const;
 const allTime = [instantFromIso('2000-01-01T00:00:00Z'), instantFromIso('2100-01-01T00:00:00Z')] as const;
 
 /** The control room, and the app Vapi and Twilio reach, with texts through a pretend Twilio and this go-live email. */
@@ -67,10 +69,10 @@ async function staffId(email = 'staff@example.com'): Promise<StaffId> {
 }
 
 /** Which checks are met, by name. */
-async function met(firm: FirmId): Promise<Record<string, boolean>> {
+async function met(firm: FirmId, rules: ChecklistRules = LIVE_RULES): Promise<Record<string, boolean>> {
   const state = await goLiveState(db, firm);
   if (state === null) throw new Error('No firm');
-  return Object.fromEntries(goLiveChecklist(state).map((item) => [item.check, item.met]));
+  return Object.fromEntries(goLiveChecklist(state, rules).map((item) => [item.check, item.met]));
 }
 
 /**
@@ -101,7 +103,7 @@ async function restMet(firm: FirmId, vapiId: string, system: ReturnType<typeof s
   const assistant = `00000000-0000-4000-8000-${firm.slice(0, 12).replace(/[^0-9]/g, '0').padEnd(12, '0')}`;
   await setAgent(db, firm, assistant, staff);
   await recordAgentPush(db, firm, { assistantId: assistant, by: { kind: 'frontline' }, due: null, outcome: 'in_step', settings: [], state: 'in_step', differing: [] });
-  expect((await system.open(`/control/firms/${firm}/go-live/ticks`, controlForm({ ticked: [...TICKED_ITEMS] }))).status).toBe(303);
+  expect((await system.open(`/control/firms/${firm}/go-live/ticks`, controlForm({ ticked: [...STAFF_TICKED_ITEMS] }))).status).toBe(303);
   expect((await system.open(`/control/firms/${firm}/go-live/test-call`, controlForm({ vapiId, passed: '1' }))).status).toBe(303);
 }
 
@@ -194,7 +196,7 @@ describe('switching a firm to live', () => {
     await restMet(firm, vapiId, system);
     const state = await goLiveState(db, firm);
     if (state === null) throw new Error('No firm');
-    expect(readyToGoLive(state)).toBe(true);
+    expect(readyToGoLive(state, LIVE_RULES)).toBe(true);
     const page = await system.open(`/control/firms/${firm}/go-live`);
     expect(page.words).toContain(`action="/control/firms/${firm}/go-live"`);
 
@@ -226,7 +228,7 @@ describe('switching a firm to live', () => {
     expect((await system.open(`/control/firms/${firm}/go-live`, controlForm({}))).location).toBe(`/control/firms/${firm}/go-live?done=not_allowed`);
     expect(await getFirm(db, firm)).toMatchObject({ live: null, services: { invoices: false } });
     // Named by email to the record, a member of staff with another email is refused there too.
-    expect(await markLive(db, firm, await staffId(), 'greg-stand-in@example.com')).toBe('not_allowed');
+    expect(await markLive(db, firm, await staffId(), 'greg-stand-in@example.com', LIVE_RULES)).toBe('not_allowed');
     expect((await getFirm(db, firm))?.live).toBeNull();
   });
 
@@ -263,5 +265,51 @@ describe('switching services on before a firm is live', () => {
     const example = await createFirm(db, { name: 'Example Demo Firm', isExample: true });
     expect((await system.open(`/control/firms/${example}/service`, controlForm({ service: 'quotes', on: '1' }))).location).toBe(`/control/firms/${example}`);
     expect((await getFirm(db, example))?.services.quotes).toBe(true);
+  });
+});
+
+describe('Greg’s check of the agent by hand (his decision of 16 Oct 2026)', () => {
+  /** A firm with everything met but its agent in step: the agent is set, never checked by Front-line. */
+  async function allButTheAgent(number: string, system: ReturnType<typeof systemWith>): Promise<FirmId> {
+    const { firm, vapiId } = await firmWithEvidence(number, system);
+    await setServicesChosen(db, firm, ['calls'], frontline);
+    await setAgent(db, firm, '00000000-0000-4000-8000-00000000a9a9'.replace('a9a9', number.slice(-4)), await staffId());
+    expect((await system.open(`/control/firms/${firm}/go-live/ticks`, controlForm({ ticked: [...STAFF_TICKED_ITEMS] }))).status).toBe(303);
+    expect((await system.open(`/control/firms/${firm}/go-live/test-call`, controlForm({ vapiId, passed: '1' }))).status).toBe(303);
+    return firm;
+  }
+
+  it('counts on practice as the agent matching, recorded by Greg, so the firm can go live', async () => {
+    const system = systemWith('staff@example.com');
+    const firm = await allButTheAgent('07700 900480', system);
+    const practice = { handCheckCounts: true };
+    expect((await met(firm, practice)).agent_in_step).toBe(false);
+    expect((await system.open(`/control/firms/${firm}/go-live/agent-check`, controlForm({ checked: '1' }))).location).toBe(`/control/firms/${firm}/go-live`);
+    expect((await met(firm, practice)).agent_in_step).toBe(true);
+    // Never on live, which needs the automatic check.
+    expect((await met(firm, LIVE_RULES)).agent_in_step).toBe(false);
+    expect((await system.open(`/control/firms/${firm}/go-live`, controlForm({}))).location).toBe(`/control/firms/${firm}/go-live?done=live`);
+  });
+
+  it('is refused for anyone but Greg, with nothing recorded, and the database checks it too', async () => {
+    const system = systemWith('greg-stand-in@example.com');
+    const firm = await allButTheAgent('07700 900481', system);
+    const page = await system.open(`/control/firms/${firm}/go-live`);
+    expect(page.words).toContain(escaped(CONTROL_WORDS.agentHandCheckOnlyGreg));
+    expect(page.words).not.toContain(`action="/control/firms/${firm}/go-live/agent-check"`);
+    expect((await system.open(`/control/firms/${firm}/go-live/agent-check`, controlForm({ checked: '1' }))).location).toBe(`/control/firms/${firm}/go-live?done=not_allowed`);
+    await expect(tickGoLive(db, firm, AGENT_HAND_CHECK, true, await staffId(), 'greg-stand-in@example.com')).rejects.toThrow(Refused);
+    await expect(tickGoLive(db, firm, AGENT_HAND_CHECK, true, await staffId())).rejects.toThrow(Refused);
+    expect((await goLiveState(db, firm))?.evidence.ticks[AGENT_HAND_CHECK]).toBeUndefined();
+  });
+
+  it('is not offered on live, and refused there', async () => {
+    const deps = { ...testDeps(clock), texts: pretendTwilio(), goLiveBy: 'staff@example.com', copy: 'live' as const };
+    const open = controlOpener(createApp(() => deps));
+    const firm = await createFirm(db, { name: 'Live Copy Example Firm', isExample: false });
+    const page = await (await open(`/control/firms/${firm}/go-live`)).text();
+    expect(page).not.toContain(escaped(CONTROL_WORDS.agentHandCheck));
+    expect((await open(`/control/firms/${firm}/go-live/agent-check`, controlForm({ checked: '1' }))).headers.get('Location')).toBe(`/control/firms/${firm}/go-live?done=not_allowed`);
+    expect((await goLiveState(db, firm))?.evidence.ticks[AGENT_HAND_CHECK]).toBeUndefined();
   });
 });
